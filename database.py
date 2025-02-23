@@ -24,16 +24,15 @@ class User(Base):
 class PremioVinto(Base):
     __tablename__ = "premi_vinti"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    telegram_id = Column(String, nullable=False)  # ID Telegram dell'utente che ha vinto il premio
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Riferimento all'utente
+    telegram_id = Column(String, nullable=False)  # ID Telegram dell'utente (può essere ridondante, ma utile)
     wallet = Column(String, nullable=False)         # Wallet a cui il premio è stato accreditato
     premio = Column(String, nullable=False)         # Descrizione del premio vinto
     tx_hash = Column(String, nullable=True)         # Riferimento alla transazione (tx hash)
     data_vincita = Column(DateTime, default=datetime.datetime.utcnow)  # Data e ora in cui il premio è stato vinto
 
-    # Relazione opzionale: collega il premio all'utente (assicurati che User.telegram_id sia unico)
-    # Puoi decommentare le seguenti righe se vuoi abilitare il vincolo di foreign key
-    # telegram_id = Column(String, ForeignKey("users.telegram_id"), nullable=False)
-    # user = relationship("User", back_populates="premi_vinti")
+    # Relazione: collega il premio all'utente
+    user = relationship("User", back_populates="premi_vinti")
 
 # Crea le tabelle se non esistono
 Base.metadata.create_all(engine)
