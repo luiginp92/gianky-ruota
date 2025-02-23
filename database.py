@@ -16,6 +16,7 @@ class User(Base):
     wallet_address = Column(String, nullable=True)  # Indirizzo del wallet collegato
     last_play_date = Column(DateTime, nullable=True)  # Data dell'ultimo giro effettuato
     extra_spins = Column(Integer, default=0)  # Numero di spin extra acquistati
+    last_share_task = Column(DateTime, nullable=True)  # Data dell'ultima task di condivisione completata
 
     # Relazione: un utente può avere molti premi vinti
     premi_vinti = relationship("PremioVinto", back_populates="user", cascade="all, delete-orphan")
@@ -25,11 +26,11 @@ class PremioVinto(Base):
     __tablename__ = "premi_vinti"
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Riferimento all'utente
-    telegram_id = Column(String, nullable=False)  # ID Telegram dell'utente (può essere ridondante, ma utile)
+    telegram_id = Column(String, nullable=False)  # ID Telegram dell'utente
     wallet = Column(String, nullable=False)         # Wallet a cui il premio è stato accreditato
     premio = Column(String, nullable=False)         # Descrizione del premio vinto
     tx_hash = Column(String, nullable=True)         # Riferimento alla transazione (tx hash)
-    data_vincita = Column(DateTime, default=datetime.datetime.utcnow)  # Data e ora in cui il premio è stato vinto
+    data_vincita = Column(DateTime, default=datetime.datetime.utcnow)  # Data e ora del premio
 
     # Relazione: collega il premio all'utente
     user = relationship("User", back_populates="premi_vinti")

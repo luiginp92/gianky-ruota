@@ -4,10 +4,10 @@ Gianky Coin Bot - main.py
 --------------------------
 Questo file implementa un bot Telegram che:
   - Collega il wallet (/connect)
-  - Mostra la ruota statica (/ruota) una volta e mantiene un contatore dei tiri disponibili.
+  - Mostra la ruota statica (/ruota) con un contatore dei tiri disponibili aggiornato in tempo reale.
   - Al click sul pulsante "Gira la ruota!" consuma uno spin, calcola il premio e aggiorna il messaggio.
-  - Ogni giorno (secondo il fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
-  - Se non ci sono spin disponibili, viene mostrato un messaggio appropriato.
+  - Ogni giorno (fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
+  - È disponibile una task settimanale di condivisione per vincere 1 giro extra. L’utente deve completare la task (confermandola) e, dopo 10 minuti, potrà riscattare il premio. Se ha già completato la task negli ultimi 7 giorni, dovrà rifarla.
 """
 
 #######################################
@@ -161,10 +161,10 @@ def verifica_transazione_gky(user_address, tx_hash, cost):
 
 def get_prize():
     """
-    Calcola il premio secondo la seguente distribuzione (percentuali):
+    Calcola il premio secondo la seguente distribuzione:
       - NFT BASISC: 0.02%
       - NFT STARTER: 0.04%
-      - Normal prizes totali: 99.0%, così suddivisi:
+      - Normal prizes (totale 99.0%):
             NO PRIZE: 30%
             10 GKY: 25%
             20 GKY: 20%
@@ -174,7 +174,7 @@ def get_prize():
             500 GKY: 2%
             1000 GKY: 1%
     """
-    r = random.random() * 100  # Genera un numero tra 0 e 100
+    r = random.random() * 100  # r in [0,100)
     if r < 0.02:
         return "NFT BASISC"
     elif r < 0.02 + 0.04:
@@ -199,7 +199,7 @@ def get_prize():
             return "1000 GKY"
 
 #######################################
-# COMANDI DEL BOT
+# COMANDI DEL BOT ESISTENTI
 #######################################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -207,7 +207,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🎉 Benvenuto in Gianky Coin!\n\n"
         "Usa /connect <wallet_address> per collegare il wallet,\n"
         "usa /ruota per visualizzare la ruota e il contatore dei tiri disponibili,\n"
-        "/buyspins per acquistare extra tiri."
+        "/buyspins per acquistare extra tiri,\n"
+        "oppure /sharetask per condividere il video e guadagnare 1 giro extra (1 volta a settimana)."
     )
 
 async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -238,9 +239,9 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def ruota(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Comando per mostrare la ruota statica con il contatore dei tiri disponibili.
-    Il contatore viene calcolato come: se l'utente non ha giocato oggi (fuso italiano),
-    il giro gratuito è disponibile (1 tiro) + extra_spins; altrimenti, solo extra_spins.
+    Mostra la ruota statica con il contatore dei tiri disponibili.
+    Il contatore è calcolato come: se l'utente non ha giocato oggi (fuso italiano),
+    disponibile 1 tiro gratuito + extra_spins; altrimenti, solo extra_spins.
     """
     telegram_id = str(update.message.from_user.id)
     session = Session()
@@ -255,7 +256,6 @@ async def ruota(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Collega il wallet con /connect")
         return
 
-    # Calcola i tiri disponibili in base al fuso orario italiano
     italy_tz = pytz.timezone("Europe/Rome")
     now_italy = datetime.datetime.now(italy_tz)
     if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
@@ -348,11 +348,87 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         session.close()
 
+#######################################
+# NUOVI COMANDI PER LA SHARE TASK
+#######################################
+
+async def sharetask(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Il comando /sharetask invia il link del video e un pulsante "Condividi e vinci".
+    """
+    video_url = "https://www.youtube.com/watch?v=AbpPYERGCXI&ab_channel=GKY-OFFICIAL"
+    keyboard = [[InlineKeyboardButton("Condividi e vinci", url=video_url)]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "📢 Condividi questo video per vincere 1 giro extra.\n(La task può essere completata 1 volta a settimana.)",
+        reply_markup=reply_markup
+    )
+    # Invia un pulsante per confermare la task
+    confirm_keyboard = [[InlineKeyboardButton("Conferma task", callback_data="confirm_share_task")]]
+    confirm_markup = InlineKeyboardMarkup(confirm_keyboard)
+    await update.message.reply_text("Quando hai condiviso, premi il pulsante:", reply_markup=confirm_markup)
+
+async def confirm_share_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Callback per il pulsante "Conferma task" dopo la condivisione.
+    Invia un messaggio che informa l'utente che il check durerà max 10 minuti.
+    Dopo 10 minuti, invia un pulsante "Prendi premio" per riscattare il giro extra.
+    """
+    query = update.callback_query
+    await query.answer()
+    await query.message.reply_text("⏳ Attendi, il check della task durerà max 10 minuti...")
+    # Dopo 10 minuti, invia il pulsante per riscattare il premio
+    await asyncio.sleep(600)  # 600 secondi = 10 minuti
+    reward_keyboard = [[InlineKeyboardButton("Prendi premio", callback_data="claim_share_reward")]]
+    reward_markup = InlineKeyboardMarkup(reward_keyboard)
+    await query.message.reply_text("✅ Check completato. Premi 'Prendi premio' per ottenere 1 giro extra.", reply_markup=reward_markup)
+
+async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Callback per "Prendi premio".
+    Controlla se l'utente ha completato la task recentemente (deve rifarla ogni volta, non solo una volta a settimana).
+    Se la task non è stata completata di recente (entro 7 giorni), informa l'utente che deve rifarla.
+    Altrimenti, accredita 1 giro extra e aggiorna last_share_task.
+    """
+    query = update.callback_query
+    await query.answer()
+    telegram_id = str(query.from_user.id)
+    session = Session()
+    try:
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if not user:
+            await query.edit_message_caption("⚠️ Utente non trovato. Usa /connect per collegare il wallet.")
+            return
+        now = datetime.datetime.now(pytz.timezone("Europe/Rome"))
+        # Se l'utente ha già completato la task (last_share_task esiste) e l'ultimo completamento è meno di 7 giorni fa,
+        # non può riscattare il premio. Deve rifare la task.
+        if user.last_share_task is not None:
+            diff = now - user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
+            if diff < datetime.timedelta(days=7):
+                remaining = datetime.timedelta(days=7) - diff
+                await query.edit_message_caption(f"⏳ Task già completata. Riprova tra {remaining}.")
+                return
+        # Se non esiste o se sono passati almeno 7 giorni, allora accredita 1 giro extra e aggiorna last_share_task
+        user.extra_spins = (user.extra_spins or 0) + 1
+        user.last_share_task = now
+        session.commit()
+        await query.edit_message_caption(f"🎉 Task completata! Hai guadagnato 1 giro extra.\nExtra tiri disponibili: {user.extra_spins}")
+    except Exception as e:
+        logging.error(f"Errore in claim_share_reward: {e}")
+        await query.edit_message_caption("❌ Errore durante il riscatto del premio.")
+    finally:
+        session.close()
+
+#######################################
+# HANDLER ESISTENTI (callback della ruota, buyspins, ecc.)
+#######################################
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback per "Gira la ruota!".
-    - Mostra il risultato del giro e aggiorna il contatore dei tiri disponibili.
-    - Il messaggio della ruota viene aggiornato (modificando la didascalia) per mostrare in tempo reale i tiri disponibili.
+    - Se l'utente non ha giocato oggi (fuso italiano), concede il giro gratuito.
+    - Se ha già giocato, usa un extra tiro se disponibile; altrimenti comunica che non ci sono tiri.
+    - Dopo il giro, calcola il premio e aggiorna il messaggio originale con il nuovo contatore.
     """
     query = update.callback_query
     try:
@@ -367,14 +443,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_caption("⚠️ Collega il wallet con /connect")
             return
 
-        # Imposta il fuso orario italiano
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
 
-        # Calcola spin disponibili: se non ha giocato oggi, il giro gratuito è disponibile (1) + extra_spins; altrimenti, solo extra_spins.
         if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
             available = 1 + (user.extra_spins or 0)
-            # Consuma il giro gratuito aggiornando last_play_date
             user.last_play_date = now_italy
             session.commit()
         else:
@@ -387,7 +460,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_caption("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
                 return
 
-        # Calcola il premio
         prize = get_prize()
         if prize == "NO PRIZE":
             result_text = "😔 Nessun premio vinto. Riprova!"
@@ -399,11 +471,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 result_text = "❌ Errore nell'invio dei token."
         else:
             result_text = f"🎉 Hai vinto: {prize}!"
-            premio_record = PremioVinto(telegram_id=telegram_id, wallet=user.wallet_address, premio=prize)
+            premio_record = PremioVinto(telegram_id=telegram_id, wallet=user.wallet_address, premio=prize, user_id=user.id)
             session.add(premio_record)
             session.commit()
 
-        # Ricalcola spin disponibili dopo il consumo
         if user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
             new_available = 1 + (user.extra_spins or 0)
         else:
@@ -436,6 +507,11 @@ def main():
     app.add_handler(CommandHandler("ruota", ruota))
     app.add_handler(CommandHandler("buyspins", buyspins))
     app.add_handler(CommandHandler("confirmbuy", confirmbuy))
+    # Handler per la share task
+    app.add_handler(CommandHandler("sharetask", sharetask))
+    app.add_handler(CallbackQueryHandler(confirm_share_task, pattern="^confirm_share_task$"))
+    app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
+    # Mantieni l'handler per la ruota
     app.add_handler(CallbackQueryHandler(button))
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
