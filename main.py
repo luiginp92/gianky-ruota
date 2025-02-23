@@ -4,9 +4,9 @@ Gianky Coin Bot - main.py
 --------------------------
 Questo file implementa un bot Telegram che:
   - Collega il wallet (/connect)
-  - Mostra la ruota statica (/ruota)
-  - Al click sul pulsante "Gira la ruota!" esegue il giro e comunica il premio.
-  - Ogni giorno (al fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
+  - Mostra la ruota statica (/ruota) una volta e mantiene un contatore dei tiri disponibili.
+  - Al click sul pulsante "Gira la ruota!" consuma uno spin, calcola il premio e aggiorna il messaggio.
+  - Ogni giorno (secondo il fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
   - Se non ci sono spin disponibili, viene mostrato un messaggio appropriato.
 """
 
@@ -206,7 +206,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎉 Benvenuto in Gianky Coin!\n\n"
         "Usa /connect <wallet_address> per collegare il wallet,\n"
-        "/ruota per giocare,\n"
+        "usa /ruota per visualizzare la ruota e il contatore dei tiri disponibili,\n"
         "/buyspins per acquistare extra tiri."
     )
 
@@ -237,6 +237,11 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Usa: /connect <wallet_address>")
 
 async def ruota(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Comando per mostrare la ruota statica con il contatore dei tiri disponibili.
+    Il contatore viene calcolato come: se l'utente non ha giocato oggi (fuso italiano),
+    il giro gratuito è disponibile (1 tiro) + extra_spins; altrimenti, solo extra_spins.
+    """
     telegram_id = str(update.message.from_user.id)
     session = Session()
     try:
@@ -249,13 +254,23 @@ async def ruota(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user or not user.wallet_address:
         await update.message.reply_text("⚠️ Collega il wallet con /connect")
         return
+
+    # Calcola i tiri disponibili in base al fuso orario italiano
+    italy_tz = pytz.timezone("Europe/Rome")
+    now_italy = datetime.datetime.now(italy_tz)
+    if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
+        available = 1 + (user.extra_spins or 0)
+    else:
+        available = user.extra_spins or 0
+
+    caption = f"🎰 Ruota pronta! Tiri disponibili: {available}\nPremi il pulsante per girarla."
     keyboard = [[InlineKeyboardButton("🎡 Gira la ruota!", callback_data="spin")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if STATIC_IMAGE_BYTES:
         photo = InputFile(io.BytesIO(STATIC_IMAGE_BYTES), filename="ruota.png")
         await update.message.reply_photo(
             photo=photo,
-            caption="🎰 Ruota pronta! Premi il pulsante per girarla.",
+            caption=caption,
             reply_markup=reply_markup
         )
     else:
@@ -336,10 +351,8 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback per "Gira la ruota!".
-    - Se l'utente non ha giocato oggi (secondo il fuso orario italiano), concede il giro gratuito.
-    - Se ha già giocato, usa un extra tiro se disponibile (decrementando extra_spins);
-      altrimenti comunica che non ci sono tiri disponibili.
-    - Dopo il giro, calcola il premio e aggiorna la didascalia del messaggio originale con il risultato.
+    - Mostra il risultato del giro e aggiorna il contatore dei tiri disponibili.
+    - Il messaggio della ruota viene aggiornato (modificando la didascalia) per mostrare in tempo reale i tiri disponibili.
     """
     query = update.callback_query
     try:
@@ -358,43 +371,50 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
 
-        # Se l'utente non ha ancora giocato oggi (in base al fuso italiano), concede il giro gratuito
+        # Calcola spin disponibili: se non ha giocato oggi, il giro gratuito è disponibile (1) + extra_spins; altrimenti, solo extra_spins.
         if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
+            available = 1 + (user.extra_spins or 0)
+            # Consuma il giro gratuito aggiornando last_play_date
             user.last_play_date = now_italy
             session.commit()
         else:
-            # Giro gratuito già usato: controlla gli extra spin
-            if user.extra_spins > 0:
+            available = user.extra_spins or 0
+            if available > 0:
                 user.extra_spins -= 1
                 session.commit()
+                available -= 1
             else:
-                if query.message.caption:
-                    await query.edit_message_caption("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
-                else:
-                    await query.edit_message_text("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
+                await query.edit_message_caption("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
                 return
 
-        # Calcola il premio usando la nuova distribuzione
+        # Calcola il premio
         prize = get_prize()
         if prize == "NO PRIZE":
-            messaggio = "😔 Nessun premio vinto. Riprova!"
+            result_text = "😔 Nessun premio vinto. Riprova!"
         elif "GKY" in prize:
             amount = int(prize.split(" ")[0])
             if invia_token(user.wallet_address, amount):
-                messaggio = f"🎉 Hai vinto {amount} GKY!"
+                result_text = f"🎉 Hai vinto {amount} GKY!"
             else:
-                messaggio = "❌ Errore nell'invio dei token."
+                result_text = "❌ Errore nell'invio dei token."
         else:
-            messaggio = f"🎉 Hai vinto: {prize}!"
+            result_text = f"🎉 Hai vinto: {prize}!"
             premio_record = PremioVinto(telegram_id=telegram_id, wallet=user.wallet_address, premio=prize)
             session.add(premio_record)
             session.commit()
 
+        # Ricalcola spin disponibili dopo il consumo
+        if user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
+            new_available = 1 + (user.extra_spins or 0)
+        else:
+            new_available = user.extra_spins or 0
+
+        new_caption = f"{result_text}\n\n🎰 Ruota pronta! Tiri disponibili: {new_available}"
         try:
-            await query.edit_message_caption(caption=messaggio)
+            await query.edit_message_caption(caption=new_caption)
         except Exception as e:
             logging.error(f"Errore nell'aggiornamento della didascalia: {e}")
-            await query.message.reply_text(messaggio)
+            await query.message.reply_text(new_caption)
     except Exception as e:
         logging.error(f"Errore nel callback della ruota: {e}")
         try:
