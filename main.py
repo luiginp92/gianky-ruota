@@ -363,32 +363,33 @@ async def sharetask(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📢 Condividi questo video per vincere 1 giro extra.\n(La task può essere completata 1 volta a settimana.)",
         reply_markup=reply_markup
     )
-    # Invia un pulsante per confermare la task
     confirm_keyboard = [[InlineKeyboardButton("Conferma task", callback_data="confirm_share_task")]]
     confirm_markup = InlineKeyboardMarkup(confirm_keyboard)
     await update.message.reply_text("Quando hai condiviso, premi il pulsante:", reply_markup=confirm_markup)
 
 async def confirm_share_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Callback per il pulsante "Conferma task" dopo la condivisione.
-    Invia un messaggio che informa l'utente che il check durerà max 10 minuti.
-    Dopo 10 minuti, invia un pulsante "Prendi premio" per riscattare il giro extra.
+    Callback per "Conferma task". Risponde subito e poi, in background, attende 10 minuti per inviare il pulsante "Prendi premio".
     """
     query = update.callback_query
     await query.answer()
     await query.message.reply_text("⏳ Attendi, il check della task durerà max 10 minuti...")
-    # Dopo 10 minuti, invia il pulsante per riscattare il premio
+    # Avvia il task in background
+    asyncio.create_task(delayed_reward(query))
+
+async def delayed_reward(query):
     await asyncio.sleep(600)  # 600 secondi = 10 minuti
     reward_keyboard = [[InlineKeyboardButton("Prendi premio", callback_data="claim_share_reward")]]
     reward_markup = InlineKeyboardMarkup(reward_keyboard)
-    await query.message.reply_text("✅ Check completato. Premi 'Prendi premio' per ottenere 1 giro extra.", reply_markup=reward_markup)
+    try:
+        await query.message.reply_text("✅ Check completato. Premi 'Prendi premio' per ottenere 1 giro extra.", reply_markup=reward_markup)
+    except Exception as e:
+        logging.error(f"Errore in delayed_reward: {e}")
 
 async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Callback per "Prendi premio".
-    Controlla se l'utente ha completato la task recentemente (deve rifarla ogni volta, non solo una volta a settimana).
-    Se la task non è stata completata di recente (entro 7 giorni), informa l'utente che deve rifarla.
-    Altrimenti, accredita 1 giro extra e aggiorna last_share_task.
+    Callback per "Prendi premio". Se l'utente ha completato la task (cioè se l'ultima share task è stata registrata più di 7 giorni fa)
+    accredita 1 giro extra, altrimenti informa l'utente che deve rifare la task.
     """
     query = update.callback_query
     await query.answer()
@@ -400,15 +401,14 @@ async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await query.edit_message_caption("⚠️ Utente non trovato. Usa /connect per collegare il wallet.")
             return
         now = datetime.datetime.now(pytz.timezone("Europe/Rome"))
-        # Se l'utente ha già completato la task (last_share_task esiste) e l'ultimo completamento è meno di 7 giorni fa,
-        # non può riscattare il premio. Deve rifare la task.
+        # Se l'utente ha già completato la task negli ultimi 7 giorni, deve rifarla
         if user.last_share_task is not None:
             diff = now - user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
             if diff < datetime.timedelta(days=7):
                 remaining = datetime.timedelta(days=7) - diff
-                await query.edit_message_caption(f"⏳ Task già completata. Riprova tra {remaining}.")
+                await query.edit_message_caption(f"⏳ Task già completata. Devi rifare la task per guadagnare un nuovo giro extra. Riprova tra {remaining}.")
                 return
-        # Se non esiste o se sono passati almeno 7 giorni, allora accredita 1 giro extra e aggiorna last_share_task
+        # Accredita 1 giro extra e aggiorna la data della task
         user.extra_spins = (user.extra_spins or 0) + 1
         user.last_share_task = now
         session.commit()
@@ -420,7 +420,7 @@ async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE)
         session.close()
 
 #######################################
-# HANDLER ESISTENTI (callback della ruota, buyspins, ecc.)
+# HANDLER ESISTENTI (callback della ruota, ecc.)
 #######################################
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -428,7 +428,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Callback per "Gira la ruota!".
     - Se l'utente non ha giocato oggi (fuso italiano), concede il giro gratuito.
     - Se ha già giocato, usa un extra tiro se disponibile; altrimenti comunica che non ci sono tiri.
-    - Dopo il giro, calcola il premio e aggiorna il messaggio originale con il nuovo contatore.
+    - Dopo il giro, calcola il premio e aggiorna il messaggio con il nuovo contatore.
     """
     query = update.callback_query
     try:
@@ -511,7 +511,7 @@ def main():
     app.add_handler(CommandHandler("sharetask", sharetask))
     app.add_handler(CallbackQueryHandler(confirm_share_task, pattern="^confirm_share_task$"))
     app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
-    # Mantieni l'handler per la ruota
+    # Handler per la ruota
     app.add_handler(CallbackQueryHandler(button))
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
