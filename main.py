@@ -6,8 +6,8 @@ Questo file implementa un bot Telegram che:
   - Collega il wallet (/connect)
   - Mostra la ruota statica (/ruota)
   - Al click sul pulsante "Gira la ruota!" esegue il giro e comunica il premio.
-  - Ogni giorno c'è un giro gratuito dopo la mezzanotte; ulteriori tiri possono essere acquistati.
-  - Se non ci sono tiri disponibili viene mostrato un messaggio appropriato.
+  - Ogni giorno (al fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
+  - Se non ci sono spin disponibili, viene mostrato un messaggio appropriato.
 """
 
 #######################################
@@ -20,6 +20,9 @@ import datetime
 import os
 import io
 import asyncio
+
+import pytz  # Per il fuso orario italiano
+
 from web3 import Web3
 from telegram import (
     Update,
@@ -158,11 +161,42 @@ def verifica_transazione_gky(user_address, tx_hash, cost):
 
 def get_prize():
     """
-    Restituisce casualmente un premio.
-    Puoi personalizzare la logica in base alle tue esigenze.
+    Calcola il premio secondo la seguente distribuzione (percentuali):
+      - NFT BASISC: 0.02%
+      - NFT STARTER: 0.04%
+      - Normal prizes totali: 99.0%, così suddivisi:
+            NO PRIZE: 30%
+            10 GKY: 25%
+            20 GKY: 20%
+            50 GKY: 10%
+            100 GKY: 7%
+            250 GKY: 4%
+            500 GKY: 2%
+            1000 GKY: 1%
     """
-    prizes = ["NO PRIZE", "10 GKY", "20 GKY", "50 GKY", "NFT STARTER"]
-    return random.choice(prizes)
+    r = random.random() * 100  # Genera un numero tra 0 e 100
+    if r < 0.02:
+        return "NFT BASISC"
+    elif r < 0.02 + 0.04:
+        return "NFT STARTER"
+    else:
+        r2 = r - 0.06  # r2 varia da 0 a 99
+        if r2 < 30:
+            return "NO PRIZE"
+        elif r2 < 30 + 25:
+            return "10 GKY"
+        elif r2 < 55 + 20:  # 75
+            return "20 GKY"
+        elif r2 < 75 + 10:  # 85
+            return "50 GKY"
+        elif r2 < 85 + 7:   # 92
+            return "100 GKY"
+        elif r2 < 92 + 4:   # 96
+            return "250 GKY"
+        elif r2 < 96 + 2:   # 98
+            return "500 GKY"
+        else:
+            return "1000 GKY"
 
 #######################################
 # COMANDI DEL BOT
@@ -302,8 +336,8 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback per "Gira la ruota!".
-    - Se l'utente non ha giocato oggi, concede il giro gratuito aggiornando last_play_date.
-    - Se ha già giocato, usa un extra tiro se disponibile (decrementando extra_spins),
+    - Se l'utente non ha giocato oggi (secondo il fuso orario italiano), concede il giro gratuito.
+    - Se ha già giocato, usa un extra tiro se disponibile (decrementando extra_spins);
       altrimenti comunica che non ci sono tiri disponibili.
     - Dopo il giro, calcola il premio e aggiorna la didascalia del messaggio originale con il risultato.
     """
@@ -319,9 +353,17 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not user or not user.wallet_address:
             await query.edit_message_caption("⚠️ Collega il wallet con /connect")
             return
-        today = datetime.date.today()
-        if user.last_play_date is not None and user.last_play_date.date() == today:
-            # Il giro gratuito è già stato usato
+
+        # Imposta il fuso orario italiano
+        italy_tz = pytz.timezone("Europe/Rome")
+        now_italy = datetime.datetime.now(italy_tz)
+
+        # Se l'utente non ha ancora giocato oggi (in base al fuso italiano), concede il giro gratuito
+        if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
+            user.last_play_date = now_italy
+            session.commit()
+        else:
+            # Giro gratuito già usato: controlla gli extra spin
             if user.extra_spins > 0:
                 user.extra_spins -= 1
                 session.commit()
@@ -331,11 +373,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await query.edit_message_text("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
                 return
-        else:
-            # Giro gratuito disponibile
-            user.last_play_date = datetime.datetime.now()
-            session.commit()
-        # Calcola il premio
+
+        # Calcola il premio usando la nuova distribuzione
         prize = get_prize()
         if prize == "NO PRIZE":
             messaggio = "😔 Nessun premio vinto. Riprova!"
@@ -350,7 +389,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             premio_record = PremioVinto(telegram_id=telegram_id, wallet=user.wallet_address, premio=prize)
             session.add(premio_record)
             session.commit()
-        # Aggiorna il messaggio originale (mantiene la ruota statica) aggiornando la didascalia
+
         try:
             await query.edit_message_caption(caption=messaggio)
         except Exception as e:
@@ -380,10 +419,6 @@ def main():
     app.add_handler(CallbackQueryHandler(button))
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
-
-#######################################
-# INIZIO DEL PROGRAMMA
-#######################################
 
 if __name__ == '__main__':
     main()
