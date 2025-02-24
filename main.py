@@ -28,8 +28,7 @@ import asyncio
 import pytz
 
 from web3 import Web3
-# Rimuoviamo l'import e l'iniezione del POA middleware
-# from web3.middleware import geth_poa_middleware
+from web3.middleware import geth_poa_middleware  # Abilitiamo il middleware POA
 
 from telegram import (
     Update,
@@ -65,8 +64,7 @@ BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
 
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
-# Rimuoviamo l'iniezione del middleware:
-# w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+w3.middleware_onion.inject(geth_poa_middleware, layer=0)  # Iniezione del POA middleware
 
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
@@ -137,7 +135,6 @@ def invia_token(destinatario, quantita):
         if counter is not None:
             counter.total_out += quantita
         else:
-            # Se non esiste, crealo
             counter = GlobalCounter(total_in=0.0, total_out=quantita)
             session.add(counter)
         session.commit()
