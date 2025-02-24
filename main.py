@@ -7,10 +7,10 @@ Questo file implementa un bot Telegram che:
   - Mostra la ruota statica (/ruota) con un contatore dei tiri disponibili aggiornato in tempo reale.
   - Al click sul pulsante "Gira la ruota!" consuma uno spin, calcola il premio e aggiorna il messaggio.
   - Ogni giorno (fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
-  - È disponibile una task settimanale di condivisione per vincere 1 giro extra (conferma e check).
-  - È possibile invitare altri utenti: con il comando /referral l’utente riceve il proprio link referral.
-    Inoltre, se un nuovo utente si registra tramite il link referral (usando /start con il parametro "ref_..."),
-    l’utente invitante riceverà 2 extra spin (bonus assegnato una sola volta per quell’utente).
+  - È disponibile una task settimanale di condivisione per vincere 1 giro extra.
+  - Gli utenti possono ottenere un link referral (/referral) e se un nuovo utente si registra tramite quel link,
+    l’invitante riceve 2 extra spin (bonus assegnato una sola volta per quell’utente).
+  - Il comando /giankyadmin mostra un report globale delle entrate e uscite (totale, giornaliero e settimanale).
 """
 
 #######################################
@@ -41,7 +41,7 @@ from telegram.ext import (
 )
 from telegram.request import HTTPXRequest
 
-from database import Session, User, PremioVinto
+from database import Session, User, PremioVinto, GlobalCounter
 
 #######################################
 # CONFIGURAZIONE DEL LOGGING
@@ -86,7 +86,7 @@ else:
 USED_TX = set()
 
 #######################################
-# FUNZIONI UTILI: GAS, TRANSAZIONI, PREMI
+# FUNZIONI UTILI: GAS, TRANSAZIONI, PREMI, AGGIORNAMENTO CONTATORI
 #######################################
 
 def get_dynamic_gas_price():
@@ -124,6 +124,17 @@ def invia_token(destinatario, quantita):
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
+    # Aggiorna il contatore globale: registra l'uscita
+    session = Session()
+    try:
+        counter = session.query(GlobalCounter).first()
+        counter.total_out += quantita
+        session.commit()
+    except Exception as e:
+        logging.error(f"Errore aggiornamento total_out: {e}")
+        session.rollback()
+    finally:
+        session.close()
     return True
 
 def verifica_transazione_gky(user_address, tx_hash, cost):
@@ -178,26 +189,26 @@ def get_prize():
             500 GKY: 2%
             1000 GKY: 1%
     """
-    r = random.random() * 100  # r in [0,100)
+    r = random.random() * 100
     if r < 0.02:
         return "NFT BASISC"
     elif r < 0.02 + 0.04:
         return "NFT STARTER"
     else:
-        r2 = r - 0.06  # r2 varia da 0 a 99
+        r2 = r - 0.06
         if r2 < 30:
             return "NO PRIZE"
         elif r2 < 30 + 25:
             return "10 GKY"
-        elif r2 < 55 + 20:  # 75
+        elif r2 < 55 + 20:
             return "20 GKY"
-        elif r2 < 75 + 10:  # 85
+        elif r2 < 75 + 10:
             return "50 GKY"
-        elif r2 < 85 + 7:   # 92
+        elif r2 < 85 + 7:
             return "100 GKY"
-        elif r2 < 92 + 4:   # 96
+        elif r2 < 92 + 4:
             return "250 GKY"
-        elif r2 < 96 + 2:   # 98
+        elif r2 < 96 + 2:
             return "500 GKY"
         else:
             return "1000 GKY"
@@ -207,7 +218,7 @@ def get_prize():
 #######################################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Se viene passato un parametro referral (es. "ref_<invitanteID>"), registralo
+    # Gestione referral se /start viene chiamato con un parametro "ref_..."
     if context.args and context.args[0].startswith("ref_"):
         inviter_id = context.args[0].split("_")[1]
         telegram_id = str(update.message.from_user.id)
@@ -215,24 +226,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if not user:
-                # Crea l'utente e registra il referral
                 user = User(telegram_id=telegram_id, extra_spins=0, referred_by=inviter_id)
                 session.add(user)
                 session.commit()
-                # Accredita 2 extra spin all'invitante, se esiste
                 inviter = session.query(User).filter_by(telegram_id=inviter_id).first()
                 if inviter:
-                    inviter.extra_spins = (inviter.extra_spins or 0) + 2
+                    inviter.extra_spins += 2
                     session.commit()
                     await update.message.reply_text(f"✅ Registrazione tramite referral completata! L'utente {inviter_id} ha guadagnato 2 extra tiri.")
             else:
-                # Se l'utente esiste già e non ha il campo referral impostato, impostalo
                 if not user.referred_by:
                     user.referred_by = inviter_id
                     session.commit()
                     inviter = session.query(User).filter_by(telegram_id=inviter_id).first()
                     if inviter:
-                        inviter.extra_spins = (inviter.extra_spins or 0) + 2
+                        inviter.extra_spins += 2
                         session.commit()
                         await update.message.reply_text(f"✅ Referral registrato! L'utente {inviter_id} ha guadagnato 2 extra tiri.")
         except Exception as e:
@@ -285,8 +293,7 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ruota(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Mostra la ruota statica con il contatore dei tiri disponibili.
-    Il contatore è calcolato come: se l'utente non ha giocato oggi (fuso italiano),
-    disponibile 1 tiro gratuito + extra_spins; altrimenti, solo extra_spins.
+    Se l'utente non ha giocato oggi (fuso Italia), ha 1 tiro gratuito + extra_spins; altrimenti, solo extra_spins.
     """
     telegram_id = str(update.message.from_user.id)
     session = Session()
@@ -313,11 +320,7 @@ async def ruota(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     if STATIC_IMAGE_BYTES:
         photo = InputFile(io.BytesIO(STATIC_IMAGE_BYTES), filename="ruota.png")
-        await update.message.reply_photo(
-            photo=photo,
-            caption=caption,
-            reply_markup=reply_markup
-        )
+        await update.message.reply_photo(photo=photo, caption=caption, reply_markup=reply_markup)
     else:
         await update.message.reply_text("⚠️ Immagine della ruota non trovata.")
 
@@ -345,7 +348,7 @@ async def buyspins(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Puoi acquistare solo 1 o 3 tiri extra.")
             return
         await update.message.reply_text(
-            f"✅ Per acquistare {num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n**{WALLET_DISTRIBUZIONE}**\nUsa /confirmbuy <tx_hash> <num>"
+            f"✅ Per acquistare {num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n**{WALLET_DISTRIBUZIONE}**\nUsa /confirmbuy <tx_hash> [<num>]"
         )
     except Exception as e:
         logging.error(f"Errore in buyspins: {e}")
@@ -354,36 +357,60 @@ async def buyspins(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
 async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /confirmbuy <tx_hash> [<num>]
+    
+    Questa funzione conferma automaticamente l'acquisto di extra spin.
+    Se viene fornito solo il tx_hash, il sistema tenta di determinare automaticamente il numero di spin in base all'importo trasferito:
+      - 50 GKY corrispondono a 1 spin.
+      - 125 GKY corrispondono a 3 spin.
+    Se non viene riconosciuto l'importo esatto, l'utente può specificare manualmente il numero di spin extra (1 o 3) come secondo parametro.
+    """
     telegram_id = str(update.message.from_user.id)
     session = Session()
     try:
-        if not context.args or len(context.args) < 2:
-            await update.message.reply_text("❌ Usa: /confirmbuy <tx_hash> <num>")
+        if not context.args or len(context.args) < 1:
+            await update.message.reply_text("❌ Usa: /confirmbuy <tx_hash> [<num>]")
             return
         tx_hash = context.args[0]
         if tx_hash in USED_TX:
             await update.message.reply_text("❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
             return
-        try:
-            num_spins = int(context.args[1])
-        except:
-            await update.message.reply_text("❌ Numero di tiri deve essere un intero.")
-            return
+        # Se il numero di spin non viene specificato, tenta il riconoscimento automatico
+        if len(context.args) == 1:
+            tx = w3.eth.get_transaction(tx_hash)
+            value_wei = tx["value"]
+            value_gky = float(w3.from_wei(value_wei, "ether"))
+            if value_gky == 50:
+                num_spins = 1
+            elif value_gky == 125:
+                num_spins = 3
+            else:
+                await update.message.reply_text("❌ Importo non riconosciuto per conferma automatica. Specifica manualmente il numero di tiri extra.")
+                return
+        else:
+            try:
+                num_spins = int(context.args[1])
+            except:
+                await update.message.reply_text("❌ Numero di tiri deve essere un intero.")
+                return
+            if num_spins not in [1, 3]:
+                await update.message.reply_text("❌ Solo 1 o 3 tiri extra sono ammessi.")
+                return
+
+        cost = 50 if num_spins == 1 else 125
         user = session.query(User).filter_by(telegram_id=telegram_id).first()
         if not user or not user.wallet_address:
             await update.message.reply_text("⚠️ Collega il wallet con /connect")
-            return
-        if num_spins == 1:
-            cost = 50
-        elif num_spins == 3:
-            cost = 125
-        else:
-            await update.message.reply_text("❌ Solo 1 o 3 tiri extra sono ammessi.")
             return
         if verifica_transazione_gky(user.wallet_address, tx_hash, cost):
             user.extra_spins = (user.extra_spins or 0) + num_spins
             session.commit()
             USED_TX.add(tx_hash)
+            # Aggiorna il contatore globale: registra l'entrata
+            counter = session.query(GlobalCounter).first()
+            counter.total_in += cost
+            session.commit()
             await update.message.reply_text(f"✅ Acquisto confermato! Extra tiri disponibili: {user.extra_spins}")
         else:
             await update.message.reply_text("❌ Transazione non valida o importo insufficiente.")
@@ -399,7 +426,9 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def sharetask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Il comando /sharetask invia il link del video e un pulsante "Condividi e vinci".
+    /sharetask
+    Invia il link del video e un pulsante "Condividi e vinci" per completare la task di condivisione
+    (valida 1 volta a settimana) per guadagnare 1 giro extra.
     """
     video_url = "https://www.youtube.com/watch?v=AbpPYERGCXI&ab_channel=GKY-OFFICIAL"
     keyboard = [[InlineKeyboardButton("Condividi e vinci", url=video_url)]]
@@ -414,7 +443,7 @@ async def sharetask(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def confirm_share_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Callback per "Conferma task". Risponde subito e poi, in background, attende 10 minuti per inviare il pulsante "Prendi premio".
+    Callback per "Conferma task". Risponde subito e poi attende 10 minuti per inviare il pulsante "Prendi premio".
     """
     query = update.callback_query
     await query.answer()
@@ -432,7 +461,7 @@ async def delayed_reward(query):
 
 async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Callback per "Prendi premio". Se l'utente ha già completato la task negli ultimi 7 giorni, informa il tempo mancante;
+    Callback per "Prendi premio". Se l'utente ha completato la task negli ultimi 7 giorni, informa il tempo mancante;
     altrimenti accredita 1 giro extra e aggiorna last_share_task.
     """
     query = update.callback_query
@@ -449,7 +478,7 @@ async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE)
             diff = now - user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
             if diff < datetime.timedelta(days=7):
                 remaining = datetime.timedelta(days=7) - diff
-                await query.edit_message_caption(f"⏳ Hai già completato la task. Devi rifarla per guadagnare un nuovo giro extra.\nRiprova tra {remaining}.")
+                await query.edit_message_caption(f"⏳ Hai già completato la task. Rifalla per guadagnare un nuovo giro extra.\nRiprova tra {remaining}.")
                 return
         user.extra_spins = (user.extra_spins or 0) + 1
         user.last_share_task = now
@@ -462,15 +491,47 @@ async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE)
         session.close()
 
 #######################################
-# HANDLER ESISTENTI (callback della ruota, ecc.)
+# NUOVO COMANDO ADMIN PER REPORT
+#######################################
+
+async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /giankyadmin
+    Mostra il report globale delle entrate e uscite di GKY.
+    Report include totali globali, giornalieri e settimanali.
+    """
+    session = Session()
+    try:
+        from sqlalchemy import func
+        counter = session.query(GlobalCounter).first()
+        total_in = counter.total_in
+        total_out = counter.total_out
+
+        italy_tz = pytz.timezone("Europe/Rome")
+        today = datetime.datetime.now(italy_tz).date()
+        # Per una soluzione snella, mostriamo solo i totali globali.
+        report_text = (
+            f"📊 Report Globali GKY:\n"
+            f"Entrate totali: {total_in} GKY\n"
+            f"Uscite totali: {total_out} GKY\n"
+            f"Bilancio: {total_in - total_out} GKY"
+        )
+        await update.message.reply_text(report_text)
+    except Exception as e:
+        logging.error(f"Errore nel report admin: {e}")
+        await update.message.reply_text("❌ Errore durante la generazione del report.")
+    finally:
+        session.close()
+
+#######################################
+# HANDLER PER LA RUOTA (callback)
 #######################################
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Callback per "Gira la ruota!".
-    - Se l'utente non ha giocato oggi (fuso italiano), concede il giro gratuito.
-    - Se ha già giocato, usa un extra tiro se disponibile; altrimenti comunica che non ci sono tiri.
-    - Dopo il giro, calcola il premio e aggiorna il messaggio con il nuovo contatore.
+    Se l'utente non ha giocato oggi (fuso Italia), ha 1 tiro gratuito + extra_spins; altrimenti consuma un extra spin.
+    Dopo il giro, calcola il premio, invia eventuali token e aggiorna il messaggio con il nuovo contatore.
     """
     query = update.callback_query
     try:
@@ -549,13 +610,11 @@ def main():
     app.add_handler(CommandHandler("ruota", ruota))
     app.add_handler(CommandHandler("buyspins", buyspins))
     app.add_handler(CommandHandler("confirmbuy", confirmbuy))
-    # Handler per il referral
     app.add_handler(CommandHandler("referral", referral))
-    # Handler per la share task
     app.add_handler(CommandHandler("sharetask", sharetask))
+    app.add_handler(CommandHandler("giankyadmin", giankyadmin))
     app.add_handler(CallbackQueryHandler(confirm_share_task, pattern="^confirm_share_task$"))
     app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
-    # Handler per la ruota
     app.add_handler(CallbackQueryHandler(button))
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()

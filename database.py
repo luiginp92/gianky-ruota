@@ -1,9 +1,9 @@
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Float, create_engine, ForeignKey
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 import datetime
 
 # Configura il database
-DATABASE_URL = "sqlite:///database.db"  # Per ambiente di sviluppo; in produzione valuta PostgreSQL/MySQL
+DATABASE_URL = "sqlite:///database.db"  # Per sviluppo; in produzione valuta PostgreSQL/MySQL
 engine = create_engine(DATABASE_URL, echo=True)  # Imposta echo=False in produzione
 Session = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -17,12 +17,12 @@ class User(Base):
     last_play_date = Column(DateTime, nullable=True)  # Data dell'ultimo giro effettuato
     extra_spins = Column(Integer, default=0)  # Numero di spin extra acquistati
     last_share_task = Column(DateTime, nullable=True)  # Data dell'ultima task di condivisione completata
-    referred_by = Column(String, nullable=True)  # Telegram ID dell'utente invitante (referral)
+    referred_by = Column(String, nullable=True)  # Telegram ID dell'utente invitante
 
     # Relazione: un utente può avere molti premi vinti
     premi_vinti = relationship("PremioVinto", back_populates="user", cascade="all, delete-orphan")
 
-# Modello per registrare i premi vinti e le transazioni associate
+# Modello per registrare i premi vinti
 class PremioVinto(Base):
     __tablename__ = "premi_vinti"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -36,5 +36,19 @@ class PremioVinto(Base):
     # Relazione: collega il premio all'utente
     user = relationship("User", back_populates="premi_vinti")
 
+# Tabella per il contatore globale di entrate/uscite
+class GlobalCounter(Base):
+    __tablename__ = "global_counter"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    total_in = Column(Float, default=0.0)   # Totale entrate (pagamenti per extra spin)
+    total_out = Column(Float, default=0.0)  # Totale uscite (premi distribuiti)
+
 # Crea le tabelle se non esistono
 Base.metadata.create_all(engine)
+
+# Inizializza il record globale se non esiste
+session = Session()
+if session.query(GlobalCounter).count() == 0:
+    session.add(GlobalCounter(total_in=0.0, total_out=0.0))
+    session.commit()
+session.close()
