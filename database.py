@@ -17,7 +17,7 @@ class User(Base):
     last_play_date = Column(DateTime, nullable=True)  # Data dell'ultimo giro effettuato
     extra_spins = Column(Integer, default=0)  # Numero di spin extra acquistati
     last_share_task = Column(DateTime, nullable=True)  # Data dell'ultima task di condivisione completata
-    referred_by = Column(String, nullable=True)  # Telegram ID dell'utente invitante
+    referred_by = Column(String, nullable=True)  # ID Telegram dell'utente invitante (referral)
 
     # Relazione: un utente può avere molti premi vinti
     premi_vinti = relationship("PremioVinto", back_populates="user", cascade="all, delete-orphan")
@@ -36,18 +36,12 @@ class PremioVinto(Base):
     # Relazione: collega il premio all'utente
     user = relationship("User", back_populates="premi_vinti")
 
-# Tabella per il contatore globale di entrate/uscite
+# Tabella per il contatore globale di GKY
 class GlobalCounter(Base):
     __tablename__ = "global_counter"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    total_in = Column(Float, default=0.0)   # Totale entrate (pagamenti per extra spin)
-    total_out = Column(Float, default=0.0)  # Totale uscite (premi distribuiti)
+    total_in = Column(Float, default=0.0)   # Totale token in entrata (pagamenti ricevuti)
+    total_out = Column(Float, default=0.0)  # Totale token in uscita (premi inviati)
 
+# Crea le tabelle se non esistono
 Base.metadata.create_all(engine)
-
-# Inizializza il record globale se non esiste
-session = Session()
-if session.query(GlobalCounter).count() == 0:
-    session.add(GlobalCounter(total_in=0.0, total_out=0.0))
-    session.commit()
-session.close()

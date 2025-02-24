@@ -10,7 +10,8 @@ Questo file implementa un bot Telegram che:
   - È disponibile una task settimanale di condivisione per vincere 1 giro extra.
   - Gli utenti possono ottenere un link referral (/referral) e, se un nuovo utente si registra tramite quel link, l’invitante riceve 2 extra spin.
   - Il comando /giankyadmin mostra un report globale delle entrate e uscite.
-  - Un task automatico controlla in background le transazioni in arrivo sul contratto (CONTRATTO_GKY) e accredita extra spin in automatico.
+  - Un task automatico controlla in background le transazioni in arrivo sul contratto (CONTRATTO_GKY)
+    e accredita extra spin automaticamente.
   - La funzione /confirmbuy rimane come riserva manuale.
 """
 
@@ -27,6 +28,7 @@ import asyncio
 import pytz
 
 from web3 import Web3
+from web3.middleware import geth_poa_middleware
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -61,6 +63,8 @@ BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
 
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
+# Iniettare il middleware per chain POA (se necessario)
+w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
 
@@ -80,7 +84,7 @@ else:
     logging.error("File statico non trovato: ruota.png")
 
 #######################################
-# VARIABILE GLOBALE PER TX DUPLICATI E PER IL TASK AUTOMATICO
+# VARIABILE GLOBALE PER TX DUPLICATI E TASK AUTOMATICO
 #######################################
 
 USED_TX = set()
@@ -369,7 +373,6 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error(f"Errore nella decodifica automatica: {e}")
                 await update.message.reply_text("❌ Errore nella decodifica automatica. Specifica manualmente il numero di tiri extra.")
                 return
-
             if value_gky == 50:
                 num_spins = 1
             elif value_gky == 125:
@@ -396,6 +399,7 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user.extra_spins = (user.extra_spins or 0) + num_spins
             session.commit()
             USED_TX.add(tx_hash)
+            # Aggiorna il contatore globale per entrate
             counter = session.query(GlobalCounter).first()
             counter.total_in += cost
             session.commit()
@@ -452,7 +456,7 @@ async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 remaining = datetime.timedelta(days=7) - diff
                 await query.edit_message_caption(f"⏳ Hai già completato la task. Rifalla per guadagnare un nuovo giro extra.\nRiprova tra {remaining}.")
                 return
-        user.extra_spins = (user.extra_spins or 0) + 1
+        user.extra_spins += 1
         user.last_share_task = now
         session.commit()
         await query.edit_message_caption(f"🎉 Task completata! Hai guadagnato 1 giro extra.\nExtra tiri disponibili: {user.extra_spins}")
@@ -469,7 +473,6 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         counter = session.query(GlobalCounter).first()
         total_in = counter.total_in
         total_out = counter.total_out
-        italy_tz = pytz.timezone("Europe/Rome")
         report_text = (
             f"📊 Report Globali GKY:\n"
             f"Entrate totali: {total_in} GKY\n"
@@ -496,10 +499,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not user or not user.wallet_address:
             await query.edit_message_caption("⚠️ Collega il wallet con /connect")
             return
-
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
-
         if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
             available = 1 + (user.extra_spins or 0)
             user.last_play_date = now_italy
@@ -513,7 +514,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.edit_message_caption("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
                 return
-
         prize = get_prize()
         if prize == "NO PRIZE":
             result_text = "😔 Nessun premio vinto. Riprova!"
@@ -528,12 +528,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             premio_record = PremioVinto(telegram_id=telegram_id, wallet=user.wallet_address, premio=prize, user_id=user.id)
             session.add(premio_record)
             session.commit()
-
         if user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
             new_available = 1 + (user.extra_spins or 0)
         else:
             new_available = user.extra_spins or 0
-
         new_caption = f"{result_text}\n\n🎰 Ruota pronta! Tiri disponibili: {new_available}"
         try:
             await query.edit_message_caption(caption=new_caption)
@@ -615,21 +613,16 @@ async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Errore nel task auto_confirm_extra_spins: {e}")
 
 #######################################
-# FUNZIONE ADMIN PER REPORT (accessibile solo dagli admin)
+# FUNZIONE ADMIN PER REPORT GLOBALI
 #######################################
 
 async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Assicurati che solo gli admin possano eseguire questo comando
-    admin_ids = ["<ID_ADMIN1>", "<ID_ADMIN2>"]  # Sostituisci con gli ID Telegram degli admin
-    if str(update.message.from_user.id) not in admin_ids:
-        return
     session = Session()
     try:
         from sqlalchemy import func
         counter = session.query(GlobalCounter).first()
         total_in = counter.total_in
         total_out = counter.total_out
-        italy_tz = pytz.timezone("Europe/Rome")
         report_text = (
             f"📊 Report Globali GKY:\n"
             f"Entrate totali: {total_in} GKY\n"
@@ -650,8 +643,8 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
     app = ApplicationBuilder().token(TOKEN).request(request).build()
-
-    # Aggiungi gli handler
+    
+    # Aggiungi gli handler dei comandi
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("connect", connect))
     app.add_handler(CommandHandler("ruota", ruota))
@@ -660,16 +653,18 @@ def main():
     app.add_handler(CommandHandler("referral", referral))
     app.add_handler(CommandHandler("sharetask", sharetask))
     app.add_handler(CommandHandler("giankyadmin", giankyadmin))
+    
+    # Aggiungi gli handler per le callback
     app.add_handler(CallbackQueryHandler(confirm_share_task, pattern="^confirm_share_task$"))
     app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
     app.add_handler(CallbackQueryHandler(button))
     
-    # Usa la JobQueue già disponibile nell'app (non è necessario creare manualmente)
+    # Avvia il task automatico per controllare le transazioni ogni 30 secondi
     if app.job_queue:
         app.job_queue.run_repeating(auto_confirm_extra_spins, interval=30, first=10)
     else:
         logging.error("JobQueue non disponibile!")
-
+    
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
 
