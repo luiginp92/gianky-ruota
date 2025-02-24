@@ -8,12 +8,9 @@ Questo file implementa un bot Telegram che:
   - Al click sul pulsante "Gira la ruota!" consuma uno spin, calcola il premio e aggiorna il messaggio.
   - Ogni giorno (fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
   - È disponibile una task settimanale di condivisione per vincere 1 giro extra.
-  - Gli utenti possono ottenere un link referral (/referral) e, se un nuovo utente si registra tramite quel link,
-    l’invitante riceve 2 extra spin.
+  - Gli utenti possono ottenere un link referral (/referral) e, se un nuovo utente si registra tramite quel link, l’invitante riceve 2 extra spin.
   - Il comando /giankyadmin mostra un report globale delle entrate e uscite.
-  - Nuovo: Un task automatico controlla in background le transazioni in arrivo sul contratto (CONTRATTO_GKY).
-    Se viene rilevata una transazione da un utente registrato che trasferisce 50 o 125 GKY, vengono accreditati
-    1 o 3 extra spin, aggiornando anche il contatore globale (GlobalCounter).
+  - Un task automatico controlla in background le transazioni in arrivo sul contratto (CONTRATTO_GKY) e accredita extra spin in automatico.
   - La funzione /confirmbuy rimane come riserva manuale.
 """
 
@@ -27,7 +24,6 @@ import datetime
 import os
 import io
 import asyncio
-
 import pytz
 
 from web3 import Web3
@@ -42,7 +38,6 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
-    JobQueue,  # Importa JobQueue per creare manualmente il job queue
 )
 from telegram.request import HTTPXRequest
 
@@ -85,11 +80,11 @@ else:
     logging.error("File statico non trovato: ruota.png")
 
 #######################################
-# VARIABILE GLOBALE PER TX DUPLICATI E LAST_BLOCK
+# VARIABILE GLOBALE PER TX DUPLICATI E PER IL TASK AUTOMATICO
 #######################################
 
 USED_TX = set()
-LAST_BLOCK = None  # Per il task automatico
+LAST_BLOCK = None
 
 #######################################
 # FUNZIONI UTILI: GAS, TRANSAZIONI, PREMI, AGGIORNAMENTO CONTATORI
@@ -128,6 +123,7 @@ def invia_token(destinatario, quantita):
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
+    # Aggiorna il contatore globale per uscite
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
@@ -205,7 +201,6 @@ def get_prize():
 #######################################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Se viene passato un parametro referral (es. "ref_<invitanteID>"), registralo
     if context.args and context.args[0].startswith("ref_"):
         inviter_id = context.args[0].split("_")[1]
         telegram_id = str(update.message.from_user.id)
@@ -340,11 +335,10 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     /confirmbuy <tx_hash> [<num>]
 
     Questa funzione conferma automaticamente l'acquisto di extra spin.
-    Se viene fornito solo il tx_hash, il sistema decodifica l'input della transazione per determinare
-    automaticamente il numero di spin in base all'importo trasferito:
+    Se viene fornito solo il tx_hash, il sistema decodifica l'importo trasferito:
       - 50 GKY  → 1 spin
       - 125 GKY → 3 spin
-    Se l'importo non viene riconosciuto, l'utente può specificare manualmente il numero di spin extra (1 o 3).
+    Se l'importo non viene riconosciuto, l'utente può specificare manualmente il numero di spin extra.
     """
     telegram_id = str(update.message.from_user.id)
     session = Session()
@@ -556,7 +550,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
 #######################################
-# TASK AUTOMATICO PER VERIFICARE LE TRANSAZIONI
+# TASK AUTOMATICO PER VERIFICARE LE TRANSAZIONI EXTRA
 #######################################
 
 LAST_BLOCK = None
@@ -574,7 +568,7 @@ async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
         latest_block = w3.eth.block_number
         if LAST_BLOCK is None:
             LAST_BLOCK = latest_block
-            return  # Inizializza LAST_BLOCK senza processare blocchi
+            return
         for blk_num in range(LAST_BLOCK + 1, latest_block + 1):
             block = w3.eth.get_block(blk_num, full_transactions=True)
             for tx in block.transactions:
@@ -621,10 +615,14 @@ async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Errore nel task auto_confirm_extra_spins: {e}")
 
 #######################################
-# FUNZIONE ADMIN PER REPORT
+# FUNZIONE ADMIN PER REPORT (accessibile solo dagli admin)
 #######################################
 
 async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Assicurati che solo gli admin possano eseguire questo comando
+    admin_ids = ["<ID_ADMIN1>", "<ID_ADMIN2>"]  # Sostituisci con gli ID Telegram degli admin
+    if str(update.message.from_user.id) not in admin_ids:
+        return
     session = Session()
     try:
         from sqlalchemy import func
@@ -646,13 +644,14 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
 #######################################
-# TASK PER GESTIRE LA JOB QUEUE (Creazione manuale)
+# FUNZIONE PRINCIPALE
 #######################################
 
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
     app = ApplicationBuilder().token(TOKEN).request(request).build()
 
+    # Aggiungi gli handler
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("connect", connect))
     app.add_handler(CommandHandler("ruota", ruota))
@@ -665,14 +664,12 @@ def main():
     app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
     app.add_handler(CallbackQueryHandler(button))
     
-    # Crea la JobQueue manualmente usando la classe JobQueue
-    from telegram.ext import JobQueue
-    job_queue = JobQueue()
-    job_queue.set_dispatcher(app.dispatcher)
-    job_queue.start()
-    app.job_queue = job_queue
-    job_queue.run_repeating(auto_confirm_extra_spins, interval=30, first=10)
-    
+    # Usa la JobQueue già disponibile nell'app (non è necessario creare manualmente)
+    if app.job_queue:
+        app.job_queue.run_repeating(auto_confirm_extra_spins, interval=30, first=10)
+    else:
+        logging.error("JobQueue non disponibile!")
+
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
 
