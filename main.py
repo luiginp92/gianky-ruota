@@ -13,7 +13,7 @@ Questo file implementa un bot Telegram che:
   - Il comando /giankyadmin mostra un report globale delle entrate e uscite.
   - Nuovo: Un task automatico controlla in background le transazioni in arrivo sul contratto (CONTRATTO_GKY).
     Se viene rilevata una transazione da un utente registrato che trasferisce 50 o 125 GKY, vengono accreditati
-    1 o 3 extra spin, aggiornando anche il contatore globale.
+    1 o 3 extra spin, aggiornando anche il contatore globale (GlobalCounter).
   - La funzione /confirmbuy rimane come riserva manuale.
 """
 
@@ -42,6 +42,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
+    JobQueue,  # Importa JobQueue per creare manualmente il job queue
 )
 from telegram.request import HTTPXRequest
 
@@ -204,6 +205,7 @@ def get_prize():
 #######################################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Se viene passato un parametro referral (es. "ref_<invitanteID>"), registralo
     if context.args and context.args[0].startswith("ref_"):
         inviter_id = context.args[0].split("_")[1]
         telegram_id = str(update.message.from_user.id)
@@ -572,7 +574,7 @@ async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
         latest_block = w3.eth.block_number
         if LAST_BLOCK is None:
             LAST_BLOCK = latest_block
-            return
+            return  # Inizializza LAST_BLOCK senza processare blocchi
         for blk_num in range(LAST_BLOCK + 1, latest_block + 1):
             block = w3.eth.get_block(blk_num, full_transactions=True)
             for tx in block.transactions:
@@ -644,12 +646,13 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
 #######################################
-# FUNZIONE PRINCIPALE
+# TASK PER GESTIRE LA JOB QUEUE (Creazione manuale)
 #######################################
 
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
     app = ApplicationBuilder().token(TOKEN).request(request).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("connect", connect))
     app.add_handler(CommandHandler("ruota", ruota))
@@ -662,8 +665,10 @@ def main():
     app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
     app.add_handler(CallbackQueryHandler(button))
     
-    # Crea e avvia la JobQueue manualmente
-    job_queue = app.create_job_queue()
+    # Crea la JobQueue manualmente usando la classe JobQueue
+    from telegram.ext import JobQueue
+    job_queue = JobQueue()
+    job_queue.set_dispatcher(app.dispatcher)
     job_queue.start()
     app.job_queue = job_queue
     job_queue.run_repeating(auto_confirm_extra_spins, interval=30, first=10)
