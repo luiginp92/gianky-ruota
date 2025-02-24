@@ -28,15 +28,14 @@ import asyncio
 import pytz
 
 from web3 import Web3
-# Non usiamo geth_poa_middleware da web3, ma definiamo una versione custom:
-def custom_geth_poa_middleware(make_request, web3):
+# Definiamo un POA middleware custom che accetta un valore di default per "web3"
+def custom_geth_poa_middleware(make_request, web3=None):
     def middleware(method, params):
         response = make_request(method, params)
-        # Se la risposta contiene il campo "extraData" e la sua lunghezza è maggiore di 32 byte,
-        # lo trunchiamo a 32 byte (64 caratteri esadecimali + "0x")
         result = response.get("result")
         if isinstance(result, dict) and "extraData" in result:
             extra = result["extraData"]
+            # Se extraData è troppo lungo (>32 byte), lo trunchiamo agli ultimi 32 byte (64 caratteri esadecimali, + "0x")
             if isinstance(extra, str) and len(extra) > 66:
                 response["result"]["extraData"] = "0x" + extra[-64:]
         return response
@@ -76,7 +75,7 @@ BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
 
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
-w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)  # Iniezione del middleware POA custom
+w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)  # Iniezione del POA middleware custom
 
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
