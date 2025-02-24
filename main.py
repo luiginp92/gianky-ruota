@@ -28,7 +28,20 @@ import asyncio
 import pytz
 
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
+# Non usiamo geth_poa_middleware da web3, ma definiamo una versione custom:
+def custom_geth_poa_middleware(make_request, web3):
+    def middleware(method, params):
+        response = make_request(method, params)
+        # Se la risposta contiene il campo "extraData" e la sua lunghezza è maggiore di 32 byte,
+        # lo trunchiamo a 32 byte (64 caratteri esadecimali + "0x")
+        result = response.get("result")
+        if isinstance(result, dict) and "extraData" in result:
+            extra = result["extraData"]
+            if isinstance(extra, str) and len(extra) > 66:
+                response["result"]["extraData"] = "0x" + extra[-64:]
+        return response
+    return middleware
+
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -63,7 +76,7 @@ BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
 
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
-w3.middleware_onion.inject(geth_poa_middleware, layer=0)  # Iniezione del POA middleware
+w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)  # Iniezione del middleware POA custom
 
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
@@ -676,7 +689,7 @@ def main():
     
     # Aggiungi gli handler per le callback
     app.add_handler(CallbackQueryHandler(confirm_share_task, pattern="^confirm_share_task$"))
-    # Assicurati di avere definito claim_share_reward se necessario (la funzione non è inclusa in questo snippet)
+    # Se la funzione claim_share_reward è necessaria, va aggiunta qui
     # app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
     app.add_handler(CallbackQueryHandler(button))
     
