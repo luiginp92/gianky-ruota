@@ -15,10 +15,6 @@ Questo file implementa un bot Telegram che:
   - La funzione /confirmbuy rimane come riserva manuale.
 """
 
-#######################################
-# IMPORTAZIONI E CONFIGURAZIONI INIZIALI
-#######################################
-
 import logging
 import random
 import datetime
@@ -28,9 +24,7 @@ import asyncio
 import pytz
 
 from web3 import Web3
-# La riga seguente è stata rimossa perché causa errore:
-# from web3.middleware.geth_poa import geth_poa_middleware
-
+from web3.middleware import geth_poa_middleware
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -47,26 +41,20 @@ from telegram.request import HTTPXRequest
 
 from database import Session, User, PremioVinto, GlobalCounter
 
-#######################################
 # CONFIGURAZIONE DEL LOGGING
-#######################################
-
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-#######################################
 # COSTANTI E CONFIGURAZIONI DEL BOT
-#######################################
-
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
-IMAGE_PATH = "ruota.png"  # Immagine statica della ruota
-BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
+IMAGE_PATH = "ruota.png"
+BOT_USERNAME = "giankytestbot"
 
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
-# Rimuovi il middleware POA, se non necessario:
-# w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+# Inietta il middleware per POA
+w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
 
@@ -74,10 +62,7 @@ PRIVATE_KEY = os.getenv("PRIVATE_KEY_GKY")
 if not PRIVATE_KEY:
     raise ValueError("❌ Errore: la chiave privata non è impostata.")
 
-#######################################
 # CACHING DEL FILE DI IMMAGINE STATICA
-#######################################
-
 if os.path.exists(IMAGE_PATH):
     with open(IMAGE_PATH, "rb") as f:
         STATIC_IMAGE_BYTES = f.read()
@@ -85,16 +70,11 @@ else:
     STATIC_IMAGE_BYTES = None
     logging.error("File statico non trovato: ruota.png")
 
-#######################################
-# VARIABILE GLOBALE PER TX DUPLICATI E TASK AUTOMATICO
-#######################################
-
+# VARIABILI GLOBALI
 USED_TX = set()
 LAST_BLOCK = None
 
-#######################################
-# FUNZIONI UTILI: GAS, TRANSAZIONI, PREMI, AGGIORNAMENTO CONTATORI
-#######################################
+# FUNZIONI UTILI
 
 def get_dynamic_gas_price():
     try:
@@ -133,6 +113,10 @@ def invia_token(destinatario, quantita):
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
+        if counter is None:
+            counter = GlobalCounter(total_in=0.0, total_out=0.0)
+            session.add(counter)
+            session.commit()
         counter.total_out += quantita
         session.commit()
     except Exception as e:
@@ -202,11 +186,10 @@ def get_prize():
         else:
             return "1000 GKY"
 
-#######################################
-# COMANDI DEL BOT ESISTENTI
-#######################################
+# COMANDI DEL BOT
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Gestione del referral se viene passato un parametro "ref_<ID>"
     if context.args and context.args[0].startswith("ref_"):
         inviter_id = context.args[0].split("_")[1]
         telegram_id = str(update.message.from_user.id)
@@ -391,7 +374,6 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if num_spins not in [1, 3]:
                 await update.message.reply_text("❌ Solo 1 o 3 tiri extra sono ammessi.")
                 return
-
         cost = 50 if num_spins == 1 else 125
         user = session.query(User).filter_by(telegram_id=telegram_id).first()
         if not user or not user.wallet_address:
@@ -403,6 +385,10 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             USED_TX.add(tx_hash)
             # Aggiorna il contatore globale per entrate
             counter = session.query(GlobalCounter).first()
+            if counter is None:
+                counter = GlobalCounter(total_in=0.0, total_out=0.0)
+                session.add(counter)
+                session.commit()
             counter.total_in += cost
             session.commit()
             await update.message.reply_text(f"✅ Acquisto confermato! Extra tiri disponibili: {user.extra_spins}")
@@ -473,6 +459,9 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from sqlalchemy import func
         counter = session.query(GlobalCounter).first()
+        if counter is None:
+            await update.message.reply_text("Nessun dato di transazioni ancora registrato.")
+            return
         total_in = counter.total_in
         total_out = counter.total_out
         report_text = (
@@ -501,7 +490,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not user or not user.wallet_address:
             await query.edit_message_caption("⚠️ Collega il wallet con /connect")
             return
-
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
         if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
@@ -517,7 +505,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.edit_message_caption("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
                 return
-
         prize = get_prize()
         if prize == "NO PRIZE":
             result_text = "😔 Nessun premio vinto. Riprova!"
@@ -532,12 +519,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             premio_record = PremioVinto(telegram_id=telegram_id, wallet=user.wallet_address, premio=prize, user_id=user.id)
             session.add(premio_record)
             session.commit()
-
         if user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
             new_available = 1 + (user.extra_spins or 0)
         else:
             new_available = user.extra_spins or 0
-
         new_caption = f"{result_text}\n\n🎰 Ruota pronta! Tiri disponibili: {new_available}"
         try:
             await query.edit_message_caption(caption=new_caption)
@@ -553,19 +538,18 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         session.close()
 
-#######################################
 # TASK AUTOMATICO PER VERIFICARE LE TRANSAZIONI EXTRA
-#######################################
 
 LAST_BLOCK = None
 
 async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
     """
-    Task automatico che, ad intervalli regolari, controlla i nuovi blocchi.
+    Task automatico che controlla i nuovi blocchi ogni 30 secondi.
     Per ogni transazione in cui il destinatario è il CONTRATTO_GKY e il mittente corrisponde
     a un wallet registrato, decodifica l'importo trasferito.
     Se l'importo corrisponde a 50 GKY, accredita 1 spin; se 125 GKY, accredita 3 spin.
     Aggiorna anche il contatore globale (total_in).
+    Se si verifica un errore di decodifica (es. per extraData non standard), lo logga e passa oltre.
     """
     global LAST_BLOCK
     try:
@@ -604,6 +588,10 @@ async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
                                     user.extra_spins += spins
                                     USED_TX.add(tx.hash.hex())
                                     counter = session.query(GlobalCounter).first()
+                                    if counter is None:
+                                        counter = GlobalCounter(total_in=0.0, total_out=0.0)
+                                        session.add(counter)
+                                        session.commit()
                                     counter.total_in += value_gky
                                     session.commit()
                                     try:
@@ -627,6 +615,9 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from sqlalchemy import func
         counter = session.query(GlobalCounter).first()
+        if counter is None:
+            await update.message.reply_text("Nessun dato di transazioni ancora registrato.")
+            return
         total_in = counter.total_in
         total_out = counter.total_out
         report_text = (
@@ -642,6 +633,67 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         session.close()
 
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    try:
+        await query.answer()
+    except Exception as e:
+        logging.error(f"Errore in query.answer(): {e}")
+    telegram_id = str(query.from_user.id)
+    session = Session()
+    try:
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if not user or not user.wallet_address:
+            await query.edit_message_caption("⚠️ Collega il wallet con /connect")
+            return
+        italy_tz = pytz.timezone("Europe/Rome")
+        now_italy = datetime.datetime.now(italy_tz)
+        if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
+            available = 1 + (user.extra_spins or 0)
+            user.last_play_date = now_italy
+            session.commit()
+        else:
+            available = user.extra_spins or 0
+            if available > 0:
+                user.extra_spins -= 1
+                session.commit()
+                available -= 1
+            else:
+                await query.edit_message_caption("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
+                return
+        prize = get_prize()
+        if prize == "NO PRIZE":
+            result_text = "😔 Nessun premio vinto. Riprova!"
+        elif "GKY" in prize:
+            amount = int(prize.split(" ")[0])
+            if invia_token(user.wallet_address, amount):
+                result_text = f"🎉 Hai vinto {amount} GKY!"
+            else:
+                result_text = "❌ Errore nell'invio dei token."
+        else:
+            result_text = f"🎉 Hai vinto: {prize}!"
+            premio_record = PremioVinto(telegram_id=telegram_id, wallet=user.wallet_address, premio=prize, user_id=user.id)
+            session.add(premio_record)
+            session.commit()
+        if user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
+            new_available = 1 + (user.extra_spins or 0)
+        else:
+            new_available = user.extra_spins or 0
+        new_caption = f"{result_text}\n\n🎰 Ruota pronta! Tiri disponibili: {new_available}"
+        try:
+            await query.edit_message_caption(caption=new_caption)
+        except Exception as e:
+            logging.error(f"Errore nell'aggiornamento della didascalia: {e}")
+            await query.message.reply_text(new_caption)
+    except Exception as e:
+        logging.error(f"Errore nel callback della ruota: {e}")
+        try:
+            await query.edit_message_caption("❌ Errore durante il giro della ruota.")
+        except Exception:
+            await query.message.reply_text("❌ Errore durante il giro della ruota.")
+    finally:
+        session.close()
+
 #######################################
 # FUNZIONE PRINCIPALE
 #######################################
@@ -649,7 +701,7 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
     app = ApplicationBuilder().token(TOKEN).request(request).build()
-    
+
     # Aggiungi gli handler dei comandi
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("connect", connect))
