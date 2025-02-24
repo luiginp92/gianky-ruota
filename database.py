@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 import datetime
 
 # Configura il database
-DATABASE_URL = "sqlite:///database.db"  # Per sviluppo; in produzione valuta PostgreSQL/MySQL
+DATABASE_URL = "sqlite:///database.db"  # Per ambiente di sviluppo; in produzione valuta PostgreSQL/MySQL
 engine = create_engine(DATABASE_URL, echo=True)  # Imposta echo=False in produzione
 Session = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -43,7 +43,6 @@ class GlobalCounter(Base):
     total_in = Column(Float, default=0.0)   # Totale entrate (pagamenti per extra spin)
     total_out = Column(Float, default=0.0)  # Totale uscite (premi distribuiti)
 
-# Crea le tabelle se non esistono
 Base.metadata.create_all(engine)
 
 # Inizializza il record globale se non esiste

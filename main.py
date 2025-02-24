@@ -4,13 +4,17 @@ Gianky Coin Bot - main.py
 --------------------------
 Questo file implementa un bot Telegram che:
   - Collega il wallet (/connect)
-  - Mostra la ruota statica (/ruota) con un contatore dei tiri disponibili aggiornato in tempo reale.
+  - Mostra la ruota statica (/ruota) con un contatore aggiornato dei tiri disponibili.
   - Al click sul pulsante "Gira la ruota!" consuma uno spin, calcola il premio e aggiorna il messaggio.
   - Ogni giorno (fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
   - È disponibile una task settimanale di condivisione per vincere 1 giro extra.
-  - Gli utenti possono ottenere un link referral (/referral) e se un nuovo utente si registra tramite quel link,
-    l’invitante riceve 2 extra spin (bonus assegnato una sola volta per quell’utente).
-  - Il comando /giankyadmin mostra un report globale delle entrate e uscite (totale, giornaliero e settimanale).
+  - Gli utenti possono ottenere un link referral (/referral) e, se un nuovo utente si registra tramite quel link,
+    l’invitante riceve 2 extra spin.
+  - Il comando /giankyadmin mostra un report globale delle entrate e uscite.
+  - **Nuovo:** Un task automatico controlla in background le transazioni in arrivo sul wallet del contratto
+    (su CONTRATTO_GKY). Se viene rilevata una transazione da un utente registrato che trasferisce 50 o 125 GKY,
+    vengono automaticamente accreditati 1 o 3 extra spin, aggiornando anche il contatore globale (GlobalCounter).
+  - La funzione /confirmbuy rimane come riserva manuale.
 """
 
 #######################################
@@ -24,7 +28,7 @@ import os
 import io
 import asyncio
 
-import pytz  # Per il fuso orario italiano
+import pytz
 
 from web3 import Web3
 from telegram import (
@@ -56,8 +60,8 @@ logging.basicConfig(
 #######################################
 
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
-IMAGE_PATH = "ruota.png"  # Immagine statica della ruota
-BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
+IMAGE_PATH = "ruota.png"
+BOT_USERNAME = "giankytestbot"
 
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
@@ -84,6 +88,7 @@ else:
 #######################################
 
 USED_TX = set()
+LAST_BLOCK = None  # Per il task automatico
 
 #######################################
 # FUNZIONI UTILI: GAS, TRANSAZIONI, PREMI, AGGIORNAMENTO CONTATORI
@@ -104,17 +109,15 @@ def invia_token(destinatario, quantita):
         logging.error("Blockchain non connessa.")
         return False
     gas_price = get_dynamic_gas_price()
-    contratto = w3.eth.contract(address=CONTRATTO_GKY, abi=[
-        {
-            "constant": False,
-            "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
-            "name": "transfer",
-            "outputs": [{"name": "", "type": "bool"}],
-            "payable": False,
-            "stateMutability": "nonpayable",
-            "type": "function",
-        }
-    ])
+    contratto = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
+        "constant": False,
+        "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
+        "name": "transfer",
+        "outputs": [{"name": "", "type": "bool"}],
+        "payable": False,
+        "stateMutability": "nonpayable",
+        "type": "function",
+    }])
     tx = contratto.functions.transfer(destinatario, quantita * 10**18).build_transaction({
         'from': WALLET_DISTRIBUZIONE,
         'nonce': w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE),
@@ -124,7 +127,6 @@ def invia_token(destinatario, quantita):
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
-    # Aggiorna il contatore globale: registra l'uscita
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
@@ -143,17 +145,15 @@ def verifica_transazione_gky(user_address, tx_hash, cost):
         if tx["to"].lower() != CONTRATTO_GKY.lower():
             logging.error("TX non destinata al contratto GKY.")
             return False
-        contract = w3.eth.contract(address=CONTRATTO_GKY, abi=[
-            {
-                "constant": False,
-                "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
-                "name": "transfer",
-                "outputs": [{"name": "", "type": "bool"}],
-                "payable": False,
-                "stateMutability": "nonpayable",
-                "type": "function",
-            }
-        ])
+        contract = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
+            "constant": False,
+            "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
+            "name": "transfer",
+            "outputs": [{"name": "", "type": "bool"}],
+            "payable": False,
+            "stateMutability": "nonpayable",
+            "type": "function",
+        }])
         try:
             func_obj, params = contract.decode_function_input(tx.input)
         except Exception as decode_error:
@@ -175,24 +175,10 @@ def verifica_transazione_gky(user_address, tx_hash, cost):
         return False
 
 def get_prize():
-    """
-    Calcola il premio secondo la seguente distribuzione:
-      - NFT BASISC: 0.02%
-      - NFT STARTER: 0.04%
-      - Normal prizes (totale 99.0%):
-            NO PRIZE: 30%
-            10 GKY: 25%
-            20 GKY: 20%
-            50 GKY: 10%
-            100 GKY: 7%
-            250 GKY: 4%
-            500 GKY: 2%
-            1000 GKY: 1%
-    """
     r = random.random() * 100
     if r < 0.02:
         return "NFT BASISC"
-    elif r < 0.02 + 0.04:
+    elif r < 0.06:
         return "NFT STARTER"
     else:
         r2 = r - 0.06
@@ -218,7 +204,6 @@ def get_prize():
 #######################################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Gestione referral se /start viene chiamato con un parametro "ref_..."
     if context.args and context.args[0].startswith("ref_"):
         inviter_id = context.args[0].split("_")[1]
         telegram_id = str(update.message.from_user.id)
@@ -248,7 +233,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session.rollback()
         finally:
             session.close()
-
     await update.message.reply_text(
         "🎉 Benvenuto in Gianky Coin!\n\n"
         "Usa /connect <wallet_address> per collegare il wallet,\n"
@@ -259,7 +243,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Genera e invia il link referral univoco per l'utente corrente."""
     telegram_id = str(update.message.from_user.id)
     link = f"https://t.me/{BOT_USERNAME}?start=ref_{telegram_id}"
     await update.message.reply_text(f"💡 Il tuo link referral:\n{link}")
@@ -291,10 +274,6 @@ async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Usa: /connect <wallet_address>")
 
 async def ruota(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Mostra la ruota statica con il contatore dei tiri disponibili.
-    Se l'utente non ha giocato oggi (fuso Italia), ha 1 tiro gratuito + extra_spins; altrimenti, solo extra_spins.
-    """
     telegram_id = str(update.message.from_user.id)
     session = Session()
     try:
@@ -307,14 +286,12 @@ async def ruota(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user or not user.wallet_address:
         await update.message.reply_text("⚠️ Collega il wallet con /connect")
         return
-
     italy_tz = pytz.timezone("Europe/Rome")
     now_italy = datetime.datetime.now(italy_tz)
     if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
         available = 1 + (user.extra_spins or 0)
     else:
         available = user.extra_spins or 0
-
     caption = f"🎰 Ruota pronta! Tiri disponibili: {available}\nPremi il pulsante per girarla."
     keyboard = [[InlineKeyboardButton("🎡 Gira la ruota!", callback_data="spin")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -361,10 +338,11 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     /confirmbuy <tx_hash> [<num>]
     
     Questa funzione conferma automaticamente l'acquisto di extra spin.
-    Se viene fornito solo il tx_hash, il sistema tenta di determinare automaticamente il numero di spin in base all'importo trasferito:
-      - 50 GKY corrispondono a 1 spin.
-      - 125 GKY corrispondono a 3 spin.
-    Se non viene riconosciuto l'importo esatto, l'utente può specificare manualmente il numero di spin extra (1 o 3) come secondo parametro.
+    Se viene fornito solo il tx_hash, il sistema decodifica l'input della transazione per determinare
+    automaticamente il numero di spin in base all'importo trasferito:
+      - 50 GKY  → 1 spin
+      - 125 GKY → 3 spin
+    Se l'importo non viene riconosciuto, l'utente può specificare manualmente il numero di spin extra (1 o 3).
     """
     telegram_id = str(update.message.from_user.id)
     session = Session()
@@ -376,11 +354,26 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if tx_hash in USED_TX:
             await update.message.reply_text("❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
             return
-        # Se il numero di spin non viene specificato, tenta il riconoscimento automatico
         if len(context.args) == 1:
-            tx = w3.eth.get_transaction(tx_hash)
-            value_wei = tx["value"]
-            value_gky = float(w3.from_wei(value_wei, "ether"))
+            try:
+                tx = w3.eth.get_transaction(tx_hash)
+                contract = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
+                    "constant": False,
+                    "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
+                    "name": "transfer",
+                    "outputs": [{"name": "", "type": "bool"}],
+                    "payable": False,
+                    "stateMutability": "nonpayable",
+                    "type": "function",
+                }])
+                func_obj, params = contract.decode_function_input(tx.input)
+                token_amount = params.get("_value", 0)
+                value_gky = float(w3.from_wei(token_amount, "ether"))
+            except Exception as e:
+                logging.error(f"Errore nella decodifica automatica: {e}")
+                await update.message.reply_text("❌ Errore nella decodifica automatica. Specifica manualmente il numero di tiri extra.")
+                return
+
             if value_gky == 50:
                 num_spins = 1
             elif value_gky == 125:
@@ -407,7 +400,6 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user.extra_spins = (user.extra_spins or 0) + num_spins
             session.commit()
             USED_TX.add(tx_hash)
-            # Aggiorna il contatore globale: registra l'entrata
             counter = session.query(GlobalCounter).first()
             counter.total_in += cost
             session.commit()
@@ -420,16 +412,7 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         session.close()
 
-#######################################
-# NUOVI COMANDI PER LA SHARE TASK
-#######################################
-
 async def sharetask(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /sharetask
-    Invia il link del video e un pulsante "Condividi e vinci" per completare la task di condivisione
-    (valida 1 volta a settimana) per guadagnare 1 giro extra.
-    """
     video_url = "https://www.youtube.com/watch?v=AbpPYERGCXI&ab_channel=GKY-OFFICIAL"
     keyboard = [[InlineKeyboardButton("Condividi e vinci", url=video_url)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -442,16 +425,13 @@ async def sharetask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Quando hai condiviso, premi il pulsante:", reply_markup=confirm_markup)
 
 async def confirm_share_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Callback per "Conferma task". Risponde subito e poi attende 10 minuti per inviare il pulsante "Prendi premio".
-    """
     query = update.callback_query
     await query.answer()
     await query.message.reply_text("⏳ Attendi, il check della task durerà max 10 minuti...")
     asyncio.create_task(delayed_reward(query))
 
 async def delayed_reward(query):
-    await asyncio.sleep(600)  # 600 secondi = 10 minuti
+    await asyncio.sleep(600)
     reward_keyboard = [[InlineKeyboardButton("Prendi premio", callback_data="claim_share_reward")]]
     reward_markup = InlineKeyboardMarkup(reward_keyboard)
     try:
@@ -460,10 +440,6 @@ async def delayed_reward(query):
         logging.error(f"Errore in delayed_reward: {e}")
 
 async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Callback per "Prendi premio". Se l'utente ha completato la task negli ultimi 7 giorni, informa il tempo mancante;
-    altrimenti accredita 1 giro extra e aggiorna last_share_task.
-    """
     query = update.callback_query
     await query.answer()
     telegram_id = str(query.from_user.id)
@@ -490,26 +466,15 @@ async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE)
     finally:
         session.close()
 
-#######################################
-# NUOVO COMANDO ADMIN PER REPORT
-#######################################
-
 async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /giankyadmin
-    Mostra il report globale delle entrate e uscite di GKY.
-    Report include totali globali, giornalieri e settimanali.
-    """
     session = Session()
     try:
         from sqlalchemy import func
         counter = session.query(GlobalCounter).first()
         total_in = counter.total_in
         total_out = counter.total_out
-
         italy_tz = pytz.timezone("Europe/Rome")
         today = datetime.datetime.now(italy_tz).date()
-        # Per una soluzione snella, mostriamo solo i totali globali.
         report_text = (
             f"📊 Report Globali GKY:\n"
             f"Entrate totali: {total_in} GKY\n"
@@ -523,16 +488,7 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         session.close()
 
-#######################################
-# HANDLER PER LA RUOTA (callback)
-#######################################
-
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Callback per "Gira la ruota!".
-    Se l'utente non ha giocato oggi (fuso Italia), ha 1 tiro gratuito + extra_spins; altrimenti consuma un extra spin.
-    Dopo il giro, calcola il premio, invia eventuali token e aggiorna il messaggio con il nuovo contatore.
-    """
     query = update.callback_query
     try:
         await query.answer()
@@ -599,6 +555,110 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
 #######################################
+# TASK AUTOMATICO PER VERIFICARE LE TRANSAZIONI
+#######################################
+
+LAST_BLOCK = None
+
+async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Task automatico che, ad intervalli regolari, controlla i nuovi blocchi.
+    Per ogni transazione in cui il destinatario è il CONTRATTO_GKY e il mittente corrisponde
+    a un wallet registrato, decodifica l'importo trasferito.
+    Se l'importo corrisponde a 50 GKY, accredita 1 spin; se 125 GKY, accredita 3 spin.
+    Aggiorna anche il contatore globale (total_in).
+    """
+    global LAST_BLOCK
+    try:
+        latest_block = w3.eth.block_number
+        if LAST_BLOCK is None:
+            LAST_BLOCK = latest_block
+            return  # Salta la prima esecuzione per inizializzare LAST_BLOCK
+        # Processa solo i blocchi nuovi
+        for blk_num in range(LAST_BLOCK + 1, latest_block + 1):
+            block = w3.eth.get_block(blk_num, full_transactions=True)
+            for tx in block.transactions:
+                if tx.to and tx.to.lower() == CONTRATTO_GKY.lower():
+                    # Controlla se il mittente (from) è presente nel database
+                    sender = tx["from"].lower()
+                    session = Session()
+                    try:
+                        user = session.query(User).filter(User.wallet_address.ilike(f"{sender}%")).first()
+                        if user and tx.hash.hex() not in USED_TX:
+                            # Decodifica la transazione
+                            contract = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
+                                "constant": False,
+                                "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
+                                "name": "transfer",
+                                "outputs": [{"name": "", "type": "bool"}],
+                                "payable": False,
+                                "stateMutability": "nonpayable",
+                                "type": "function",
+                            }])
+                            try:
+                                func_obj, params = contract.decode_function_input(tx.input)
+                                token_amount = params.get("_value", 0)
+                                value_gky = float(w3.from_wei(token_amount, "ether"))
+                                spins = 0
+                                if value_gky == 50:
+                                    spins = 1
+                                elif value_gky == 125:
+                                    spins = 3
+                                if spins > 0:
+                                    user.extra_spins += spins
+                                    USED_TX.add(tx.hash.hex())
+                                    # Aggiorna il contatore globale
+                                    counter = session.query(GlobalCounter).first()
+                                    counter.total_in += value_gky
+                                    session.commit()
+                                    # Invia un messaggio (opzionale) per notificare l'utente
+                                    try:
+                                        await context.bot.send_message(chat_id=user.telegram_id, text=f"✅ Auto-conferma: hai ricevuto {spins} extra spin per un pagamento di {value_gky} GKY!")
+                                    except Exception as msg_err:
+                                        logging.error(f"Errore invio messaggio automatico: {msg_err}")
+                            except Exception as decode_err:
+                                logging.error(f"Errore nella decodifica automatica in blocco {blk_num}: {decode_err}")
+                    finally:
+                        session.close()
+            LAST_BLOCK = blk_num
+    except Exception as e:
+        logging.error(f"Errore nel task auto_confirm_extra_spins: {e}")
+
+#######################################
+# HANDLER PER SHARE TASK E RUOTA (già definiti sopra)
+#######################################
+
+# (Le funzioni sharetask, confirm_share_task, delayed_reward, claim_share_reward, button, giankyadmin, ecc. rimangono invariate)
+
+# Inserisco qui la funzione claim_share_reward (già definita in precedenza)
+async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    telegram_id = str(query.from_user.id)
+    session = Session()
+    try:
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if not user:
+            await query.edit_message_caption("⚠️ Utente non trovato. Usa /connect per collegare il wallet.")
+            return
+        now = datetime.datetime.now(pytz.timezone("Europe/Rome"))
+        if user.last_share_task is not None:
+            diff = now - user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
+            if diff < datetime.timedelta(days=7):
+                remaining = datetime.timedelta(days=7) - diff
+                await query.edit_message_caption(f"⏳ Hai già completato la task. Rifalla per guadagnare un nuovo giro extra.\nRiprova tra {remaining}.")
+                return
+        user.extra_spins += 1
+        user.last_share_task = now
+        session.commit()
+        await query.edit_message_caption(f"🎉 Task completata! Hai guadagnato 1 giro extra.\nExtra tiri disponibili: {user.extra_spins}")
+    except Exception as e:
+        logging.error(f"Errore in claim_share_reward: {e}")
+        await query.edit_message_caption("❌ Errore durante il riscatto del premio.")
+    finally:
+        session.close()
+
+#######################################
 # FUNZIONE PRINCIPALE
 #######################################
 
@@ -616,6 +676,10 @@ def main():
     app.add_handler(CallbackQueryHandler(confirm_share_task, pattern="^confirm_share_task$"))
     app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
     app.add_handler(CallbackQueryHandler(button))
+    
+    # Aggiungi il task automatico per controllare le transazioni (ogni 30 secondi)
+    app.job_queue.run_repeating(auto_confirm_extra_spins, interval=30, first=10)
+
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
 
