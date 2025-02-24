@@ -2,8 +2,8 @@ from sqlalchemy import Column, Integer, String, DateTime, Float, create_engine, 
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 import datetime
 
-# Configura il database
-DATABASE_URL = "sqlite:///database.db"  # Per ambiente di sviluppo; in produzione valuta PostgreSQL/MySQL
+# Configura il database (usa PostgreSQL/MySQL in produzione)
+DATABASE_URL = "sqlite:///database.db"
 engine = create_engine(DATABASE_URL, echo=True)  # Imposta echo=False in produzione
 Session = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -22,6 +22,9 @@ class User(Base):
     # Relazione: un utente può avere molti premi vinti
     premi_vinti = relationship("PremioVinto", back_populates="user", cascade="all, delete-orphan")
 
+    def __repr__(self):
+        return f"<User(id={self.id}, telegram_id='{self.telegram_id}', wallet_address='{self.wallet_address}')>"
+
 # Modello per registrare i premi vinti
 class PremioVinto(Base):
     __tablename__ = "premi_vinti"
@@ -36,12 +39,18 @@ class PremioVinto(Base):
     # Relazione: collega il premio all'utente
     user = relationship("User", back_populates="premi_vinti")
 
-# Tabella per il contatore globale di GKY
+    def __repr__(self):
+        return f"<PremioVinto(id={self.id}, premio='{self.premio}', data_vincita={self.data_vincita})>"
+
+# Modello per il contatore globale di GKY
 class GlobalCounter(Base):
     __tablename__ = "global_counter"
     id = Column(Integer, primary_key=True, autoincrement=True)
     total_in = Column(Float, default=0.0)   # Totale token in entrata (pagamenti ricevuti)
     total_out = Column(Float, default=0.0)  # Totale token in uscita (premi inviati)
+
+    def __repr__(self):
+        return f"<GlobalCounter(total_in={self.total_in}, total_out={self.total_out})>"
 
 # Crea le tabelle se non esistono
 Base.metadata.create_all(engine)

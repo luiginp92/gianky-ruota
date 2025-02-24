@@ -28,7 +28,9 @@ import asyncio
 import pytz
 
 from web3 import Web3
-from web3.middleware.geth_poa import geth_poa_middleware
+# La riga seguente è stata rimossa perché causa errore:
+# from web3.middleware.geth_poa import geth_poa_middleware
+
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -63,8 +65,8 @@ BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
 
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
-w3.middleware_onion.inject(geth_poa_middleware, layer=0)  # Iniezione middleware per POA
-
+# Rimuovi il middleware POA, se non necessario:
+# w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
 
@@ -185,27 +187,26 @@ def get_prize():
         r2 = r - 0.06
         if r2 < 30:
             return "NO PRIZE"
-        elif r2 < 55:
+        elif r2 < 30 + 25:
             return "10 GKY"
-        elif r2 < 75:
+        elif r2 < 55 + 20:
             return "20 GKY"
-        elif r2 < 85:
+        elif r2 < 75 + 10:
             return "50 GKY"
-        elif r2 < 92:
+        elif r2 < 85 + 7:
             return "100 GKY"
-        elif r2 < 96:
+        elif r2 < 92 + 4:
             return "250 GKY"
-        elif r2 < 98:
+        elif r2 < 96 + 2:
             return "500 GKY"
         else:
             return "1000 GKY"
 
 #######################################
-# COMANDI DEL BOT
+# COMANDI DEL BOT ESISTENTI
 #######################################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Gestione del referral: se /start viene avviato con parametro ref_, registra il referral
     if context.args and context.args[0].startswith("ref_"):
         inviter_id = context.args[0].split("_")[1]
         telegram_id = str(update.message.from_user.id)
@@ -400,6 +401,7 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user.extra_spins = (user.extra_spins or 0) + num_spins
             session.commit()
             USED_TX.add(tx_hash)
+            # Aggiorna il contatore globale per entrate
             counter = session.query(GlobalCounter).first()
             counter.total_in += cost
             session.commit()
@@ -499,6 +501,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not user or not user.wallet_address:
             await query.edit_message_caption("⚠️ Collega il wallet con /connect")
             return
+
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
         if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
@@ -514,6 +517,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.edit_message_caption("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
                 return
+
         prize = get_prize()
         if prize == "NO PRIZE":
             result_text = "😔 Nessun premio vinto. Riprova!"
@@ -528,10 +532,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             premio_record = PremioVinto(telegram_id=telegram_id, wallet=user.wallet_address, premio=prize, user_id=user.id)
             session.add(premio_record)
             session.commit()
+
         if user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
             new_available = 1 + (user.extra_spins or 0)
         else:
             new_available = user.extra_spins or 0
+
         new_caption = f"{result_text}\n\n🎰 Ruota pronta! Tiri disponibili: {new_available}"
         try:
             await query.edit_message_caption(caption=new_caption)
@@ -643,7 +649,7 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
     app = ApplicationBuilder().token(TOKEN).request(request).build()
-
+    
     # Aggiungi gli handler dei comandi
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("connect", connect))
@@ -655,8 +661,8 @@ def main():
     app.add_handler(CommandHandler("giankyadmin", giankyadmin))
     
     # Aggiungi gli handler per le callback
-    app.add_handler(CallbackQueryHandler(lambda update, context: asyncio.create_task(confirm_share_task(update, context)), pattern="^confirm_share_task$"))
-    app.add_handler(CallbackQueryHandler(lambda update, context: asyncio.create_task(claim_share_reward(update, context)), pattern="^claim_share_reward$"))
+    app.add_handler(CallbackQueryHandler(confirm_share_task, pattern="^confirm_share_task$"))
+    app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
     app.add_handler(CallbackQueryHandler(button))
     
     # Avvia il task automatico per controllare le transazioni ogni 30 secondi
