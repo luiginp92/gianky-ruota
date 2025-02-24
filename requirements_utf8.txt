@@ -31,7 +31,7 @@ propcache==0.3.0
 pycryptodome==3.21.0
 pydantic==2.10.6
 pydantic_core==2.27.2
-python-telegram-bot==21.10
+python-telegram-bot[job-queue]==21.10
 pyunormalize==16.0.0
 pywin32==308
 regex==2024.11.6
