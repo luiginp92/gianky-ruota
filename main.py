@@ -8,9 +8,9 @@ Questo file implementa un bot Telegram che:
   - Al click sul pulsante "Gira la ruota!" consuma uno spin, calcola il premio e aggiorna il messaggio.
   - Ogni giorno (fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
   - È disponibile una task settimanale di condivisione per vincere 1 giro extra (conferma e check).
-  - È possibile invitare altri utenti: con il comando /referral l’utente riceve il proprio link univoco.
-    Inoltre, se un nuovo utente si registra (es. via /start) con un parametro referral (formato "ref_<invitanteID>"),
-    l’utente invitante riceverà 2 extra spin.
+  - È possibile invitare altri utenti: con il comando /referral l’utente riceve il proprio link referral.
+    Inoltre, se un nuovo utente si registra tramite il link referral (usando /start con il parametro "ref_..."),
+    l’utente invitante riceverà 2 extra spin (bonus assegnato una sola volta per quell’utente).
 """
 
 #######################################
@@ -57,7 +57,7 @@ logging.basicConfig(
 
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
 IMAGE_PATH = "ruota.png"  # Immagine statica della ruota
-BOT_USERNAME = "gianky-bot-test"  # Sostituisci con il tuo username (senza @)
+BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
 
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
@@ -207,19 +207,19 @@ def get_prize():
 #######################################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Controlla se è stato passato un parametro referral, formato "ref_<invitanteID>"
+    # Se viene passato un parametro referral (es. "ref_<invitanteID>"), registralo
     if context.args and context.args[0].startswith("ref_"):
         inviter_id = context.args[0].split("_")[1]
         telegram_id = str(update.message.from_user.id)
         session = Session()
         try:
-            # Crea l'utente se non esiste
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if not user:
+                # Crea l'utente e registra il referral
                 user = User(telegram_id=telegram_id, extra_spins=0, referred_by=inviter_id)
                 session.add(user)
                 session.commit()
-                # Se esiste un invitante, accredita 2 extra spin
+                # Accredita 2 extra spin all'invitante, se esiste
                 inviter = session.query(User).filter_by(telegram_id=inviter_id).first()
                 if inviter:
                     inviter.extra_spins = (inviter.extra_spins or 0) + 2
@@ -246,7 +246,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Usa /connect <wallet_address> per collegare il wallet,\n"
         "usa /ruota per visualizzare la ruota e il contatore dei tiri disponibili,\n"
         "/buyspins per acquistare extra tiri,\n"
-        "/sharetask per condividere il video e guadagnare 1 giro extra (1 volta a settimana),\n"
+        "/sharetask per completare la task di condivisione e guadagnare 1 giro extra (1 volta a settimana),\n"
         "oppure /referral per ottenere il tuo link referral."
     )
 
@@ -419,7 +419,6 @@ async def confirm_share_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     await query.message.reply_text("⏳ Attendi, il check della task durerà max 10 minuti...")
-    # Avvia il task in background
     asyncio.create_task(delayed_reward(query))
 
 async def delayed_reward(query):
@@ -450,7 +449,7 @@ async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE)
             diff = now - user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
             if diff < datetime.timedelta(days=7):
                 remaining = datetime.timedelta(days=7) - diff
-                await query.edit_message_caption(f"⏳ Hai già completato la task. Devi rifarla per guadagnare un nuovo giro extra. Riprova tra {remaining}.")
+                await query.edit_message_caption(f"⏳ Hai già completato la task. Devi rifarla per guadagnare un nuovo giro extra.\nRiprova tra {remaining}.")
                 return
         user.extra_spins = (user.extra_spins or 0) + 1
         user.last_share_task = now
@@ -461,18 +460,6 @@ async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_caption("❌ Errore durante il riscatto del premio.")
     finally:
         session.close()
-
-#######################################
-# NUOVO COMANDO PER IL REFERRAL
-#######################################
-
-async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Il comando /referral genera un link referral univoco per l'utente corrente.
-    """
-    telegram_id = str(update.message.from_user.id)
-    link = f"https://t.me/{BOT_USERNAME}?start=ref_{telegram_id}"
-    await update.message.reply_text(f"💡 Il tuo link referral:\n{link}")
 
 #######################################
 # HANDLER ESISTENTI (callback della ruota, ecc.)
@@ -562,10 +549,13 @@ def main():
     app.add_handler(CommandHandler("ruota", ruota))
     app.add_handler(CommandHandler("buyspins", buyspins))
     app.add_handler(CommandHandler("confirmbuy", confirmbuy))
-    app.add_handler(CommandHandler("sharetask", sharetask))
+    # Handler per il referral
     app.add_handler(CommandHandler("referral", referral))
+    # Handler per la share task
+    app.add_handler(CommandHandler("sharetask", sharetask))
     app.add_handler(CallbackQueryHandler(confirm_share_task, pattern="^confirm_share_task$"))
     app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
+    # Handler per la ruota
     app.add_handler(CallbackQueryHandler(button))
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
