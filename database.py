@@ -17,6 +17,7 @@ class User(Base):
     last_play_date = Column(DateTime, nullable=True)  # Data dell'ultimo giro effettuato
     extra_spins = Column(Integer, default=0)  # Numero di spin extra acquistati
     last_share_task = Column(DateTime, nullable=True)  # Data dell'ultima task di condivisione completata
+    referred_by = Column(String, nullable=True)  # Telegram ID dell'utente che ha invitato
 
     # Relazione: un utente può avere molti premi vinti
     premi_vinti = relationship("PremioVinto", back_populates="user", cascade="all, delete-orphan")
