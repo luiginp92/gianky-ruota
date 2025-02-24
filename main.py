@@ -10,9 +10,7 @@ Questo file implementa un bot Telegram che:
   - È disponibile una task settimanale di condivisione per vincere 1 giro extra.
   - Gli utenti possono ottenere un link referral (/referral) e, se un nuovo utente si registra tramite quel link, l’invitante riceve 2 extra spin.
   - Il comando /giankyadmin mostra un report globale delle entrate e uscite.
-  - Un task automatico controlla in background le transazioni in arrivo sul contratto (CONTRATTO_GKY)
-    e accredita extra spin automaticamente.
-  - La funzione /confirmbuy rimane come riserva manuale.
+  - La funzione /confirmbuy conferma manualmente l'acquisto di extra spin.
 """
 
 #######################################
@@ -28,14 +26,14 @@ import asyncio
 import pytz
 
 from web3 import Web3
-# Definiamo un POA middleware custom che accetta un valore di default per "web3"
+# Definiamo un POA middleware custom per gestire il campo extraData
 def custom_geth_poa_middleware(make_request, web3=None):
     def middleware(method, params):
         response = make_request(method, params)
         result = response.get("result")
         if isinstance(result, dict) and "extraData" in result:
             extra = result["extraData"]
-            # Se extraData è troppo lungo (>32 byte), lo trunchiamo agli ultimi 32 byte (64 caratteri esadecimali, + "0x")
+            # Se extraData è troppo lungo (>32 byte), lo trunchiamo agli ultimi 32 byte (64 caratteri esadecimali + "0x")
             if isinstance(extra, str) and len(extra) > 66:
                 response["result"]["extraData"] = "0x" + extra[-64:]
         return response
@@ -96,11 +94,10 @@ else:
     logging.error("File statico non trovato: ruota.png")
 
 #######################################
-# VARIABILE GLOBALE PER TX DUPLICATI E TASK AUTOMATICO
+# VARIABILE GLOBALE PER TX DUPLICATI
 #######################################
 
 USED_TX = set()
-LAST_BLOCK = None
 
 #######################################
 # FUNZIONI UTILI: GAS, TRANSAZIONI, PREMI, AGGIORNAMENTO CONTATORI
@@ -356,7 +353,7 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /confirmbuy <tx_hash> [<num>]
 
-    Questa funzione conferma automaticamente l'acquisto di extra spin.
+    Questa funzione conferma manualmente l'acquisto di extra spin.
     Se viene fornito solo il tx_hash, il sistema decodifica l'importo trasferito:
       - 50 GKY  → 1 spin
       - 125 GKY → 3 spin
@@ -573,102 +570,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
 
 #######################################
-# TASK AUTOMATICO PER VERIFICARE LE TRANSAZIONI EXTRA
-#######################################
-
-LAST_BLOCK = None
-
-async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
-    """
-    Task automatico che, ad intervalli regolari, controlla i nuovi blocchi.
-    Per ogni transazione in cui il destinatario è il CONTRATTO_GKY e il mittente corrisponde
-    a un wallet registrato, decodifica l'importo trasferito.
-    Se l'importo corrisponde a 50 GKY, accredita 1 spin; se 125 GKY, accredita 3 spin.
-    Aggiorna anche il contatore globale (total_in).
-    """
-    global LAST_BLOCK
-    try:
-        latest_block = w3.eth.block_number
-        if LAST_BLOCK is None:
-            LAST_BLOCK = latest_block
-            return
-        for blk_num in range(LAST_BLOCK + 1, latest_block + 1):
-            block = w3.eth.get_block(blk_num, full_transactions=True)
-            for tx in block.transactions:
-                if tx.to and tx.to.lower() == CONTRATTO_GKY.lower():
-                    sender = tx["from"].lower()
-                    session = Session()
-                    try:
-                        user = session.query(User).filter(User.wallet_address.ilike(f"{sender}%")).first()
-                        if user and tx.hash.hex() not in USED_TX:
-                            contract = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
-                                "constant": False,
-                                "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
-                                "name": "transfer",
-                                "outputs": [{"name": "", "type": "bool"}],
-                                "payable": False,
-                                "stateMutability": "nonpayable",
-                                "type": "function",
-                            }])
-                            try:
-                                func_obj, params = contract.decode_function_input(tx.input)
-                                token_amount = params.get("_value", 0)
-                                value_gky = float(w3.from_wei(token_amount, "ether"))
-                                spins = 0
-                                if value_gky == 50:
-                                    spins = 1
-                                elif value_gky == 125:
-                                    spins = 3
-                                if spins > 0:
-                                    user.extra_spins += spins
-                                    USED_TX.add(tx.hash.hex())
-                                    counter = session.query(GlobalCounter).first()
-                                    if counter is not None:
-                                        counter.total_in += value_gky
-                                    else:
-                                        counter = GlobalCounter(total_in=value_gky, total_out=0.0)
-                                        session.add(counter)
-                                    session.commit()
-                                    try:
-                                        await context.bot.send_message(chat_id=user.telegram_id, text=f"✅ Auto-conferma: hai ricevuto {spins} extra spin per un pagamento di {value_gky} GKY!")
-                                    except Exception as msg_err:
-                                        logging.error(f"Errore invio messaggio automatico: {msg_err}")
-                            except Exception as decode_err:
-                                logging.error(f"Errore nella decodifica automatica in blocco {blk_num}: {decode_err}")
-                    finally:
-                        session.close()
-            LAST_BLOCK = blk_num
-    except Exception as e:
-        logging.error(f"Errore nel task auto_confirm_extra_spins: {e}")
-
-#######################################
-# FUNZIONE ADMIN PER REPORT GLOBALI
-#######################################
-
-async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    session = Session()
-    try:
-        from sqlalchemy import func
-        counter = session.query(GlobalCounter).first()
-        if counter is None:
-            report_text = "Nessun dato disponibile ancora."
-        else:
-            total_in = counter.total_in
-            total_out = counter.total_out
-            report_text = (
-                f"📊 Report Globali GKY:\n"
-                f"Entrate totali: {total_in} GKY\n"
-                f"Uscite totali: {total_out} GKY\n"
-                f"Bilancio: {total_in - total_out} GKY"
-            )
-        await update.message.reply_text(report_text)
-    except Exception as e:
-        logging.error(f"Errore nel report admin: {e}")
-        await update.message.reply_text("❌ Errore durante la generazione del report.")
-    finally:
-        session.close()
-
-#######################################
 # FUNZIONE PRINCIPALE
 #######################################
 
@@ -692,11 +593,7 @@ def main():
     # app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
     app.add_handler(CallbackQueryHandler(button))
     
-    # Avvia il task automatico per controllare le transazioni ogni 30 secondi
-    if app.job_queue:
-        app.job_queue.run_repeating(auto_confirm_extra_spins, interval=30, first=10)
-    else:
-        logging.error("JobQueue non disponibile!")
+    # Rimosso il task automatico per la verifica delle transazioni, per evitare conflitti.
     
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
