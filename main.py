@@ -11,9 +11,9 @@ Questo file implementa un bot Telegram che:
   - Gli utenti possono ottenere un link referral (/referral) e, se un nuovo utente si registra tramite quel link,
     l’invitante riceve 2 extra spin.
   - Il comando /giankyadmin mostra un report globale delle entrate e uscite.
-  - **Nuovo:** Un task automatico controlla in background le transazioni in arrivo sul wallet del contratto
-    (su CONTRATTO_GKY). Se viene rilevata una transazione da un utente registrato che trasferisce 50 o 125 GKY,
-    vengono automaticamente accreditati 1 o 3 extra spin, aggiornando anche il contatore globale (GlobalCounter).
+  - Nuovo: Un task automatico controlla in background le transazioni in arrivo sul contratto (CONTRATTO_GKY).
+    Se viene rilevata una transazione da un utente registrato che trasferisce 50 o 125 GKY, vengono accreditati
+    1 o 3 extra spin, aggiornando anche il contatore globale.
   - La funzione /confirmbuy rimane come riserva manuale.
 """
 
@@ -60,8 +60,8 @@ logging.basicConfig(
 #######################################
 
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
-IMAGE_PATH = "ruota.png"
-BOT_USERNAME = "giankytestbot"
+IMAGE_PATH = "ruota.png"  # Immagine statica della ruota
+BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
 
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
@@ -84,7 +84,7 @@ else:
     logging.error("File statico non trovato: ruota.png")
 
 #######################################
-# VARIABILE GLOBALE PER TX DUPLICATI
+# VARIABILE GLOBALE PER TX DUPLICATI E LAST_BLOCK
 #######################################
 
 USED_TX = set()
@@ -336,7 +336,7 @@ async def buyspins(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /confirmbuy <tx_hash> [<num>]
-    
+
     Questa funzione conferma automaticamente l'acquisto di extra spin.
     Se viene fornito solo il tx_hash, il sistema decodifica l'input della transazione per determinare
     automaticamente il numero di spin in base all'importo trasferito:
@@ -474,7 +474,6 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total_in = counter.total_in
         total_out = counter.total_out
         italy_tz = pytz.timezone("Europe/Rome")
-        today = datetime.datetime.now(italy_tz).date()
         report_text = (
             f"📊 Report Globali GKY:\n"
             f"Entrate totali: {total_in} GKY\n"
@@ -573,19 +572,16 @@ async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
         latest_block = w3.eth.block_number
         if LAST_BLOCK is None:
             LAST_BLOCK = latest_block
-            return  # Salta la prima esecuzione per inizializzare LAST_BLOCK
-        # Processa solo i blocchi nuovi
+            return
         for blk_num in range(LAST_BLOCK + 1, latest_block + 1):
             block = w3.eth.get_block(blk_num, full_transactions=True)
             for tx in block.transactions:
                 if tx.to and tx.to.lower() == CONTRATTO_GKY.lower():
-                    # Controlla se il mittente (from) è presente nel database
                     sender = tx["from"].lower()
                     session = Session()
                     try:
                         user = session.query(User).filter(User.wallet_address.ilike(f"{sender}%")).first()
                         if user and tx.hash.hex() not in USED_TX:
-                            # Decodifica la transazione
                             contract = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
                                 "constant": False,
                                 "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
@@ -607,11 +603,9 @@ async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
                                 if spins > 0:
                                     user.extra_spins += spins
                                     USED_TX.add(tx.hash.hex())
-                                    # Aggiorna il contatore globale
                                     counter = session.query(GlobalCounter).first()
                                     counter.total_in += value_gky
                                     session.commit()
-                                    # Invia un messaggio (opzionale) per notificare l'utente
                                     try:
                                         await context.bot.send_message(chat_id=user.telegram_id, text=f"✅ Auto-conferma: hai ricevuto {spins} extra spin per un pagamento di {value_gky} GKY!")
                                     except Exception as msg_err:
@@ -625,36 +619,27 @@ async def auto_confirm_extra_spins(context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Errore nel task auto_confirm_extra_spins: {e}")
 
 #######################################
-# HANDLER PER SHARE TASK E RUOTA (già definiti sopra)
+# FUNZIONE ADMIN PER REPORT
 #######################################
 
-# (Le funzioni sharetask, confirm_share_task, delayed_reward, claim_share_reward, button, giankyadmin, ecc. rimangono invariate)
-
-# Inserisco qui la funzione claim_share_reward (già definita in precedenza)
-async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    telegram_id = str(query.from_user.id)
+async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = Session()
     try:
-        user = session.query(User).filter_by(telegram_id=telegram_id).first()
-        if not user:
-            await query.edit_message_caption("⚠️ Utente non trovato. Usa /connect per collegare il wallet.")
-            return
-        now = datetime.datetime.now(pytz.timezone("Europe/Rome"))
-        if user.last_share_task is not None:
-            diff = now - user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
-            if diff < datetime.timedelta(days=7):
-                remaining = datetime.timedelta(days=7) - diff
-                await query.edit_message_caption(f"⏳ Hai già completato la task. Rifalla per guadagnare un nuovo giro extra.\nRiprova tra {remaining}.")
-                return
-        user.extra_spins += 1
-        user.last_share_task = now
-        session.commit()
-        await query.edit_message_caption(f"🎉 Task completata! Hai guadagnato 1 giro extra.\nExtra tiri disponibili: {user.extra_spins}")
+        from sqlalchemy import func
+        counter = session.query(GlobalCounter).first()
+        total_in = counter.total_in
+        total_out = counter.total_out
+        italy_tz = pytz.timezone("Europe/Rome")
+        report_text = (
+            f"📊 Report Globali GKY:\n"
+            f"Entrate totali: {total_in} GKY\n"
+            f"Uscite totali: {total_out} GKY\n"
+            f"Bilancio: {total_in - total_out} GKY"
+        )
+        await update.message.reply_text(report_text)
     except Exception as e:
-        logging.error(f"Errore in claim_share_reward: {e}")
-        await query.edit_message_caption("❌ Errore durante il riscatto del premio.")
+        logging.error(f"Errore nel report admin: {e}")
+        await update.message.reply_text("❌ Errore durante la generazione del report.")
     finally:
         session.close()
 
@@ -677,9 +662,12 @@ def main():
     app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
     app.add_handler(CallbackQueryHandler(button))
     
-    # Aggiungi il task automatico per controllare le transazioni (ogni 30 secondi)
-    app.job_queue.run_repeating(auto_confirm_extra_spins, interval=30, first=10)
-
+    # Crea e avvia la JobQueue manualmente
+    job_queue = app.create_job_queue()
+    job_queue.start()
+    app.job_queue = job_queue
+    job_queue.run_repeating(auto_confirm_extra_spins, interval=30, first=10)
+    
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
 
