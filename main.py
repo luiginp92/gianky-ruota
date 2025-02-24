@@ -187,26 +187,28 @@ def get_prize():
     r = random.random() * 100
     if r < 0.02:
         return "NFT BASISC"
-    elif r < 0.06:
+    elif r < 0.02 + 0.04:  # r < 0.06
         return "NFT STARTER"
     else:
         r2 = r - 0.06
         if r2 < 30:
             return "NO PRIZE"
-        elif r2 < 30 + 25:
+        elif r2 < 30 + 25:  # r2 < 55
             return "10 GKY"
-        elif r2 < 55 + 20:
+        elif r2 < 55 + 20:  # r2 < 75
             return "20 GKY"
-        elif r2 < 75 + 10:
+        elif r2 < 75 + 2:   # r2 < 77
             return "50 GKY"
-        elif r2 < 85 + 7:
+        elif r2 < 77 + 1:   # r2 < 78
             return "100 GKY"
-        elif r2 < 92 + 4:
+        elif r2 < 78 + 0.5: # r2 < 78.5
             return "250 GKY"
-        elif r2 < 96 + 2:
+        elif r2 < 78.5 + 0.25: # r2 < 78.75
             return "500 GKY"
-        else:
+        elif r2 < 78.75 + 0.1: # r2 < 78.85
             return "1000 GKY"
+        else:
+            return "NO PRIZE"
 
 #######################################
 # COMANDI DEL BOT ESISTENTI
