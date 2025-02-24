@@ -26,14 +26,13 @@ import asyncio
 import pytz
 
 from web3 import Web3
-# Definiamo un POA middleware custom per gestire il campo extraData
+# Middleware custom per POA: gestisce il campo extraData
 def custom_geth_poa_middleware(make_request, web3=None):
     def middleware(method, params):
         response = make_request(method, params)
         result = response.get("result")
         if isinstance(result, dict) and "extraData" in result:
             extra = result["extraData"]
-            # Se extraData è troppo lungo (>32 byte), lo trunchiamo agli ultimi 32 byte (64 caratteri esadecimali + "0x")
             if isinstance(extra, str) and len(extra) > 66:
                 response["result"]["extraData"] = "0x" + extra[-64:]
         return response
@@ -68,12 +67,16 @@ logging.basicConfig(
 #######################################
 
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
-IMAGE_PATH = "ruota.png"  # Immagine statica della ruota
-BOT_USERNAME = "giankytestbot"  # Username del bot (senza @)
+IMAGE_PATH = "ruota.png"      # Immagine statica della ruota
+BOT_USERNAME = "giankytestbot" # Username del bot (senza @)
 
 POLYGON_RPC = "https://polygon-rpc.com"
+# Istanza Web3 con il middleware custom (per operazioni generali)
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
-w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)  # Iniezione del POA middleware custom
+w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
+
+# Istanza Web3 senza middleware (usata esclusivamente per la verifica della transazione)
+w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
@@ -136,7 +139,6 @@ def invia_token(destinatario, quantita):
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
-    # Aggiorna il contatore globale per uscite
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
@@ -153,13 +155,14 @@ def invia_token(destinatario, quantita):
         session.close()
     return True
 
+# Funzione di verifica che usa w3_no_mw per ottenere e decodificare la transazione.
 def verifica_transazione_gky(user_address, tx_hash, cost):
     try:
-        tx = w3.eth.get_transaction(tx_hash)
+        tx = w3_no_mw.eth.get_transaction(tx_hash)
         if tx["to"].lower() != CONTRATTO_GKY.lower():
             logging.error("TX non destinata al contratto GKY.")
             return False
-        contract = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
+        contract = w3_no_mw.eth.contract(address=CONTRATTO_GKY, abi=[{
             "constant": False,
             "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
             "name": "transfer",
@@ -181,7 +184,7 @@ def verifica_transazione_gky(user_address, tx_hash, cost):
             return False
         token_amount = params.get("_value", 0)
         if token_amount < cost * 10**18:
-            logging.error(f"Importo insufficiente: {w3.from_wei(token_amount, 'ether')} vs {cost}")
+            logging.error(f"Importo insufficiente: {w3_no_mw.from_wei(token_amount, 'ether')} vs {cost}")
             return False
         return True
     except Exception as e:
@@ -234,7 +237,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if inviter:
                     inviter.extra_spins += 2
                     session.commit()
-                    await update.message.reply_text(f"✅ Registrazione tramite referral completata! L'utente {inviter_id} ha guadagnato 2 extra tiri.")
+                    await update.message.reply_text(
+                        f"✅ Registrazione tramite referral completata! L'utente {inviter_id} ha guadagnato 2 extra tiri."
+                    )
             else:
                 if not user.referred_by:
                     user.referred_by = inviter_id
@@ -243,7 +248,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if inviter:
                         inviter.extra_spins += 2
                         session.commit()
-                        await update.message.reply_text(f"✅ Referral registrato! L'utente {inviter_id} ha guadagnato 2 extra tiri.")
+                        await update.message.reply_text(
+                            f"✅ Referral registrato! L'utente {inviter_id} ha guadagnato 2 extra tiri."
+                        )
         except Exception as e:
             logging.error(f"Errore in referral in start: {e}")
             session.rollback()
@@ -354,10 +361,10 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     /confirmbuy <tx_hash> [<num>]
 
     Questa funzione conferma manualmente l'acquisto di extra spin.
-    Se viene fornito solo il tx_hash, il sistema decodifica l'importo trasferito:
-      - 50 GKY  → 1 spin
-      - 125 GKY → 3 spin
-    Se l'importo non viene riconosciuto, l'utente può specificare manualmente il numero di spin extra.
+    Se viene fornito solo il tx_hash, si assume per default 1 spin (costo 50 GKY).
+    Se viene specificato il numero, sono ammessi solo 1 o 3 tiri extra.
+    La transazione viene verificata (usando un'istanza Web3 senza middleware) e viene
+    controllato che non sia già stata usata.
     """
     telegram_id = str(update.message.from_user.id)
     session = Session()
@@ -370,31 +377,7 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
             return
         if len(context.args) == 1:
-            try:
-                tx = w3.eth.get_transaction(tx_hash)
-                contract = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
-                    "constant": False,
-                    "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
-                    "name": "transfer",
-                    "outputs": [{"name": "", "type": "bool"}],
-                    "payable": False,
-                    "stateMutability": "nonpayable",
-                    "type": "function",
-                }])
-                func_obj, params = contract.decode_function_input(tx.input)
-                token_amount = params.get("_value", 0)
-                value_gky = float(w3.from_wei(token_amount, "ether"))
-            except Exception as e:
-                logging.error(f"Errore nella decodifica automatica: {e}")
-                await update.message.reply_text("❌ Errore nella decodifica automatica. Specifica manualmente il numero di tiri extra.")
-                return
-            if value_gky == 50:
-                num_spins = 1
-            elif value_gky == 125:
-                num_spins = 3
-            else:
-                await update.message.reply_text("❌ Importo non riconosciuto per conferma automatica. Specifica manualmente il numero di tiri extra.")
-                return
+            num_spins = 1
         else:
             try:
                 num_spins = int(context.args[1])
@@ -414,7 +397,6 @@ async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user.extra_spins = (user.extra_spins or 0) + num_spins
             session.commit()
             USED_TX.add(tx_hash)
-            # Aggiorna il contatore globale per entrate
             counter = session.query(GlobalCounter).first()
             if counter is not None:
                 counter.total_in += cost
@@ -593,7 +575,7 @@ def main():
     # app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
     app.add_handler(CallbackQueryHandler(button))
     
-    # Rimosso il task automatico per la verifica delle transazioni, per evitare conflitti.
+    # Rimosso il task automatico per la verifica delle transazioni.
     
     logging.info("✅ Bot in esecuzione...")
     app.run_polling()
