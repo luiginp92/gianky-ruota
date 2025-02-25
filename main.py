@@ -79,7 +79,7 @@ USED_TX = set()
 # ------------------------------------------------
 # CONFIGURAZIONI JWT & AUTENTICAZIONE
 # ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # In produzione utilizza una chiave sicura
+SECRET_KEY = "a_very_secret_key_change_me"  # In produzione usa una chiave sicura
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
