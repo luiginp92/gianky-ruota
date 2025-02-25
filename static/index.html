@@ -7,59 +7,49 @@
   <!-- Bootstrap 5 CDN -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body {
-      background-color: #f8f9fa;
-    }
-    .header {
-      background-color: #343a40;
-      color: white;
-      padding: 2rem 1rem;
-    }
-    .header h1 {
-      font-size: 2.5rem;
-      margin-bottom: 0.5rem;
-    }
-    .header p {
-      font-size: 1.2rem;
-      margin-bottom: 0;
-    }
-    .content {
-      padding: 3rem 1rem;
-    }
-    .btn-spin {
-      font-size: 1.5rem;
-      padding: 0.75rem 2rem;
-    }
-    .footer {
-      background-color: #343a40;
-      color: #ccc;
-      text-align: center;
-      padding: 1rem;
-      margin-top: 2rem;
-    }
+    body { background-color: #f8f9fa; }
+    .header { background-color: #343a40; color: white; padding: 2rem 1rem; text-align: center; }
+    .content { padding: 3rem 1rem; }
+    .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
+    .footer { background-color: #343a40; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
   </style>
 </head>
 <body>
-  <header class="header text-center">
+  <header class="header">
     <h1>Gianky Coin</h1>
-    <p>La tua esperienza di gioco blockchain</p>
+    <p>Interfaccia Web per gestire il tuo gioco blockchain</p>
   </header>
   
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Immagine della ruota servita dal backend -->
         <img src="/wheel" alt="Ruota" class="img-fluid" style="max-width:300px;">
       </div>
     </div>
-    <div class="row">
-      <div class="col text-center">
-        <button id="spinButton" class="btn btn-primary btn-spin">Gira la ruota!</button>
+    <div class="row text-center">
+      <div class="col">
+        <button id="btnSpin" class="btn btn-primary btn-custom">Gira la ruota</button>
+      </div>
+    </div>
+    <div class="row text-center mt-3">
+      <div class="col">
+        <button id="btnConnect" class="btn btn-success btn-custom">Collega Wallet</button>
+      </div>
+      <div class="col">
+        <button id="btnBuySpins" class="btn btn-warning btn-custom">Acquista Extra Tiri</button>
+      </div>
+    </div>
+    <div class="row text-center mt-3">
+      <div class="col">
+        <button id="btnReferral" class="btn btn-info btn-custom">Ottieni Referral</button>
+      </div>
+      <div class="col">
+        <button id="btnTask" class="btn btn-secondary btn-custom">Completa Task</button>
       </div>
     </div>
     <div class="row mt-4">
       <div class="col">
-        <div id="result" class="alert alert-info" style="display: none;"></div>
+        <div id="result" class="alert alert-info" style="display:none;"></div>
       </div>
     </div>
   </div>
@@ -71,25 +61,32 @@
   <!-- Bootstrap Bundle with Popper -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // Logica per il pulsante "Gira la ruota"
-    document.getElementById("spinButton").addEventListener("click", function() {
-      fetch("/api/spin", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-          // Aggiungi "Authorization" se la logica del token è implementata
-        },
-        body: JSON.stringify({})
+    // Esempio di chiamate API (da integrare con autenticazione se necessario)
+    document.getElementById("btnSpin").addEventListener("click", function() {
+      fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) })
+      .then(res => res.json())
+      .then(data => { 
+         document.getElementById("result").style.display = "block";
+         document.getElementById("result").innerText = data.message; 
       })
-      .then(response => response.json())
-      .then(data => {
-        const resultDiv = document.getElementById("result");
-        resultDiv.style.display = "block";
-        resultDiv.textContent = data.message;
-      })
-      .catch(error => {
-        console.error("Errore:", error);
-      });
+      .catch(err => console.error(err));
+    });
+    
+    document.getElementById("btnConnect").addEventListener("click", function() {
+      // Qui puoi reindirizzare l'utente ad una pagina per collegare il wallet
+      window.location.href = "https://gianky-bot-test-f275065c7d33.herokuapp.com/static/connect.html";
+    });
+    
+    document.getElementById("btnBuySpins").addEventListener("click", function() {
+      window.location.href = "https://gianky-bot-test-f275065c7d33.herokuapp.com/static/buyspins.html";
+    });
+    
+    document.getElementById("btnReferral").addEventListener("click", function() {
+      window.location.href = "https://gianky-bot-test-f275065c7d33.herokuapp.com/static/referral.html";
+    });
+    
+    document.getElementById("btnTask").addEventListener("click", function() {
+      window.location.href = "https://gianky-bot-test-f275065c7d33.herokuapp.com/static/task.html";
     });
   </script>
 </body>

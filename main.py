@@ -5,8 +5,8 @@ Gianky Coin Web App – main.py
 Questa applicazione espone tramite API REST la logica del gioco e integra anche un bot Telegram:
  • API REST e interfaccia web (FastAPI) per la mini app
  • Autenticazione basata sulla firma del wallet (JWT)
- • Endpoints per gioco, acquisti, referral, ecc.
- • Bot Telegram (polling) che risponde al comando /start
+ • Endpoints per gioco, acquisti, referral, task, ecc.
+ • Bot Telegram (polling) che risponde al comando /start e invia link utili
 """
 
 import logging
@@ -15,6 +15,7 @@ import datetime
 import os
 import pytz
 import asyncio
+import threading
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends, status
@@ -278,19 +279,28 @@ async def home():
 @app.on_event("startup")
 async def on_startup():
     init_db()
-    asyncio.create_task(run_telegram_bot())
+    # Avvia il bot Telegram in un thread separato per evitare conflitti di event loop
+    def start_bot_thread():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(run_telegram_bot())
+    threading.Thread(target=start_bot_thread).start()
 
 # ------------------------------------------------
 # INTEGRAZIONE DEL BOT TELEGRAM
 # ------------------------------------------------
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import threading
 
 async def start_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Ciao, sono il bot Gianky Coin! Usa /start per interagire.")
+    await update.message.reply_text(
+        "Ciao, sono il bot Gianky Coin!\n"
+        "Visita l'interfaccia web: https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html\n"
+        "Da lì puoi collegare il wallet, acquistare extra tiri, ottenere il referral e completare la task."
+    )
 
 async def run_telegram_bot():
-    # Token hardcoded come richiesto
     telegram_token = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
     try:
         bot_app = ApplicationBuilder().token(telegram_token).build()
