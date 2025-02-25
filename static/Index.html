@@ -1,118 +1,97 @@
 <!DOCTYPE html>
-<html>
+<html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>Gianky Coin</title>
-  <script src="https://cdn.jsdelivr.net/npm/web3@1.8.2/dist/web3.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gianky Coin Web App</title>
+  <!-- Bootstrap 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { font-family: Arial, sans-serif; margin: 2rem; }
-    button { padding: 0.5rem 1rem; margin: 0.5rem 0; }
-    #log { border: 1px solid #ccc; padding: 1rem; margin-top: 1rem; height: 200px; overflow-y: auto; }
+    body {
+      background-color: #f8f9fa;
+    }
+    .header {
+      background-color: #343a40;
+      color: white;
+      padding: 2rem 1rem;
+    }
+    .header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .header p {
+      font-size: 1.2rem;
+      margin-bottom: 0;
+    }
+    .content {
+      padding: 3rem 1rem;
+    }
+    .btn-spin {
+      font-size: 1.5rem;
+      padding: 0.75rem 2rem;
+    }
+    .footer {
+      background-color: #343a40;
+      color: #ccc;
+      text-align: center;
+      padding: 1rem;
+      margin-top: 2rem;
+    }
   </style>
 </head>
 <body>
-  <h1>Gianky Coin Web App</h1>
-  <div>
-    <button id="connectWallet">Connect Wallet</button>
-    <span id="walletAddress"></span>
+  <header class="header text-center">
+    <h1>Gianky Coin</h1>
+    <p>La tua esperienza di gioco blockchain</p>
+  </header>
+  
+  <div class="container content">
+    <div class="row mb-4">
+      <div class="col text-center">
+        <!-- L'immagine viene servita dal backend all'URL /wheel -->
+        <img src="/wheel" alt="Ruota" class="img-fluid" style="max-width:300px;">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col text-center">
+        <button id="spinButton" class="btn btn-primary btn-spin">Gira la ruota!</button>
+      </div>
+    </div>
+    <div class="row mt-4">
+      <div class="col">
+        <div id="result" class="alert alert-info" style="display: none;"></div>
+      </div>
+    </div>
   </div>
-  <div>
-    <button id="login">Login (Sign Message)</button>
-  </div>
-  <div>
-    <button id="getRuota">Visualizza Ruota</button>
-    <button id="spin">Gira la Ruota</button>
-  </div>
-  <div id="log"></div>
-
+  
+  <footer class="footer">
+    <p>&copy; 2025 Gianky Coin. Tutti i diritti riservati.</p>
+  </footer>
+  
+  <!-- Bootstrap Bundle with Popper -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    let web3;
-    let userAccount;
-    let authToken = "";
-
-    const log = (msg) => {
-      const logDiv = document.getElementById("log");
-      logDiv.innerHTML += msg + "<br>";
-      logDiv.scrollTop = logDiv.scrollHeight;
-    };
-
-    document.getElementById("connectWallet").addEventListener("click", async () => {
-      if (window.ethereum) {
-        web3 = new Web3(window.ethereum);
-        try {
-          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          userAccount = accounts[0];
-          document.getElementById("walletAddress").innerText = userAccount;
-          log("Wallet connesso: " + userAccount);
-        } catch (error) {
-          log("Errore di connessione: " + error.message);
-        }
-      } else {
-        log("Installa MetaMask!");
-      }
-    });
-
-    document.getElementById("login").addEventListener("click", async () => {
-      if (!userAccount) {
-        log("Connetti il wallet prima!");
-        return;
-      }
-      // Richiedi nonce dal backend
-      const response = await fetch("/api/auth/request_nonce", {
+    // Esempio di logica per il pulsante "Gira la ruota"
+    document.getElementById("spinButton").addEventListener("click", function() {
+      // Qui puoi integrare la logica per recuperare il token e chiamare l'endpoint API "/api/spin"
+      // Ad esempio, se hai già il token memorizzato in authToken:
+      fetch("/api/spin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet_address: userAccount })
+        headers: {
+          "Content-Type": "application/json",
+          // "Authorization": "Bearer " + authToken, // Decommenta se necessario
+        },
+        body: JSON.stringify({}) // Aggiungi eventuali dati se necessari
+      })
+      .then(response => response.json())
+      .then(data => {
+        const resultDiv = document.getElementById("result");
+        resultDiv.style.display = "block";
+        resultDiv.textContent = data.message;
+      })
+      .catch(error => {
+        console.error("Errore:", error);
       });
-      const data = await response.json();
-      if (!data.nonce) {
-        log("Errore nella richiesta del nonce.");
-        return;
-      }
-      log("Nonce ricevuto: " + data.nonce);
-      // Firma il nonce con il wallet
-      const signature = await web3.eth.personal.sign(data.nonce, userAccount);
-      log("Firma generata: " + signature);
-      // Invia la firma per ottenere il token
-      const verifyResp = await fetch("/api/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet_address: userAccount, signature: signature })
-      });
-      const verifyData = await verifyResp.json();
-      if (verifyData.access_token) {
-        authToken = verifyData.access_token;
-        log("Login effettuato. Token: " + authToken);
-      } else {
-        log("Errore nel login.");
-      }
-    });
-
-    document.getElementById("getRuota").addEventListener("click", async () => {
-      if (!authToken) {
-        log("Esegui il login prima!");
-        return;
-      }
-      const resp = await fetch("/api/ruota", {
-        headers: { "Authorization": "Bearer " + authToken }
-      });
-      const ruotaData = await resp.json();
-      log("Stato ruota: " + JSON.stringify(ruotaData));
-    });
-
-    document.getElementById("spin").addEventListener("click", async () => {
-      if (!authToken) {
-        log("Esegui il login prima!");
-        return;
-      }
-      const resp = await fetch("/api/spin", {
-        method: "POST",
-        headers: { 
-          "Authorization": "Bearer " + authToken,
-          "Content-Type": "application/json"
-        }
-      });
-      const spinData = await resp.json();
-      log("Risultato spin: " + JSON.stringify(spinData));
     });
   </script>
 </body>
