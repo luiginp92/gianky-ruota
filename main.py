@@ -17,7 +17,7 @@ import pytz
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
@@ -38,9 +38,6 @@ from database import Session, User, PremioVinto, GlobalCounter, init_db
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-
-# Inizializza il database (se non esiste)
-init_db()
 
 # ------------------------------------------------
 # CONFIGURAZIONI BLOCKCHAIN E COSTANTI
@@ -245,9 +242,8 @@ class AuthRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     telegram_id: Optional[str] = None
 
-
 class AuthVerifyRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     signature: str
 
 class BuySpinsRequest(BaseModel):
@@ -274,6 +270,13 @@ async def home():
       </body>
     </html>
     """
+
+# ------------------------------------------------
+# EVENTO DI STARTUP: INIZIALIZZAZIONE DEL DATABASE
+# ------------------------------------------------
+@app.on_event("startup")
+def on_startup():
+    init_db()
 
 # ------------------------------------------------
 # ENDPOINT DI AUTENTICAZIONE
@@ -525,5 +528,4 @@ async def api_giankyadmin(current_user: User = Depends(get_current_user)):
 # Avvio dell'applicazione con uvicorn
 # ------------------------------------------------
 if __name__ == '__main__':
-    import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

@@ -37,10 +37,9 @@ class GlobalCounter(Base):
 
 def init_db():
     try:
-        # Crea le tabelle se non esistono già.
-        Base.metadata.create_all(bind=engine)
+        # Crea le tabelle se non esistono già (checkfirst=True assicura che venga eseguito IF NOT EXISTS)
+        Base.metadata.create_all(bind=engine, checkfirst=True)
     except Exception as e:
-        # Se si verifica un errore (ad es. la tabella esiste già) lo logghiamo e continuiamo.
         logging.warning("init_db() warning: " + str(e))
 
 def Session():
