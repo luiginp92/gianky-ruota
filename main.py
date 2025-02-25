@@ -57,7 +57,7 @@ else:
     STATIC_IMAGE_BYTES = None
     logging.error("File statico non trovato: ruota.png")
 
-# Middleware custom per POA (come nell'implementazione originale)
+# Middleware custom per POA
 def custom_geth_poa_middleware(make_request, web3=None):
     def middleware(method, params):
         response = make_request(method, params)
@@ -79,7 +79,7 @@ USED_TX = set()
 # ------------------------------------------------
 # CONFIGURAZIONI JWT & AUTENTICAZIONE
 # ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # In produzione usa una chiave sicura
+SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con la tua chiave sicura in produzione
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
