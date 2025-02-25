@@ -2,11 +2,11 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Questa applicazione espone tramite API REST la logica del gioco con:
+Questa applicazione espone tramite API REST la logica del gioco e integra anche un bot Telegram:
+ • API REST e interfaccia web (FastAPI) per la mini app
  • Autenticazione basata sulla firma del wallet (JWT)
- • Validazioni robuste con Pydantic
  • Endpoints per gioco, acquisti, referral, ecc.
- • Un frontend minimale per interagire con il sistema
+ • Bot Telegram (polling) che risponde al comando /start
 """
 
 import logging
@@ -14,6 +14,7 @@ import random
 import datetime
 import os
 import pytz
+import asyncio
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends, status
@@ -79,7 +80,7 @@ USED_TX = set()
 # ------------------------------------------------
 # CONFIGURAZIONI JWT & AUTENTICAZIONE
 # ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con la tua chiave sicura in produzione
+SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con la tua chiave sicura
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -272,11 +273,33 @@ async def home():
     """
 
 # ------------------------------------------------
-# EVENTO DI STARTUP: INIZIALIZZAZIONE DEL DATABASE
+# EVENTO DI STARTUP: INIZIALIZZAZIONE DEL DATABASE E AVVIO BOT TELEGRAM
 # ------------------------------------------------
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     init_db()
+    # Avvia il bot Telegram in background
+    asyncio.create_task(run_telegram_bot())
+
+# ------------------------------------------------
+# INTEGRAZIONE DEL BOT TELEGRAM (utilizza python-telegram-bot v21+)
+# ------------------------------------------------
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+async def start_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Ciao, sono il bot Gianky Coin! Usa /start per interagire.")
+
+async def run_telegram_bot():
+    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not telegram_token:
+        logging.error("TELEGRAM_BOT_TOKEN non impostato.")
+        return
+    bot_app = ApplicationBuilder().token(telegram_token).build()
+    bot_app.add_handler(CommandHandler("start", start_telegram))
+    await bot_app.initialize()
+    await bot_app.start_polling()
+    await bot_app.updater.idle()
 
 # ------------------------------------------------
 # ENDPOINT DI AUTENTICAZIONE
