@@ -7,7 +7,6 @@ attrs==25.1.0
 bitarray==3.1.0
 certifi==2025.1.31
 charset-normalizer==3.4.1
-ckzg==2.0.1
 cytoolz==1.0.1
 eth-account==0.13.5
 eth-hash==0.7.1
@@ -33,7 +32,6 @@ pydantic==2.10.6
 pydantic_core==2.27.2
 python-telegram-bot[job-queue]==21.10
 pyunormalize==16.0.0
-pywin32==308
 regex==2024.11.6
 requests==2.32.3
 rlp==4.1.0
@@ -46,4 +44,4 @@ urllib3==2.3.0
 web3==7.8.0
 websockets==13.1
 yarl==1.18.3
-pytz
+pytz==2025.1

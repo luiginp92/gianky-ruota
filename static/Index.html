@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Gianky Coin</title>
+  <script src="https://cdn.jsdelivr.net/npm/web3@1.8.2/dist/web3.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    button { padding: 0.5rem 1rem; margin: 0.5rem 0; }
+    #log { border: 1px solid #ccc; padding: 1rem; margin-top: 1rem; height: 200px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h1>Gianky Coin Web App</h1>
+  <div>
+    <button id="connectWallet">Connect Wallet</button>
+    <span id="walletAddress"></span>
+  </div>
+  <div>
+    <button id="login">Login (Sign Message)</button>
+  </div>
+  <div>
+    <button id="getRuota">Visualizza Ruota</button>
+    <button id="spin">Gira la Ruota</button>
+  </div>
+  <div id="log"></div>
+
+  <script>
+    let web3;
+    let userAccount;
+    let authToken = "";
+
+    const log = (msg) => {
+      const logDiv = document.getElementById("log");
+      logDiv.innerHTML += msg + "<br>";
+      logDiv.scrollTop = logDiv.scrollHeight;
+    };
+
+    document.getElementById("connectWallet").addEventListener("click", async () => {
+      if (window.ethereum) {
+        web3 = new Web3(window.ethereum);
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          userAccount = accounts[0];
+          document.getElementById("walletAddress").innerText = userAccount;
+          log("Wallet connesso: " + userAccount);
+        } catch (error) {
+          log("Errore di connessione: " + error.message);
+        }
+      } else {
+        log("Installa MetaMask!");
+      }
+    });
+
+    document.getElementById("login").addEventListener("click", async () => {
+      if (!userAccount) {
+        log("Connetti il wallet prima!");
+        return;
+      }
+      // Richiedi nonce dal backend
+      const response = await fetch("/api/auth/request_nonce", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet_address: userAccount })
+      });
+      const data = await response.json();
+      if (!data.nonce) {
+        log("Errore nella richiesta del nonce.");
+        return;
+      }
+      log("Nonce ricevuto: " + data.nonce);
+      // Firma il nonce con il wallet
+      const signature = await web3.eth.personal.sign(data.nonce, userAccount);
+      log("Firma generata: " + signature);
+      // Invia la firma per ottenere il token
+      const verifyResp = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet_address: userAccount, signature: signature })
+      });
+      const verifyData = await verifyResp.json();
+      if (verifyData.access_token) {
+        authToken = verifyData.access_token;
+        log("Login effettuato. Token: " + authToken);
+      } else {
+        log("Errore nel login.");
+      }
+    });
+
+    document.getElementById("getRuota").addEventListener("click", async () => {
+      if (!authToken) {
+        log("Esegui il login prima!");
+        return;
+      }
+      const resp = await fetch("/api/ruota", {
+        headers: { "Authorization": "Bearer " + authToken }
+      });
+      const ruotaData = await resp.json();
+      log("Stato ruota: " + JSON.stringify(ruotaData));
+    });
+
+    document.getElementById("spin").addEventListener("click", async () => {
+      if (!authToken) {
+        log("Esegui il login prima!");
+        return;
+      }
+      const resp = await fetch("/api/spin", {
+        method: "POST",
+        headers: { 
+          "Authorization": "Bearer " + authToken,
+          "Content-Type": "application/json"
+        }
+      });
+      const spinData = await resp.json();
+      log("Risultato spin: " + JSON.stringify(spinData));
+    });
+  </script>
+</body>
+</html>
