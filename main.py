@@ -290,13 +290,12 @@ async def start_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Ciao, sono il bot Gianky Coin! Usa /start per interagire.")
 
 async def run_telegram_bot():
-    # Qui inserisco il token che hai fornito direttamente
+    # Token hardcoded come richiesto
     telegram_token = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
     try:
         bot_app = ApplicationBuilder().token(telegram_token).build()
         bot_app.add_handler(CommandHandler("start", start_telegram))
-        await bot_app.initialize()
-        await bot_app.run_polling()
+        await bot_app.run_polling(close_loop=False)
     except Exception as e:
         logging.error(f"Errore nell'avvio del bot Telegram: {e}")
 
