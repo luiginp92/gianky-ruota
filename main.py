@@ -80,7 +80,7 @@ USED_TX = set()
 # ------------------------------------------------
 # CONFIGURAZIONI JWT & AUTENTICAZIONE
 # ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con la tua chiave sicura
+SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci se necessario
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -273,7 +273,7 @@ async def home():
     """
 
 # ------------------------------------------------
-# EVENTO DI STARTUP: INIZIALIZZAZIONE DEL DATABASE E AVVIO BOT TELEGRAM
+# EVENTO DI STARTUP: INIZIALIZZAZIONE DEL DATABASE E AVVIO DEL BOT TELEGRAM
 # ------------------------------------------------
 @app.on_event("startup")
 async def on_startup():
@@ -290,15 +290,15 @@ async def start_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Ciao, sono il bot Gianky Coin! Usa /start per interagire.")
 
 async def run_telegram_bot():
-    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not telegram_token:
-        logging.error("TELEGRAM_BOT_TOKEN non impostato.")
-        return
-    bot_app = ApplicationBuilder().token(telegram_token).build()
-    bot_app.add_handler(CommandHandler("start", start_telegram))
-    await bot_app.initialize()
-    # Usa run_polling() invece di start_polling()
-    await bot_app.run_polling()
+    # Qui inserisco il token che hai fornito direttamente
+    telegram_token = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
+    try:
+        bot_app = ApplicationBuilder().token(telegram_token).build()
+        bot_app.add_handler(CommandHandler("start", start_telegram))
+        await bot_app.initialize()
+        await bot_app.run_polling()
+    except Exception as e:
+        logging.error(f"Errore nell'avvio del bot Telegram: {e}")
 
 # ------------------------------------------------
 # ENDPOINT DI AUTENTICAZIONE
