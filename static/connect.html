@@ -19,26 +19,23 @@
 <body>
   <div class="container text-center">
     <h1 class="mb-4">Collega il tuo Wallet</h1>
-    <p>Seleziona il wallet da collegare (MetaMask, Trust Wallet, SafePal, ecc.) sulla rete Polygon</p>
+    <p>Collega il tuo wallet sulla rete Polygon per iniziare a giocare a GiankyCoin!</p>
     <button id="connectButton" class="btn btn-primary btn-lg">Connetti Wallet</button>
-    <div id="walletAddress" class="mt-3"></div>
+    <div id="message" class="mt-3"></div>
   </div>
   
   <script>
-    // Configura i provider per Web3Modal: usiamo solo Polygon (chainId 137) con il suo RPC
+    // Configura i provider per Web3Modal su Polygon (chainId 137)
     const providerOptions = {
       walletconnect: {
         package: window.WalletConnectProvider.default,
         options: {
-          rpc: {
-            137: "https://polygon-rpc.com"
-          },
+          rpc: { 137: "https://polygon-rpc.com" },
           chainId: 137
         }
       }
     };
 
-    // Inizializza Web3Modal
     const web3Modal = new window.Web3Modal.default({
       cacheProvider: false,
       providerOptions,
@@ -50,29 +47,46 @@
         const provider = await web3Modal.connect();
         const web3 = new Web3(provider);
         const accounts = await web3.eth.getAccounts();
-        const account = accounts[0];
-        document.getElementById('walletAddress').innerText = "Wallet connesso: " + account;
+        const wallet = accounts[0];
+        localStorage.setItem("walletAddress", wallet);
+        document.getElementById("message").innerText = "Wallet connesso: " + wallet;
 
-        // Invia l'indirizzo wallet al backend per iniziare il processo di collegamento
-        const response = await fetch("/api/auth/request_nonce", {
+        // Richiedi il nonce dal backend
+        const nonceRes = await fetch("/api/auth/request_nonce", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: account })
+          body: JSON.stringify({ wallet_address: wallet })
         });
-        const data = await response.json();
-        if (response.ok) {
-          alert("Wallet collegato! Riceverai un nonce per completare l'autenticazione.");
-          // Qui potresti reindirizzare l'utente ad una pagina per completare l'autenticazione, se necessario
-        } else {
-          alert("Errore: " + (data.detail || "Impossibile collegare il wallet."));
+        const nonceData = await nonceRes.json();
+        if (!nonceRes.ok) {
+          throw new Error(nonceData.detail || "Errore nella richiesta del nonce.");
         }
+        const nonce = nonceData.nonce;
+        
+        // Richiedi la firma del nonce (con web3.eth.personal.sign)
+        const signature = await web3.eth.personal.sign(nonce, wallet, ""); // La passphrase è vuota
+        // Invia il wallet e la firma al backend per la verifica
+        const verifyRes = await fetch("/api/auth/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: wallet, signature })
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok) {
+          throw new Error(verifyData.detail || "Errore durante la verifica della firma.");
+        }
+        // Salva il token in localStorage
+        localStorage.setItem("jwtToken", verifyData.access_token);
+        alert("Wallet collegato correttamente!");
+        // Reindirizza all'interfaccia principale
+        window.location.href = "/static/index.html";
       } catch (error) {
         console.error("Errore nella connessione del wallet: ", error);
-        alert("Errore durante la connessione del wallet.");
+        document.getElementById("message").innerText = "Errore: " + error.message;
       }
     }
 
-    document.getElementById('connectButton').addEventListener('click', connectWallet);
+    document.getElementById("connectButton").addEventListener("click", connectWallet);
   </script>
 </body>
 </html>
