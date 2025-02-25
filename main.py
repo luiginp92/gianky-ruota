@@ -278,11 +278,10 @@ async def home():
 @app.on_event("startup")
 async def on_startup():
     init_db()
-    # Avvia il bot Telegram in background
     asyncio.create_task(run_telegram_bot())
 
 # ------------------------------------------------
-# INTEGRAZIONE DEL BOT TELEGRAM (utilizza python-telegram-bot v21+)
+# INTEGRAZIONE DEL BOT TELEGRAM
 # ------------------------------------------------
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
@@ -298,8 +297,8 @@ async def run_telegram_bot():
     bot_app = ApplicationBuilder().token(telegram_token).build()
     bot_app.add_handler(CommandHandler("start", start_telegram))
     await bot_app.initialize()
-    await bot_app.start_polling()
-    await bot_app.updater.idle()
+    # Usa run_polling() invece di start_polling()
+    await bot_app.run_polling()
 
 # ------------------------------------------------
 # ENDPOINT DI AUTENTICAZIONE
