@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext
 
 # Token hardcoded come richiesto
@@ -13,9 +13,13 @@ logging.basicConfig(
 async def start_telegram(update: Update, context: CallbackContext):
     message = update.effective_message
     if message:
+        # Crea un pulsante che porta all'interfaccia web
+        keyboard = [[InlineKeyboardButton("Gioca Ora", url="https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await message.reply_text(
-            "Ciao, sono il bot Gianky Coin!\n"
-            "Visita l'interfaccia web: https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html"
+            "Benvenuto in GiankyCoin - La Ruota della Fortuna ti aspetta!\n\n"
+            "Premi il pulsante qui sotto per girare la ruota e vincere premi fantastici!",
+            reply_markup=reply_markup
         )
     else:
         logging.error("Nessun messaggio efficace trovato in update")
@@ -23,7 +27,6 @@ async def start_telegram(update: Update, context: CallbackContext):
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start_telegram))
-    # run_polling() è sincrono e blocca il thread corrente
     application.run_polling()
 
 if __name__ == '__main__':
