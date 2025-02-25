@@ -10,11 +10,12 @@
   <meta http-equiv="Expires" content="0" />
   <!-- Bootstrap CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <!-- Ethers.js -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script>
-  <!-- Web3Modal e WalletConnect Provider versione v2 -->
+  <!-- Usa la versione UMD di ethers.js (ad es. 5.7.2) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <!-- Web3Modal v1.9.8 (UMD build) -->
   <script src="https://unpkg.com/web3modal@1.9.8/dist/index.js"></script>
-  <script src="https://unpkg.com/@walletconnect/web3-provider@2.0.0/dist/umd/index.min.js"></script>
+  <!-- WalletConnect Provider v1.8.0 (UMD build) -->
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
   <style>
     body { background-color: #f8f9fa; padding-top: 50px; }
     .container { max-width: 500px; }
@@ -29,11 +30,10 @@
   </div>
   
   <script>
-    // Configura Web3Modal con le opzioni per WalletConnect v2.
-    // Nota: Verifica la documentazione di WalletConnect v2 per eventuali modifiche alle opzioni.
+    // Configura Web3Modal per una scelta ampia di wallet
     const providerOptions = {
       walletconnect: {
-        package: window.WalletConnectProvider.default,
+        package: WalletConnectProvider, // dato che la UMD build esporta direttamente come WalletConnectProvider
         options: {
           rpc: { 137: "https://polygon-rpc.com" },
           chainId: 137
@@ -49,8 +49,9 @@
 
     async function connectWallet() {
       try {
-        // Usa sempre Web3Modal per forzare la scelta del wallet
+        // Usa Web3Modal per la scelta del wallet
         const provider = await web3Modal.connect();
+        // Crea un provider ethers dalla UMD build di ethers.js (globalmente disponibile come ethers)
         const ethersProvider = new ethers.providers.Web3Provider(provider);
         await ethersProvider.send("eth_requestAccounts", []);
         const signer = ethersProvider.getSigner();
