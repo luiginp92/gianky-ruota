@@ -1,9 +1,8 @@
-# database.py
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import logging
 
-# Utilizziamo SQLite per semplicità; in produzione puoi usare un DB diverso.
 DATABASE_URL = "sqlite:///./giankycoin.db"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -19,7 +18,7 @@ class User(Base):
     referred_by = Column(String, nullable=True)
     last_play_date = Column(DateTime, nullable=True)
     last_share_task = Column(DateTime, nullable=True)
-    nonce = Column(String, nullable=True)  # Campo per l'autenticazione via firma
+    nonce = Column(String, nullable=True)
 
 class PremioVinto(Base):
     __tablename__ = "premi_vinti"
@@ -37,7 +36,12 @@ class GlobalCounter(Base):
     total_out = Column(Float, default=0.0)
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
+    try:
+        # Crea le tabelle se non esistono già.
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        # Se si verifica un errore (ad es. la tabella esiste già) lo logghiamo e continuiamo.
+        logging.warning("init_db() warning: " + str(e))
 
 def Session():
     return SessionLocal()
