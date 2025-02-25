@@ -10,14 +10,15 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-def start_telegram(update: Update, context: CallbackContext):
-    if update.message:
-        update.message.reply_text(
+async def start_telegram(update: Update, context: CallbackContext):
+    message = update.effective_message
+    if message:
+        await message.reply_text(
             "Ciao, sono il bot Gianky Coin!\n"
             "Visita l'interfaccia web: https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html"
         )
     else:
-        logging.error("update.message is None in start_telegram")
+        logging.error("Nessun messaggio efficace trovato in update")
 
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
