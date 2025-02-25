@@ -242,8 +242,9 @@ def get_prize():
 # MODELLI DI INPUT CON Pydantic
 # ------------------------------------------------
 class AuthRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     telegram_id: Optional[str] = None
+
 
 class AuthVerifyRequest(BaseModel):
     wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
