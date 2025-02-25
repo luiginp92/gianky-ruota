@@ -306,7 +306,8 @@ async def auth_verify(auth: AuthVerifyRequest):
         user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
         if not user or not user.nonce:
             raise HTTPException(status_code=400, detail="Richiedi prima un nonce.")
-        message = encode_defunct(text=user.nonce)
+        # Includi il prefisso "GiankyStop: " nel messaggio da firmare
+        message = encode_defunct(text="GiankyStop: " + user.nonce)
         try:
             recovered_address = w3.eth.account.recover_message(message, signature=auth.signature)
         except Exception as e:
