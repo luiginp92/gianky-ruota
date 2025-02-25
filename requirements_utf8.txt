@@ -1,9 +1,11 @@
-﻿# Pacchetti per l'app web
-fastapi==0.100.0
+﻿fastapi==0.100.0
 uvicorn==0.22.0
 python-jose[cryptography]==3.3.0
-
-# Altre dipendenze (aggiornate con le versioni fornite)
+SQLAlchemy==2.0.38
+pytz==2025.1
+web3==7.8.0
+pydantic==2.10.6
+# Altre dipendenze eventualmente già presenti:
 aiohappyeyeballs==2.4.6
 aiohttp==3.11.12
 aiosignal==1.3.2
@@ -34,20 +36,14 @@ parsimonious==0.10.0
 pillow==11.1.0
 propcache==0.3.0
 pycryptodome==3.21.0
-pydantic==2.10.6
-pydantic_core==2.27.2
-python-telegram-bot[job-queue]==21.10
 pyunormalize==16.0.0
 regex==2024.11.6
 requests==2.32.3
 rlp==4.1.0
 sniffio==1.3.1
-SQLAlchemy==2.0.38
 toolz==1.0.0
 types-requests==2.32.0.20241016
 typing_extensions==4.12.2
 urllib3==2.3.0
-web3==7.8.0
 websockets==13.1
 yarl==1.18.3
-pytz==2025.1
