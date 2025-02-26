@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Collega il tuo Wallet - GiankyCoin</title>
+  <!-- Meta tag anti-cache -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -32,18 +33,22 @@
   </div>
   
   <script>
-    // Forza l'uso della proprietà default se presente
+    // Forza l'uso della proprietà default se esiste
     const wcProvider = (typeof WalletConnectProvider !== 'undefined' && WalletConnectProvider.default)
       ? WalletConnectProvider.default
       : WalletConnectProvider;
 
+    // Imposta le opzioni, forzando l'endpoint del bridge ufficiale e opzioni per il QR modal
     const providerOptions = {
       walletconnect: {
         package: wcProvider,
         options: {
           rpc: { 137: "https://polygon-rpc.com" },
           chainId: 137,
-          bridge: "https://bridge.walletconnect.org"  // Imposta esplicitamente l'endpoint ufficiale
+          bridge: "https://bridge.walletconnect.org",  // Endpoint ufficiale
+          qrcodeModalOptions: {
+            mobileLinks: ["trust", "metamask", "safePal"]
+          }
         }
       },
       injected: {
