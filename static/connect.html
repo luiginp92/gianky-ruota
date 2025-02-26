@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Collega il tuo Wallet - GiankyCoin</title>
+  <title>Collega il tuo Wallet - GiankyCoin v2</title>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <!-- Bootstrap CSS con cache busting -->
+  <!-- Bootstrap CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css?v=1.0.0">
   <style>
     body { background-color: #f8f9fa; padding-top: 50px; }
@@ -24,25 +24,32 @@
   
   <!-- Carica Ethers v5 UMD -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js?v=1.0.0"></script>
-  <!-- Importa i moduli necessari da unpkg -->
+  
+  <!-- Importa i moduli da unpkg con versione 2.2.2 -->
   <script type="module">
-    import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.1.6/dist/index.js";
-    import { EthereumClient, modalConnectors } from "https://unpkg.com/@web3modal/ethereum@2.1.6/dist/index.js";
+    // Usa URL aggiornati: versione 2.2.2 per i pacchetti Web3Modal
+    import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.2.2/dist/index.js";
+    import { EthereumClient, modalConnectors } from "https://unpkg.com/@web3modal/ethereum@2.2.2/dist/index.js";
     import { createClient } from "https://unpkg.com/wagmi@0.10.16/dist/wagmi.esm.js";
     import { polygon } from "https://unpkg.com/wagmi@0.10.16/dist/chains.js";
 
-    // Project ID dal WalletConnect Cloud
+    // Il projectId ottenuto da WalletConnect Cloud
     const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
+
+    // Configura la rete: usiamo Polygon
     const chains = [polygon];
 
+    // Crea il client wagmi
     const wagmiClient = createClient({
       autoConnect: false,
       connectors: modalConnectors({ projectId, version: 2, chains }),
       provider: () => new ethers.providers.JsonRpcProvider("https://polygon-rpc.com")
     });
 
+    // Crea l'istanza di EthereumClient per Web3Modal v2
     const ethereumClient = new EthereumClient(wagmiClient, chains);
 
+    // Configura i metadata della tua app
     const metadata = {
       name: 'GiankyCoin',
       description: 'Collega il tuo wallet per usare GiankyCoin sulla rete Polygon',
@@ -50,6 +57,7 @@
       icons: ['https://assets.reown.com/reown-profile-pic.png']
     };
 
+    // Crea il modal di Web3Modal v2
     const web3Modal = new Web3Modal({
       projectId,
       themeMode: "light",
@@ -59,6 +67,7 @@
 
     async function connectWallet() {
       try {
+        // Apri il modal per connettere il wallet
         const connection = await web3Modal.connect();
         console.log("Connessione ottenuta:", connection);
         const ethersProvider = new ethers.providers.Web3Provider(connection);
@@ -68,6 +77,7 @@
         localStorage.setItem("walletAddress", walletAddress);
         document.getElementById("message").innerText = "Wallet connesso: " + walletAddress;
 
+        // Richiedi il nonce dal backend
         const nonceRes = await fetch("/api/auth/request_nonce", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -80,10 +90,13 @@
         const nonce = nonceData.nonce;
         console.log("Nonce ricevuto:", nonce);
 
+        // Prepara il messaggio da firmare
         const messageToSign = "GiankyStop: " + nonce;
+        console.log("Messaggio da firmare:", messageToSign);
         const signature = await signer.signMessage(messageToSign);
         console.log("Firma ottenuta:", signature);
 
+        // Invia wallet e firma al backend per verifica
         const verifyRes = await fetch("/api/auth/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -105,7 +118,7 @@
     document.getElementById("connectButton").addEventListener("click", connectWallet);
   </script>
   
-  <!-- Bootstrap Bundle JS con cache busting -->
+  <!-- Bootstrap Bundle JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js?v=1.0.0"></script>
 </body>
 </html>
