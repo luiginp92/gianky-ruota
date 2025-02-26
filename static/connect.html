@@ -25,18 +25,19 @@
   <!-- Carica Ethers v5 UMD -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js?v=1.0.0"></script>
   
-  <!-- Importa i moduli da unpkg con versione 2.2.2 -->
+  <!-- Importa i moduli necessari da unpkg/jsDelivr -->
   <script type="module">
-    // Usa URL aggiornati: versione 2.2.2 per i pacchetti Web3Modal
-    import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.2.2/dist/index.js";
-    import { EthereumClient, modalConnectors } from "https://unpkg.com/@web3modal/ethereum@2.2.2/dist/index.js";
-    import { createClient } from "https://unpkg.com/wagmi@0.10.16/dist/wagmi.esm.js";
-    import { polygon } from "https://unpkg.com/wagmi@0.10.16/dist/chains.js";
+    // Importa i moduli da unpkg per Web3Modal e il relativo adapter
+    import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.1.6/dist/index.js";
+    import { EthereumClient, modalConnectors } from "https://unpkg.com/@web3modal/ethereum@2.1.6/dist/index.js";
+    // Importa wagmi e chains da jsDelivr
+    import { createClient } from "https://cdn.jsdelivr.net/npm/wagmi@0.10.16/dist/wagmi.esm.js";
+    import { polygon } from "https://cdn.jsdelivr.net/npm/wagmi@0.10.16/dist/chains.js";
 
-    // Il projectId ottenuto da WalletConnect Cloud
+    // Project ID ottenuto da WalletConnect Cloud
     const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
 
-    // Configura la rete: usiamo Polygon
+    // Configura la rete: Polygon
     const chains = [polygon];
 
     // Crea il client wagmi
@@ -67,7 +68,6 @@
 
     async function connectWallet() {
       try {
-        // Apri il modal per connettere il wallet
         const connection = await web3Modal.connect();
         console.log("Connessione ottenuta:", connection);
         const ethersProvider = new ethers.providers.Web3Provider(connection);
@@ -90,7 +90,6 @@
         const nonce = nonceData.nonce;
         console.log("Nonce ricevuto:", nonce);
 
-        // Prepara il messaggio da firmare
         const messageToSign = "GiankyStop: " + nonce;
         console.log("Messaggio da firmare:", messageToSign);
         const signature = await signer.signMessage(messageToSign);
