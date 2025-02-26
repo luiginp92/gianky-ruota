@@ -3,26 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gianky Coin Web App</title>
-  <!-- Bootstrap 5 CDN con query string -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css?v=1.0.0" rel="stylesheet">
+  <title>GiankyCoin Web App</title>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css?v=1.0.0">
   <style>
-    body { background-color: #f8f9fa; }
+    body {
+      background-color: #f8f9fa;
+      padding-top: 20px;
+    }
     .header {
       background-color: #343a40;
       color: white;
       padding: 1rem;
-      position: relative;
+      text-align: center;
     }
-    .balance-info {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      text-align: right;
-      font-size: 0.9rem;
+    .content {
+      padding: 2rem;
     }
-    .content { padding: 2rem 1rem; }
-    .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
+    .btn-custom {
+      font-size: 1.2rem;
+      margin: 0.5rem;
+    }
     .footer {
       background-color: #343a40;
       color: #ccc;
@@ -34,19 +35,13 @@
 </head>
 <body>
   <header class="header">
-    <h1>Gianky Coin</h1>
-    <!-- Sezione per mostrare il wallet e i saldi -->
-    <div id="walletInfo" class="balance-info" style="display:none;">
-      <div><strong>Wallet:</strong> <span id="walletAddress"></span></div>
-      <div><strong>MATIC:</strong> <span id="maticBalance">0</span></div>
-      <div><strong>GiankyCoin:</strong> <span id="tokenBalance">0</span></div>
-    </div>
+    <h1>GiankyCoin Web App</h1>
   </header>
   
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <img src="/wheel?v=1.0.0" alt="Ruota" class="img-fluid" style="max-width:300px;">
+        <img src="/wheel" alt="Ruota" class="img-fluid" style="max-width:300px;">
       </div>
     </div>
     <div class="row text-center">
@@ -56,7 +51,8 @@
     </div>
     <div class="row text-center mt-3">
       <div class="col">
-        <button id="btnConnect" class="btn btn-success btn-custom">Collega Wallet</button>
+        <!-- Il pulsante per collegare il wallet, che aprirà il modal di Reown AppKit -->
+        <button id="connectWalletBtn" class="btn btn-success btn-custom">Connetti Wallet</button>
       </div>
       <div class="col">
         <button id="btnBuySpins" class="btn btn-warning btn-custom">Acquista Extra Tiri</button>
@@ -78,93 +74,117 @@
   </div>
   
   <footer class="footer">
-    <p>&copy; 2025 Gianky Coin. Tutti i diritti riservati.</p>
+    <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
   </footer>
   
-  <!-- Bootstrap Bundle with Popper (con query string) -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js?v=1.0.0"></script>
-  <!-- Web3.js -->
-  <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
-  <script>
-    // Imposta il provider su Polygon
-    const web3 = new Web3(new Web3.providers.HttpProvider("https://polygon-rpc.com"));
-
-    // ABI minimo per ERC20 (balanceOf)
-    const tokenABI = [{
-      "constant": true,
-      "inputs": [{"name": "_owner", "type": "address"}],
-      "name": "balanceOf",
-      "outputs": [{"name": "balance", "type": "uint256"}],
-      "type": "function"
-    }];
-
-    // Indirizzo del token GiankyCoin
-    const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
-
-    async function updateWalletInfo() {
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) {
-        document.getElementById("walletInfo").style.display = "none";
-        return;
-      }
-      document.getElementById("walletInfo").style.display = "block";
-      document.getElementById("walletAddress").innerText = wallet;
-      
+  <!-- Carica le librerie necessarie per la connessione wallet tramite Reown AppKit v2 -->
+  <!-- Ethers v5 -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <!-- Usa Web3Modal v2 e Reown AppKit tramite moduli ES -->
+  <script type="module">
+    // Importa i moduli necessari da CDN
+    import { Web3Modal } from "https://cdn.skypack.dev/@web3modal/html@2.1.6";
+    import { EthereumClient, modalConnectors } from "https://cdn.skypack.dev/@web3modal/ethereum@2.1.6";
+    import { configureChains, createClient } from "https://cdn.skypack.dev/wagmi@0.10.16";
+    import { polygon } from "https://cdn.skypack.dev/wagmi@0.10.16/dist/chains.js";
+    
+    // Project ID fornito
+    const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
+    
+    // Configura la catena: usiamo Polygon
+    const chains = [polygon];
+    
+    // Crea il client wagmi
+    const wagmiClient = createClient({
+      autoConnect: false,
+      connectors: modalConnectors({ projectId, version: 2, chains }),
+      provider: () => new ethers.providers.JsonRpcProvider("https://polygon-rpc.com")
+    });
+    
+    // Crea l'istanza di EthereumClient per Web3Modal v2
+    const ethereumClient = new EthereumClient(wagmiClient, chains);
+    
+    // Configura i metadata della tua app
+    const metadata = {
+      name: 'GiankyCoin',
+      description: 'Collega il tuo wallet per usare GiankyCoin sulla rete Polygon',
+      url: 'https://gianky-bot-test-f275065c7d33.herokuapp.com',
+      icons: ['https://assets.reown.com/reown-profile-pic.png']
+    };
+    
+    // Crea l'istanza di Web3Modal v2
+    const web3Modal = new Web3Modal({
+      projectId,
+      themeMode: "light",
+      accentColor: "default",
+      ethereumClient,
+    });
+    
+    // Funzione per aprire il modal e collegare il wallet
+    async function connectWallet() {
       try {
-        const balanceWei = await web3.eth.getBalance(wallet);
-        const balanceMatic = web3.utils.fromWei(balanceWei, "ether");
-        document.getElementById("maticBalance").innerText = parseFloat(balanceMatic).toFixed(4);
+        const connection = await web3Modal.connect();
+        console.log("Connessione ottenuta:", connection);
+        const ethersProvider = new ethers.providers.Web3Provider(connection);
+        const signer = ethersProvider.getSigner();
+        const walletAddress = await signer.getAddress();
+        console.log("Wallet ottenuto:", walletAddress);
+        localStorage.setItem("walletAddress", walletAddress);
+        
+        // Visualizza il wallet nella pagina (potresti aggiornare un elemento dedicato ai saldi)
+        document.getElementById("result").style.display = "block";
+        document.getElementById("result").innerText = "Wallet connesso: " + walletAddress;
+        
+        // Richiedi il nonce dal backend per la firma (backend gestisce /api/auth/request_nonce)
+        const nonceRes = await fetch("/api/auth/request_nonce", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: walletAddress })
+        });
+        const nonceData = await nonceRes.json();
+        if (!nonceRes.ok) {
+          throw new Error(nonceData.detail || "Errore nella richiesta del nonce.");
+        }
+        const nonce = nonceData.nonce;
+        console.log("Nonce ricevuto:", nonce);
+        
+        // Prepara il messaggio da firmare e richiedi la firma
+        const messageToSign = "GiankyStop: " + nonce;
+        const signature = await signer.signMessage(messageToSign);
+        console.log("Firma ottenuta:", signature);
+        
+        // Invia i dati al backend per la verifica della firma
+        const verifyRes = await fetch("/api/auth/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: walletAddress, signature })
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok) {
+          throw new Error(verifyData.detail || "Errore durante la verifica della firma.");
+        }
+        localStorage.setItem("jwtToken", verifyData.access_token);
+        alert("Wallet collegato correttamente!");
+        window.location.href = "/static/index.html";
       } catch (error) {
-        console.error("Errore nel recuperare il saldo MATIC:", error);
-        document.getElementById("maticBalance").innerText = "Errore";
-      }
-      
-      try {
-        const tokenContract = new web3.eth.Contract(tokenABI, tokenAddress);
-        let tokenBalance = await tokenContract.methods.balanceOf(wallet).call();
-        tokenBalance = web3.utils.fromWei(tokenBalance, "ether");
-        document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
-      } catch (error) {
-        console.error("Errore nel recuperare il saldo GiankyCoin:", error);
-        document.getElementById("tokenBalance").innerText = "Errore";
+        console.error("Errore nella connessione del wallet:", error);
+        document.getElementById("result").style.display = "block";
+        document.getElementById("result").innerText = "Errore: " + error.message;
       }
     }
-
-    // Aggiorna i saldi al caricamento e ogni 30 secondi
-    window.addEventListener("load", updateWalletInfo);
-    setInterval(updateWalletInfo, 30000);
-
-    // Gestione dei pulsanti
-    document.getElementById("btnSpin").addEventListener("click", function() {
-      fetch("/api/spin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({})
-      })
-      .then(res => res.json())
-      .then(data => { 
-         document.getElementById("result").style.display = "block";
-         document.getElementById("result").innerText = data.message;
-         updateWalletInfo();
-      })
-      .catch(err => console.error(err));
-    });
-
-    document.getElementById("btnConnect").addEventListener("click", function() {
-      window.location.href = "/static/connect.html";
-    });
-
-    document.getElementById("btnBuySpins").addEventListener("click", function() {
-      window.location.href = "/static/buyspins.html";
-    });
-
-    document.getElementById("btnReferral").addEventListener("click", function() {
-      window.location.href = "/static/referral.html";
-    });
-
-    document.getElementById("btnTask").addEventListener("click", function() {
-      window.location.href = "/static/task.html";
-    });
+    
+    // Associa il pulsante "Connetti Wallet" alla funzione di collegamento
+    document.getElementById("connectWalletBtn")?.addEventListener("click", connectWallet);
   </script>
+  
+  <!-- Se preferisci usare un pulsante inline per il collegamento, sostituisci l'id "connectWalletBtn" 
+       con quello definito nel file HTML; ad esempio, puoi usare "btnConnect" se il pulsante si chiama così. -->
+  <script>
+    // Se nel file HTML hai un pulsante con id "btnConnect", assegna l'evento:
+    document.getElementById("btnConnect")?.addEventListener("click", connectWallet);
+  </script>
+  
+  <!-- Bootstrap Bundle JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
