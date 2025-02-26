@@ -4,11 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Collega il tuo Wallet - GiankyCoin v2</title>
-  <!-- Anti-cache -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <!-- Bootstrap CSS (facoltativo) -->
+  <!-- Bootstrap CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
     body { background-color: #f8f9fa; padding-top: 50px; }
@@ -25,17 +24,16 @@
 
   <!-- Script in modalità modulo per Web3Modal v2 -->
   <script type="module">
-    // Importa i moduli necessari da Skypack
-    import { Web3Modal } from "https://cdn.skypack.dev/@web3modal/html@2.1.6";
-    import { EthereumClient, modalConnectors } from "https://cdn.skypack.dev/@web3modal/ethereum@2.1.6";
-    import { configureChains, createClient } from "https://cdn.skypack.dev/wagmi@0.10.16";
-    // Importa la configurazione per Polygon: se non è disponibile, definiscila manualmente
-    import { polygon } from "https://cdn.skypack.dev/wagmi@0.10.16/dist/chains.js";
+    // Importa i moduli da unpkg
+    import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.1.6/dist/index.js";
+    import { EthereumClient, modalConnectors } from "https://unpkg.com/@web3modal/ethereum@2.1.6/dist/index.js";
+    import { configureChains, createClient } from "https://unpkg.com/wagmi@0.10.16/dist/wagmi.esm.js";
+    import { polygon } from "https://unpkg.com/wagmi@0.10.16/dist/chains.js";
 
-    // Inserisci il tuo projectId ottenuto da WalletConnect Cloud
+    // Usa il projectId che hai fornito
     const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
-
-    // Configura la catena: utilizziamo Polygon
+    
+    // Configura la catena: usiamo Polygon
     const chains = [polygon];
 
     // Crea il client wagmi
@@ -56,7 +54,7 @@
       icons: ['https://assets.reown.com/reown-profile-pic.png']
     };
 
-    // Crea il modal di AppKit (Web3Modal v2)
+    // Crea il modal di Web3Modal v2
     const web3Modal = new Web3Modal({
       projectId,
       themeMode: "light",
@@ -66,10 +64,8 @@
 
     async function connectWallet() {
       try {
-        // Apri il modal per connettere il wallet
         const connection = await web3Modal.connect();
         console.log("Connessione ottenuta:", connection);
-        // Crea un provider Ethers a partire dalla connessione
         const ethersProvider = new ethers.providers.Web3Provider(connection);
         const signer = ethersProvider.getSigner();
         const walletAddress = await signer.getAddress();
@@ -77,7 +73,7 @@
         localStorage.setItem("walletAddress", walletAddress);
         document.getElementById("message").innerText = "Wallet connesso: " + walletAddress;
         
-        // Richiedi il nonce dal backend per la firma
+        // Richiedi il nonce dal backend
         const nonceRes = await fetch("/api/auth/request_nonce", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -90,13 +86,12 @@
         const nonce = nonceData.nonce;
         console.log("Nonce ricevuto:", nonce);
         
-        // Prepara il messaggio da firmare
         const messageToSign = "GiankyStop: " + nonce;
         console.log("Messaggio da firmare:", messageToSign);
         const signature = await signer.signMessage(messageToSign);
         console.log("Firma ottenuta:", signature);
         
-        // Invia wallet e firma al backend per verifica
+        // Invia wallet e firma al backend per la verifica
         const verifyRes = await fetch("/api/auth/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -117,8 +112,7 @@
 
     document.getElementById("connectButton").addEventListener("click", connectWallet);
   </script>
-  
-  <!-- Bootstrap Bundle JS (facoltativo) -->
+  <!-- Bootstrap Bundle JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
