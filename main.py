@@ -40,10 +40,10 @@ logging.basicConfig(
 
 app = FastAPI(title="Gianky Coin Web App API")
 
-# Monta la cartella "static" per servire i file statici
+# Monta la cartella static per servire i file HTML, CSS, JS, ecc.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Endpoint per la home: reindirizza a index.html
+# Endpoint per la home: reindirizza alla pagina index.html
 @app.get("/", response_class=HTMLResponse)
 async def home():
     return """
@@ -51,8 +51,7 @@ async def home():
       <head>
         <meta http-equiv="refresh" content="0; url=/static/index.html" />
       </head>
-      <body>
-      </body>
+      <body></body>
     </html>
     """
 
@@ -74,7 +73,7 @@ else:
     STATIC_IMAGE_BYTES = None
     logging.error("File statico non trovato: ruota.png")
 
-# Middleware custom per il supporto a reti POA (Polygon)
+# Middleware custom per supportare reti POA (Polygon)
 def custom_geth_poa_middleware(make_request, web3=None):
     def middleware(method, params):
         response = make_request(method, params)
@@ -93,7 +92,7 @@ w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 # ------------------------------------------------
 # CONFIGURAZIONI JWT & AUTENTICAZIONE
 # ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con una chiave sicura in produzione
+SECRET_KEY = "a_very_secret_key_change_me"  # Cambia con una chiave sicura in produzione
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
