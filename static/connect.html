@@ -13,6 +13,7 @@
   <style>
     body { background-color: #f8f9fa; padding-top: 50px; }
     .container { max-width: 500px; }
+    .alert-fallback { margin-top: 20px; }
   </style>
 </head>
 <body>
@@ -22,98 +23,47 @@
     <button id="connectButton" class="btn btn-primary btn-lg">Connetti Wallet</button>
     <div id="message" class="mt-3"></div>
   </div>
-  
+
   <!-- Carica le librerie UMD -->
   <!-- ethers.js -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <!-- Web3Modal -->
-  <script src="https://unpkg.com/web3modal@1.9.8/dist/index.js"></script>
-  <!-- WalletConnect Provider v1.7.8 -->
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
-  <!-- wagmi UMD -->
-  <script src="https://unpkg.com/wagmi@0.10.16/dist/wagmi.umd.min.js"></script>
-  
-  <script>
-    // Definisci la configurazione per Polygon manualmente
-    const polygon = {
-      id: 137,
-      name: "Polygon",
-      network: "polygon",
-      nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
-      rpcUrls: { default: "https://polygon-rpc.com" },
-      blockExplorers: { default: { name: "Polygonscan", url: "https://polygonscan.com" } },
-      testnet: false,
-    };
-    const chains = [polygon];
+  <!-- Web3Modal v2 -->
+  <script type="module">
+    // Importa Web3Modal dalla versione HTML (v2.1.6)
+    import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.1.6/dist/index.js";
 
-    // Configura il provider WalletConnect con opzioni, forzando l'endpoint ufficiale
-    // Forza l'uso della proprietà default se esiste
-    const wcProvider = (typeof WalletConnectProvider !== 'undefined' && WalletConnectProvider.default)
-      ? WalletConnectProvider.default
-      : WalletConnectProvider;
+    // Inserisci il tuo projectId (quello che hai fornito)
+    const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
 
-    const providerOptions = {
-      walletconnect: {
-        package: wcProvider,
-        options: {
-          rpc: { 137: "https://polygon-rpc.com" },
-          chainId: 137,
-          bridge: "https://bridge.walletconnect.org", // Forza l'endpoint ufficiale
-          qrcodeModalOptions: { mobileLinks: ["trust", "metamask", "safePal"] }
-        }
-      },
-      injected: {
-        display: { name: "Browser Wallet" },
-        package: null
-      }
-    };
-
-    const web3Modal = new window.Web3Modal.default({
-      cacheProvider: false,
-      providerOptions,
-      theme: "light"
+    // Crea un'istanza di Web3Modal v2
+    const web3Modal = new Web3Modal({
+      projectId,
+      themeMode: "light",
+      accentColor: "default",
+      // Puoi aggiungere altre opzioni se necessario
     });
-
-    // Ora, per wagmi, utilizziamo la versione UMD (disponibile in wagmi.umd.min.js)
-    // I metodi sono disponibili sotto l'oggetto window.wagmi
-    const { configureChains, createClient } = window.wagmi;
-    // Non abbiamo un modulo separato per le chains, quindi usiamo la nostra definizione manuale
-
-    const wagmiClient = createClient({
-      autoConnect: false,
-      connectors: window.wagmi.modalConnectors({ projectId: "c17f0d55c1fb5debe77f860c40b7afdb", version: 2, chains }),
-      provider: new ethers.providers.JsonRpcProvider("https://polygon-rpc.com"),
-    });
-
-    // L'adapter Ethereum di Web3Modal potrebbe non essere disponibile in UMD; in questo esempio, continueremo ad usare Web3Modal v1.9.8.
-    // Se desideri utilizzare Web3Modal v2, devi importare i moduli in modalità "module".
 
     async function connectWallet() {
       console.log("Inizio flusso connectWallet");
       try {
-        let provider;
-        if (window.ethereum) {
-          console.log("Provider nativo disponibile");
-          provider = window.ethereum;
-          await provider.request({ method: "eth_requestAccounts" });
-        } else {
-          console.log("Utilizzo Web3Modal");
-          provider = await web3Modal.connect();
-        }
-        console.log("Provider ottenuto:", provider);
-        
-        const ethersProvider = new ethers.providers.Web3Provider(provider);
+        // Apre il modal per connettere il wallet
+        const connection = await web3Modal.connect();
+        console.log("Connessione ottenuta:", connection);
+
+        // Usa ethers.js per creare un provider a partire dalla connessione
+        const ethersProvider = new ethers.providers.Web3Provider(connection);
         const signer = ethersProvider.getSigner();
-        const wallet = await signer.getAddress();
-        console.log("Wallet ottenuto:", wallet);
-        localStorage.setItem("walletAddress", wallet);
-        document.getElementById("message").innerText = "Wallet connesso: " + wallet;
+        const walletAddress = await signer.getAddress();
+        console.log("Wallet ottenuto:", walletAddress);
+        localStorage.setItem("walletAddress", walletAddress);
+        document.getElementById("message").innerText = "Wallet connesso: " + walletAddress;
         
+        // Richiedi il nonce dal backend
         console.log("Richiedo nonce dal backend...");
         const nonceRes = await fetch("/api/auth/request_nonce", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: wallet })
+          body: JSON.stringify({ wallet_address: walletAddress })
         });
         const nonceData = await nonceRes.json();
         if (!nonceRes.ok) {
@@ -122,6 +72,7 @@
         const nonce = nonceData.nonce;
         console.log("Nonce ricevuto:", nonce);
         
+        // Prepara il messaggio da firmare
         const messageToSign = "GiankyStop: " + nonce;
         console.log("Messaggio da firmare:", messageToSign);
         let signature;
@@ -132,11 +83,12 @@
           throw new Error("Errore nella firma: " + signError.message);
         }
         
+        // Invia wallet e firma al backend per la verifica
         console.log("Invio dati al backend per verifica...");
         const verifyRes = await fetch("/api/auth/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: wallet, signature })
+          body: JSON.stringify({ wallet_address: walletAddress, signature })
         });
         const verifyData = await verifyRes.json();
         if (!verifyRes.ok) {
