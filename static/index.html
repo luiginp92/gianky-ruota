@@ -77,12 +77,11 @@
     <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
   </footer>
   
-  <!-- Carica le librerie per il collegamento wallet tramite Reown AppKit v2 -->
-  <!-- Ethers v5 -->
+  <!-- Carica Ethers v5 UMD -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <!-- Importa i moduli come ES module dai CDN (usiamo unpkg per stabilità) -->
+  <!-- Importa i moduli necessari da unpkg -->
   <script type="module">
-    // Importa i moduli necessari
+    // Importa i moduli necessari da unpkg
     import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.1.6/dist/index.js";
     import { EthereumClient, modalConnectors } from "https://unpkg.com/@web3modal/ethereum@2.1.6/dist/index.js";
     import { createClient } from "https://unpkg.com/wagmi@0.10.16/dist/wagmi.esm.js";
@@ -91,7 +90,7 @@
     // Project ID ottenuto da WalletConnect Cloud
     const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
 
-    // Configura la rete: qui usiamo Polygon
+    // Configura la rete: Polygon
     const chains = [polygon];
 
     // Crea il client wagmi
@@ -120,13 +119,11 @@
       ethereumClient,
     });
 
-    // Funzione per collegare il wallet
     async function connectWallet() {
       try {
         // Apri il modal per connettere il wallet
         const connection = await web3Modal.connect();
         console.log("Connessione ottenuta:", connection);
-        // Crea un provider ethers a partire dalla connessione
         const ethersProvider = new ethers.providers.Web3Provider(connection);
         const signer = ethersProvider.getSigner();
         const walletAddress = await signer.getAddress();
@@ -148,13 +145,13 @@
         const nonce = nonceData.nonce;
         console.log("Nonce ricevuto:", nonce);
 
-        // Prepara il messaggio da firmare e richiedi la firma
+        // Prepara il messaggio da firmare
         const messageToSign = "GiankyStop: " + nonce;
         console.log("Messaggio da firmare:", messageToSign);
         const signature = await signer.signMessage(messageToSign);
         console.log("Firma ottenuta:", signature);
 
-        // Invia wallet e firma al backend per verifica
+        // Invia wallet e firma al backend per la verifica
         const verifyRes = await fetch("/api/auth/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
