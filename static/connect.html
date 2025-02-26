@@ -4,16 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Collega il tuo Wallet - GiankyCoin</title>
+  <!-- Meta tag anti-cache -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
+  <!-- Bootstrap CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css?v=1.0.0">
-  <!-- Versione UMD di ethers.js -->
+  <!-- Usa la versione UMD di ethers.js -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <!-- Web3Modal UMD -->
   <script src="https://unpkg.com/web3modal@1.9.8/dist/index.js"></script>
-  <!-- WalletConnect Provider v1.7.8 (UMD) -->
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
+  <!-- WalletConnect Provider v1.6.6 (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.6.6/dist/umd/index.min.js"></script>
   <style>
     body { background-color: #f8f9fa; padding-top: 50px; }
     .container { max-width: 500px; }
@@ -36,7 +38,7 @@
   <script>
     const providerOptions = {
       walletconnect: {
-        package: WalletConnectProvider,
+        package: WalletConnectProvider, // Questa versione UMD di WalletConnectProvider (v1.6.6) viene esportata come WalletConnectProvider
         options: {
           rpc: { 137: "https://polygon-rpc.com" },
           chainId: 137
@@ -119,7 +121,7 @@
 
     document.getElementById('connectButton').addEventListener('click', connectWallet);
 
-    // Fallback: deep link per Trust Wallet (esempio)
+    // Fallback: deep link per Trust Wallet (se necessario)
     document.getElementById('fallbackButton')?.addEventListener('click', function() {
       const deepLink = "trust://open_url?url=" + encodeURIComponent(window.location.href);
       window.location.href = deepLink;
