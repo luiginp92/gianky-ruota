@@ -1,52 +1,87 @@
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.staticfiles import StaticFiles
-import uvicorn
-import json
-import os
-import random
-import string
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GiankyCoin Web App</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+</head>
+<body>
+  <header class="header text-center p-3 bg-dark text-white">
+    <h1>GiankyCoin Web App</h1>
+  </header>
 
-app = FastAPI()
+  <div class="container text-center mt-4">
+    <button id="connectWalletBtn" class="btn btn-success">Connetti Wallet</button>
+    <div id="result" class="alert alert-info mt-4" style="display:none;"></div>
+  </div>
 
-# Monta la cartella static per servire i file statici
-app.mount("/static", StaticFiles(directory="static"), name="static")
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script type="module">
+    import { createAppKit } from "https://cdn.jsdelivr.net/npm/@reown/appkit@latest/dist/index.js";
+    import { Ethers5Adapter } from "https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers5@latest/dist/index.js";
+    import { polygon } from "https://cdn.jsdelivr.net/npm/@reown/appkit/networks@latest/dist/index.js";
 
-# Simulazione di un database per i nonce
-nonce_db = {}
+    const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
 
-# Endpoint per richiedere un nonce
-@app.post("/api/auth/request_nonce")
-async def request_nonce(request: Request):
-    data = await request.json()
-    wallet_address = data.get("wallet_address")
-    if not wallet_address:
-        raise HTTPException(status_code=400, detail="Indirizzo wallet mancante.")
-    
-    nonce = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-    nonce_db[wallet_address] = nonce
-    return {"nonce": nonce}
+    const metadata = {
+      name: "GiankyCoin",
+      description: "Collega il tuo wallet su Polygon",
+      url: "https://gianky-bot-test.herokuapp.com"
+    };
 
-# Endpoint per verificare la firma
-@app.post("/api/auth/verify")
-async def verify_signature(request: Request):
-    data = await request.json()
-    wallet_address = data.get("wallet_address")
-    signature = data.get("signature")
-    
-    if not wallet_address or not signature:
-        raise HTTPException(status_code=400, detail="Dati mancanti.")
-    
-    stored_nonce = nonce_db.get(wallet_address)
-    if not stored_nonce:
-        raise HTTPException(status_code=400, detail="Nonce non trovato.")
-    
-    # Simuliamo la verifica della firma (in produzione si userebbe ethers.js o web3.py)
-    verified = True  # Supponiamo che la verifica vada a buon fine
-    
-    if not verified:
-        raise HTTPException(status_code=401, detail="Firma non valida.")
-    
-    return {"access_token": "fake-jwt-token-for-" + wallet_address}
+    const reownModal = createAppKit({
+      adapters: [new Ethers5Adapter()],
+      metadata,
+      networks: [polygon],
+      projectId
+    });
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    document.getElementById("connectWalletBtn").addEventListener("click", async () => {
+      const resultEl = document.getElementById("result");
+      try {
+        const provider = await reownModal.open();
+        const ethersProvider = new ethers.providers.Web3Provider(provider);
+        const signer = ethersProvider.getSigner();
+        const walletAddress = await signer.getAddress();
+
+        resultEl.style.display = "block";
+        resultEl.innerText = "Wallet connesso: " + walletAddress;
+
+        // 1) Richiedi il nonce al backend
+        const nonceRes = await fetch("/api/auth/request_nonce", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: walletAddress })
+        });
+        const nonceData = await nonceRes.json();
+        if (!nonceRes.ok) {
+          throw new Error(nonceData.detail || "Errore nella richiesta del nonce");
+        }
+
+        // 2) Firma il nonce
+        const signature = await signer.signMessage("GiankyStop: " + nonceData.nonce);
+
+        // 3) Invia firma al backend
+        const verifyRes = await fetch("/api/auth/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: walletAddress, signature })
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok) {
+          throw new Error(verifyData.detail || "Errore durante la verifica firma");
+        }
+
+        // Access token (JWT)
+        console.log("Access token:", verifyData.access_token);
+        alert("Wallet collegato correttamente!");
+      } catch (error) {
+        console.error("Errore nel collegamento:", error);
+        resultEl.style.display = "block";
+        resultEl.innerText = "Errore: " + error.message;
+      }
+    });
+  </script>
+</body>
+</html>
