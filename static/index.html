@@ -51,8 +51,8 @@
     </div>
     <div class="row text-center mt-3">
       <div class="col">
-        <!-- Il pulsante per collegare il wallet reindirizza alla pagina connect.html -->
-        <button id="btnConnect" class="btn btn-success btn-custom" onclick="window.location.href='/static/connect.html?v=1.0.0'">Connetti Wallet</button>
+        <!-- Il pulsante per collegare il wallet: viene gestito direttamente in questa pagina -->
+        <button id="btnConnect" class="btn btn-success btn-custom">Connetti Wallet</button>
       </div>
       <div class="col">
         <button id="btnBuySpins" class="btn btn-warning btn-custom">Acquista Extra Tiri</button>
@@ -80,19 +80,97 @@
   <!-- Bootstrap Bundle JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js?v=1.0.0"></script>
   
-  <!-- Eventuali script per altre funzionalità (es. spin, buy, referral, task) -->
-  <script>
-    // Esempio di chiamata a /api/spin
-    document.getElementById("btnSpin").addEventListener("click", async () => {
-      try {
-        const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
-        const data = await res.json();
-        document.getElementById("result").style.display = "block";
-        document.getElementById("result").innerText = data.message;
-      } catch (err) {
-        console.error(err);
-      }
+  <!-- Integrazione del flusso di collegamento wallet tramite Web3Modal v2 -->
+  <!-- Carica Ethers v5 UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js?v=1.0.0"></script>
+  
+  <!-- Script di collegamento wallet in modalità modulo -->
+  <script type="module">
+    // Importa i moduli necessari dai CDN:
+    // Web3Modal ed EthereumClient da unpkg (versione 2.2.2)
+    import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.2.2/dist/index.js";
+    import { EthereumClient, modalConnectors } from "https://unpkg.com/@web3modal/ethereum@2.2.2/dist/index.js";
+    // Importa wagmi e chains da Skypack
+    import { createClient } from "https://cdn.skypack.dev/wagmi@0.10.16?min";
+    import { polygon } from "https://cdn.skypack.dev/wagmi@0.10.16/dist/chains.js?min";
+    
+    // Project ID ottenuto da WalletConnect Cloud
+    const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
+    
+    // Configura la rete: Polygon
+    const chains = [polygon];
+    
+    // Crea il client wagmi
+    const wagmiClient = createClient({
+      autoConnect: false,
+      connectors: modalConnectors({ projectId, version: 2, chains }),
+      provider: () => new ethers.providers.JsonRpcProvider("https://polygon-rpc.com")
     });
+    
+    // Crea l'istanza di EthereumClient per Web3Modal v2
+    const ethereumClient = new EthereumClient(wagmiClient, chains);
+    
+    // Funzione per collegare il wallet:
+    async function connectWallet() {
+      try {
+        // Apri il modal per connettere il wallet
+        const connection = await (new Web3Modal({
+          projectId,
+          themeMode: "light",
+          accentColor: "default",
+          ethereumClient,
+        })).connect();
+        console.log("Connessione ottenuta:", connection);
+        
+        const ethersProvider = new ethers.providers.Web3Provider(connection);
+        const signer = ethersProvider.getSigner();
+        const walletAddress = await signer.getAddress();
+        console.log("Wallet ottenuto:", walletAddress);
+        localStorage.setItem("walletAddress", walletAddress);
+        document.getElementById("result").style.display = "block";
+        document.getElementById("result").innerText = "Wallet connesso: " + walletAddress;
+        
+        // Richiedi il nonce dal backend per la firma
+        const nonceRes = await fetch("/api/auth/request_nonce", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: walletAddress })
+        });
+        const nonceData = await nonceRes.json();
+        if (!nonceRes.ok) {
+          throw new Error(nonceData.detail || "Errore nella richiesta del nonce.");
+        }
+        const nonce = nonceData.nonce;
+        console.log("Nonce ricevuto:", nonce);
+        
+        // Prepara il messaggio da firmare
+        const messageToSign = "GiankyStop: " + nonce;
+        console.log("Messaggio da firmare:", messageToSign);
+        const signature = await signer.signMessage(messageToSign);
+        console.log("Firma ottenuta:", signature);
+        
+        // Invia wallet e firma al backend per la verifica
+        const verifyRes = await fetch("/api/auth/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: walletAddress, signature })
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok) {
+          throw new Error(verifyData.detail || "Errore durante la verifica della firma.");
+        }
+        localStorage.setItem("jwtToken", verifyData.access_token);
+        alert("Wallet collegato correttamente!");
+        window.location.href = "/static/index.html";
+      } catch (error) {
+        console.error("Errore nella connessione del wallet:", error);
+        document.getElementById("result").style.display = "block";
+        document.getElementById("result").innerText = "Errore: " + error.message;
+      }
+    }
+    
+    // Assegna l'evento al pulsante "Connetti Wallet"
+    document.getElementById("btnConnect").addEventListener("click", connectWallet);
   </script>
 </body>
 </html>
