@@ -25,31 +25,31 @@
   <!-- Carica Ethers v5 UMD -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js?v=1.0.0"></script>
   
-  <!-- Importa i moduli necessari da unpkg/jsDelivr -->
+  <!-- Importa i moduli necessari -->
   <script type="module">
-    // Importa i moduli da unpkg per Web3Modal e il relativo adapter
-    import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.1.6/dist/index.js";
-    import { EthereumClient, modalConnectors } from "https://unpkg.com/@web3modal/ethereum@2.1.6/dist/index.js";
-    // Importa wagmi e chains da jsDelivr
-    import { createClient } from "https://cdn.jsdelivr.net/npm/wagmi@0.10.16/dist/wagmi.esm.js";
-    import { polygon } from "https://cdn.jsdelivr.net/npm/wagmi@0.10.16/dist/chains.js";
-
+    // Importa Web3Modal ed EthereumClient da unpkg (versione 2.2.2)
+    import { Web3Modal } from "https://unpkg.com/@web3modal/html@2.2.2/dist/index.js";
+    import { EthereumClient, modalConnectors } from "https://unpkg.com/@web3modal/ethereum@2.2.2/dist/index.js";
+    // Usa Skypack per wagmi e per le chains
+    import { createClient } from "https://cdn.skypack.dev/wagmi@0.10.16?min";
+    import { polygon } from "https://cdn.skypack.dev/wagmi@0.10.16/dist/chains.js?min";
+    
     // Project ID ottenuto da WalletConnect Cloud
     const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
-
+    
     // Configura la rete: Polygon
     const chains = [polygon];
-
+    
     // Crea il client wagmi
     const wagmiClient = createClient({
       autoConnect: false,
       connectors: modalConnectors({ projectId, version: 2, chains }),
       provider: () => new ethers.providers.JsonRpcProvider("https://polygon-rpc.com")
     });
-
+    
     // Crea l'istanza di EthereumClient per Web3Modal v2
     const ethereumClient = new EthereumClient(wagmiClient, chains);
-
+    
     // Configura i metadata della tua app
     const metadata = {
       name: 'GiankyCoin',
@@ -57,7 +57,7 @@
       url: 'https://gianky-bot-test-f275065c7d33.herokuapp.com',
       icons: ['https://assets.reown.com/reown-profile-pic.png']
     };
-
+    
     // Crea il modal di Web3Modal v2
     const web3Modal = new Web3Modal({
       projectId,
@@ -65,7 +65,7 @@
       accentColor: "default",
       ethereumClient,
     });
-
+    
     async function connectWallet() {
       try {
         const connection = await web3Modal.connect();
@@ -76,7 +76,7 @@
         console.log("Wallet ottenuto:", walletAddress);
         localStorage.setItem("walletAddress", walletAddress);
         document.getElementById("message").innerText = "Wallet connesso: " + walletAddress;
-
+        
         // Richiedi il nonce dal backend
         const nonceRes = await fetch("/api/auth/request_nonce", {
           method: "POST",
@@ -89,13 +89,14 @@
         }
         const nonce = nonceData.nonce;
         console.log("Nonce ricevuto:", nonce);
-
+        
+        // Prepara il messaggio da firmare
         const messageToSign = "GiankyStop: " + nonce;
         console.log("Messaggio da firmare:", messageToSign);
         const signature = await signer.signMessage(messageToSign);
         console.log("Firma ottenuta:", signature);
-
-        // Invia wallet e firma al backend per verifica
+        
+        // Invia wallet e firma al backend per la verifica
         const verifyRes = await fetch("/api/auth/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -113,7 +114,7 @@
         document.getElementById("message").innerText = "Errore: " + error.message;
       }
     }
-
+    
     document.getElementById("connectButton").addEventListener("click", connectWallet);
   </script>
   
