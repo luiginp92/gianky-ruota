@@ -38,6 +38,24 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
+app = FastAPI(title="Gianky Coin Web App API")
+
+# Monta la cartella "static" per servire i file statici
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Endpoint per la home: reindirizza a index.html
+@app.get("/", response_class=HTMLResponse)
+async def home():
+    return """
+    <html>
+      <head>
+        <meta http-equiv="refresh" content="0; url=/static/index.html" />
+      </head>
+      <body>
+      </body>
+    </html>
+    """
+
 # ------------------------------------------------
 # CONFIGURAZIONI BLOCKCHAIN E COSTANTI
 # ------------------------------------------------
@@ -56,7 +74,7 @@ else:
     STATIC_IMAGE_BYTES = None
     logging.error("File statico non trovato: ruota.png")
 
-# Middleware custom per POA
+# Middleware custom per il supporto a reti POA (Polygon)
 def custom_geth_poa_middleware(make_request, web3=None):
     def middleware(method, params):
         response = make_request(method, params)
@@ -72,13 +90,10 @@ w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
-# Variabile globale per tx duplicate
-USED_TX = set()
-
 # ------------------------------------------------
 # CONFIGURAZIONI JWT & AUTENTICAZIONE
 # ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci se necessario
+SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con una chiave sicura in produzione
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -117,124 +132,6 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     return user
 
 # ------------------------------------------------
-# FUNZIONI UTILI PER BLOCKCHAIN E GIOCO
-# ------------------------------------------------
-def get_dynamic_gas_price():
-    try:
-        base = w3.eth.gas_price
-        safe = int(base * 1.2)
-        logging.info(f"⛽ Gas Price: {w3.from_wei(base, 'gwei')} -> {w3.from_wei(safe, 'gwei')}")
-        return safe
-    except Exception as e:
-        logging.error(f"Errore nel gas price: {e}")
-        return w3.to_wei('50', 'gwei')
-
-def invia_token(destinatario, quantita):
-    if not w3.is_connected():
-        logging.error("Blockchain non connessa.")
-        return False
-    gas_price = get_dynamic_gas_price()
-    contratto = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
-        "constant": False,
-        "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
-        "name": "transfer",
-        "outputs": [{"name": "", "type": "bool"}],
-        "payable": False,
-        "stateMutability": "nonpayable",
-        "type": "function",
-    }])
-    tx = contratto.functions.transfer(destinatario, quantita * 10**18).build_transaction({
-        'from': WALLET_DISTRIBUZIONE,
-        'nonce': w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE),
-        'gas': 100000,
-        'gasPrice': gas_price,
-    })
-    signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
-    
-    session = Session()
-    try:
-        counter = session.query(GlobalCounter).first()
-        if counter is not None:
-            counter.total_out += quantita
-        else:
-            counter = GlobalCounter(total_in=0.0, total_out=quantita)
-            session.add(counter)
-        session.commit()
-    except Exception as e:
-        logging.error(f"Errore aggiornamento total_out: {e}")
-        session.rollback()
-    finally:
-        session.close()
-    return True
-
-def verifica_transazione_gky(user_address, tx_hash, cost):
-    try:
-        tx = w3_no_mw.eth.get_transaction(tx_hash)
-        if tx["to"].lower() != CONTRATTO_GKY.lower():
-            logging.error("TX non destinata al contratto GKY.")
-            return False
-        contract = w3_no_mw.eth.contract(address=CONTRATTO_GKY, abi=[{
-            "constant": False,
-            "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
-            "name": "transfer",
-            "outputs": [{"name": "", "type": "bool"}],
-            "payable": False,
-            "stateMutability": "nonpayable",
-            "type": "function",
-        }])
-        try:
-            func_obj, params = contract.decode_function_input(tx.input)
-        except Exception as decode_error:
-            logging.error(f"Decodifica TX fallita: {decode_error}")
-            return False
-        if func_obj.fn_name != "transfer":
-            logging.error("TX non chiama transfer.")
-            return False
-        if params.get("_to", "").lower() != WALLET_DISTRIBUZIONE.lower():
-            logging.error("TX non invia al portafoglio di distribuzione.")
-            return False
-        token_amount = params.get("_value", 0)
-        if token_amount < cost * 10**18:
-            logging.error(f"Importo insufficiente: {w3_no_mw.from_wei(token_amount, 'ether')} vs {cost}")
-            return False
-        return True
-    except Exception as e:
-        logging.error(f"Errore verifica TX: {e}")
-        return False
-
-# ------------------------------------------------
-# FUNZIONE get_prize() AGGIORNATA CON NUOVE % DEI PREMI
-# ------------------------------------------------
-def get_prize():
-    r = random.random() * 100
-    if r < 0.02:
-        return "NFT BASISC"
-    elif r < 0.06:
-        return "NFT STARTER"
-    else:
-        r2 = r - 0.06
-        if r2 < 40.575:
-            return "NO PRIZE"
-        elif r2 < 40.575 + 30.2875:
-            return "10 GKY"
-        elif r2 < 40.575 + 30.2875 + 25.2875:
-            return "20 GKY"
-        elif r2 < 96.15 + 2:
-            return "50 GKY"
-        elif r2 < 98.15 + 1:
-            return "100 GKY"
-        elif r2 < 99.15 + 0.5:
-            return "250 GKY"
-        elif r2 < 99.65 + 0.25:
-            return "500 GKY"
-        elif r2 < 99.90 + 0.1:
-            return "1000 GKY"
-        else:
-            return "NO PRIZE"
-
-# ------------------------------------------------
 # MODELLI DI INPUT CON Pydantic
 # ------------------------------------------------
 class AuthRequest(BaseModel):
@@ -253,32 +150,7 @@ class ConfirmBuyRequest(BaseModel):
     num_spins: int = Field(1, description="Solo 1 o 3 tiri extra", gt=0)
 
 # ------------------------------------------------
-# CONFIGURAZIONE DI FASTAPI E MOUNT DEL FRONTEND STATICO
-# ------------------------------------------------
-app = FastAPI(title="Gianky Coin Web App API")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get("/", response_class=HTMLResponse)
-async def home():
-    return """
-    <html>
-      <head>
-        <meta http-equiv="refresh" content="0; url=/static/index.html" />
-      </head>
-      <body>
-      </body>
-    </html>
-    """
-
-# ------------------------------------------------
-# EVENTO DI STARTUP: INIZIALIZZAZIONE DEL DATABASE
-# ------------------------------------------------
-@app.on_event("startup")
-async def on_startup():
-    init_db()
-
-# ------------------------------------------------
-# ENDPOINT DI AUTENTICAZIONE
+# ENDPOINT DI AUTENTICAZIONE E GIOCO
 # ------------------------------------------------
 @app.post("/api/auth/request_nonce")
 async def request_nonce(auth: AuthRequest):
@@ -306,8 +178,7 @@ async def auth_verify(auth: AuthVerifyRequest):
         user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
         if not user or not user.nonce:
             raise HTTPException(status_code=400, detail="Richiedi prima un nonce.")
-        # Imposta il messaggio da firmare con il prefisso "GiankyStop: "
-        message = encode_defunct(text="GiankyStop: " + user.nonce)
+        message = encode_defunct(text=user.nonce)
         try:
             recovered_address = w3.eth.account.recover_message(message, signature=auth.signature)
         except Exception as e:
@@ -328,9 +199,6 @@ async def auth_verify(auth: AuthVerifyRequest):
     finally:
         session.close()
 
-# ------------------------------------------------
-# ENDPOINT DI GIOCO (protetti da token JWT)
-# ------------------------------------------------
 @app.get("/api/ruota")
 async def api_ruota(current_user: User = Depends(get_current_user)):
     session = Session()
