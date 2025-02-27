@@ -1,9 +1,11 @@
+# database.py
+
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import logging
 
-DATABASE_URL = "sqlite:///./giankycoin.db"
+DATABASE_URL = "sqlite:///./gianky_bot.db"  # Oppure su Heroku potresti usare Postgres
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -37,8 +39,7 @@ class GlobalCounter(Base):
 
 def init_db():
     try:
-        # Crea le tabelle se non esistono già (IF NOT EXISTS)
-        Base.metadata.create_all(bind=engine, checkfirst=True)
+        Base.metadata.create_all(bind=engine)
     except Exception as e:
         logging.warning("init_db() warning: " + str(e))
 
