@@ -1,15 +1,54 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8">
-  <title>Gianky Coin Mini App</title>
+  <meta charset="utf-8" />
+  <title>GiankyCoin Web App</title>
 </head>
 <body>
-  <h1>Benvenuto in Gianky Coin Mini App</h1>
-  <p>Questa app ti permette di collegare il tuo wallet, visualizzare il saldo dei token e acquistare giri extra.</p>
-  <ul>
-    <li><a href="/connect">Collega il tuo wallet</a></li>
-    <li><a href="/balance?user_id=YOUR_USER_ID">Visualizza il saldo</a></li>
-  </ul>
+  <h1>GiankyCoin</h1>
+  <button id="btnConnectReown">Collega Wallet (Reown)</button>
+
+  <!-- Esempio: import Ethers5 e Reown da CDNs, se esistono -->
+  <script type="module">
+    // Ethers v5 + Reown: 
+    // la doc ufficiale Reown potrebbe richiedere un bundler, 
+    // qui ipotizziamo link a cdn
+    import { createAppKit } from "https://unpkg.com/@reown/appkit?module"; 
+    import { Ethers5Adapter } from "https://unpkg.com/@reown/appkit-adapter-ethers5?module";
+    import { polygon } from "https://unpkg.com/@reown/appkit/networks?module";
+
+    // ProjectId e metadata
+    const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
+    const metadata = {
+      name: "GiankyBot",
+      description: "AppKit Example",
+      url: "https://gianky-bot-test.herokuapp.com",
+      icons: ["https://assets.reown.com/reown-profile-pic.png"],
+    };
+
+    let reownModal;
+    function initReown() {
+      reownModal = createAppKit({
+        adapters: [new Ethers5Adapter()],
+        networks: [polygon],
+        metadata,
+        projectId,
+        features: {
+          analytics: true
+        }
+      });
+      console.log("Reown Modal inizializzato!");
+    }
+
+    function openReownModal() {
+      if (!reownModal) initReown();
+      reownModal.open();
+    }
+
+    // Assegna evento al bottone
+    document.getElementById("btnConnectReown").addEventListener("click", () => {
+      openReownModal();
+    });
+  </script>
 </body>
 </html>
