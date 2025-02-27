@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request, Form, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from web3 import Web3
-from database import Session, User, GlobalCounter  # Assicurati che queste classi siano definite
+from database import Session, User, GlobalCounter  # Assicurati che queste classi siano definite nel tuo progetto
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
@@ -132,8 +132,6 @@ async def balance(user_id: str):
         return HTMLResponse(content=html_content)
     finally:
         session.close()
-
-# Altri endpoint (ad es. per /buyspins, /confirmbuy) possono essere aggiunti in modo simile
 
 if __name__ == "__main__":
     import uvicorn

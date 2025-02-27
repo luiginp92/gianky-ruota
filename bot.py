@@ -2,11 +2,12 @@
 import logging
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from telegram.request import HTTPXRequest  # Corretto: importa da telegram.request
+from telegram.request import HTTPXRequest
 
-# Sostituisci con il token del tuo bot
-TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-# Inserisci l'URL della tua mini app deployata (Heroku)
+# Token del bot integrato (sostituisci con il tuo token reale)
+TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
+
+# URL della mini app deployata su Heroku (aggiorna se necessario)
 WEB_APP_URL = "https://gianky-bot-test.herokuapp.com"
 
 logging.basicConfig(
