@@ -3,23 +3,25 @@
 Gianky Coin Mini App - main.py
 --------------------------------
 Questa mini app (basata su FastAPI) permette di:
-  - Collegare il wallet
-  - Visualizzare il saldo dei token Gianky Coin (e POL, se implementato)
-  - Acquistare giri extra
+  - Visualizzare la home servendo il file statico "index.html"
+  - Gestire il collegamento del wallet tramite un form semplice
+  - Visualizzare il saldo del wallet
 """
 
 import os
 import logging
 import pytz
 from fastapi import FastAPI, Request, Form, status
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from web3 import Web3
 from database import Session, User, GlobalCounter  # Assicurati che queste classi siano definite
 
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
 logging.basicConfig(level=logging.INFO)
+
+# Monta la cartella "static" per servire i file statici (incluso index.html)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Configurazione Blockchain
 POLYGON_RPC = "https://polygon-rpc.com"
@@ -55,7 +57,6 @@ ERC20_ABI = [
         "type": "function",
     }
 ]
-
 contract = w3.eth.contract(address=CONTRATTO_GKY, abi=ERC20_ABI)
 
 def get_token_balance(wallet_address):
@@ -66,50 +67,32 @@ def get_token_balance(wallet_address):
         logging.error(f"Errore nel recupero del saldo: {e}")
         return None
 
-def invia_token(destinatario, quantita):
-    try:
-        gas_price = w3.eth.gas_price
-        tx = contract.functions.transfer(destinatario, int(quantita * 10**18)).buildTransaction({
-            'from': WALLET_DISTRIBUZIONE,
-            'nonce': w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE),
-            'gas': 100000,
-            'gasPrice': gas_price,
-        })
-        signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-        tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
-        logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
-        session = Session()
-        try:
-            counter = session.query(GlobalCounter).first()
-            if counter:
-                counter.total_out += quantita
-            else:
-                counter = GlobalCounter(total_in=0.0, total_out=quantita)
-                session.add(counter)
-            session.commit()
-        except Exception as e:
-            logging.error(f"Errore aggiornamento total_out: {e}")
-            session.rollback()
-        finally:
-            session.close()
-        return True
-    except Exception as e:
-        logging.error(f"Errore invio token: {e}")
-        return False
-
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def index():
+    # Serve il file "index.html" dalla cartella static
+    return FileResponse("static/index.html")
 
+# Endpoint per mostrare un semplice form di collegamento wallet
 @app.get("/connect", response_class=HTMLResponse)
-async def connect_get(request: Request):
-    return templates.TemplateResponse("connect.html", {"request": request})
+async def connect_get():
+    html_content = """
+    <html>
+      <body>
+        <h2>Collega il Wallet</h2>
+        <form action="/connect" method="post">
+          User ID: <input type="text" name="user_id" /><br/>
+          Wallet Address: <input type="text" name="wallet_address" /><br/>
+          <input type="submit" value="Invia" />
+        </form>
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
 @app.post("/connect")
-async def connect_post(request: Request, wallet_address: str = Form(...), user_id: str = Form(...)):
+async def connect_post(user_id: str = Form(...), wallet_address: str = Form(...)):
     if not wallet_address or not Web3.isAddress(wallet_address):
-        # In assenza di un sistema di flash, reindirizza alla pagina connect
-        return RedirectResponse(url="/connect", status_code=status.HTTP_302_FOUND)
+        return HTMLResponse(content="<h3>Indirizzo wallet non valido</h3>", status_code=400)
     session = Session()
     try:
         user = session.query(User).filter_by(telegram_id=user_id).first()
@@ -122,27 +105,36 @@ async def connect_post(request: Request, wallet_address: str = Form(...), user_i
     except Exception as e:
         logging.error(f"Errore connessione wallet: {e}")
         session.rollback()
+        return HTMLResponse(content="<h3>Errore durante la connessione del wallet</h3>", status_code=500)
     finally:
         session.close()
     return RedirectResponse(url=f"/balance?user_id={user_id}", status_code=status.HTTP_302_FOUND)
 
+# Endpoint per mostrare il saldo del wallet
 @app.get("/balance", response_class=HTMLResponse)
-async def balance(request: Request, user_id: str):
+async def balance(user_id: str):
     session = Session()
     try:
         user = session.query(User).filter_by(telegram_id=user_id).first()
         if not user or not user.wallet_address:
             return RedirectResponse(url="/connect", status_code=status.HTTP_302_FOUND)
         gky_balance = get_token_balance(user.wallet_address)
-        # Per semplicità, pol_balance è impostato a 0
-        return templates.TemplateResponse("balance.html", {
-            "request": request,
-            "wallet": user.wallet_address,
-            "gky_balance": gky_balance,
-            "pol_balance": 0,
-            "user_id": user_id
-        })
+        html_content = f"""
+        <html>
+          <body>
+            <h2>Saldo del Wallet</h2>
+            <p>Wallet: {user.wallet_address}</p>
+            <p>Saldo GKY: {gky_balance}</p>
+            <p>Saldo POL: 0 (non implementato)</p>
+          </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
     finally:
         session.close()
 
-# Aggiungi ulteriori endpoint per /buyspins e /confirmbuy se necessario...
+# Altri endpoint (ad es. per /buyspins, /confirmbuy) possono essere aggiunti in modo simile
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
