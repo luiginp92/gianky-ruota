@@ -2,11 +2,11 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Questa applicazione espone tramite API REST la logica del gioco con:
+Questa applicazione espone tramite API REST la logica del gioco e integra un bot Telegram:
  • Autenticazione basata sulla firma del wallet (JWT)
- • Validazioni robuste con Pydantic
  • Endpoints per gioco, acquisti, referral, ecc.
- • Un frontend minimale per interagire con il sistema
+ • Un frontend per interagire con il sistema
+ • Un bot Telegram che risponde al comando /start inviando un pulsante per aprire la Web App
 """
 
 import logging
@@ -14,6 +14,7 @@ import random
 import datetime
 import os
 import pytz
+import threading
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends, status
@@ -23,17 +24,19 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from web3 import Web3
-# Correggi l'importazione del middleware (web3.py v6)
-from web3.middleware.geth_poa_middleware import geth_poa_middleware
-
 from eth_account.messages import encode_defunct
 
-# Per JWT
+# JWT
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
 
 # Importa il modulo del database
 from database import Session, User, PremioVinto, GlobalCounter, init_db
+
+# Telegram bot integration
+from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.request import HTTPXRequest
 
 # ------------------------------------------------
 # CONFIGURAZIONI DI BASE E LOGGING
@@ -42,15 +45,17 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# Inizializza il database
-init_db()
-
 # ------------------------------------------------
 # CONFIGURAZIONI BLOCKCHAIN E COSTANTI
 # ------------------------------------------------
 POLYGON_RPC = "https://polygon-rpc.com"
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
+
+# Usa Web3 v6 (assicurati che la versione in requirements.txt sia compatibile)
+from web3.middleware.geth_poa_middleware import geth_poa_middleware
+
+# Inserisci direttamente la chiave privata
 PRIVATE_KEY = os.getenv("PRIVATE_KEY_GKY")
 if not PRIVATE_KEY:
     raise ValueError("❌ Errore: la chiave privata non è impostata.")
@@ -63,18 +68,17 @@ else:
     STATIC_IMAGE_BYTES = None
     logging.error("File statico non trovato: ruota.png")
 
-# Configura Web3 e aggiungi il middleware per le reti POA (Polygon)
+# Applica il middleware per la rete POA (necessario per Polygon)
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
-# Variabile globale per TX duplicate
-USED_TX = set()
+USED_TX = set()  # Variabile globale per transazioni duplicate
 
 # ------------------------------------------------
 # CONFIGURAZIONI JWT & AUTENTICAZIONE
 # ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # In produzione usa una chiave sicura
+SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con una chiave sicura in produzione
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -262,9 +266,6 @@ async def home():
     </html>
     """
 
-# ------------------------------------------------
-# EVENTO DI STARTUP: INIZIALIZZAZIONE DEL DATABASE
-# ------------------------------------------------
 @app.on_event("startup")
 def on_startup():
     init_db()
@@ -516,7 +517,33 @@ async def api_giankyadmin(current_user: User = Depends(get_current_user)):
         session.close()
 
 # ------------------------------------------------
-# Avvio dell'applicazione con uvicorn
+# BOT TELEGRAM: Integrazione e avvio in thread separato
 # ------------------------------------------------
-if __name__ == '__main__':
+# Il bot usa il token fornito direttamente qui:
+TELEGRAM_BOT_TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Apri Mini App", web_app=WebAppInfo(url="https://gianky-bot-test.herokuapp.com"))]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Clicca qui per aprire la mini app:", reply_markup=reply_markup)
+
+def run_fastapi():
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+
+def run_telegram_bot():
+    request = HTTPXRequest(connect_timeout=30, read_timeout=30)
+    # Usa il token direttamente
+    bot_app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).request(request).build()
+    bot_app.add_handler(CommandHandler("start", start))
+    logging.info("Bot in esecuzione...")
+    bot_app.run_polling()
+
+if __name__ == '__main__':
+    fastapi_thread = threading.Thread(target=run_fastapi)
+    telegram_thread = threading.Thread(target=run_telegram_bot)
+    fastapi_thread.start()
+    telegram_thread.start()
+    fastapi_thread.join()
+    telegram_thread.join()

@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@reown/appkit": "^1.6.9",
+    "@reown/appkit-adapter-ethers5": "^1.6.9",
+    "ethers": "^5.7.2"
+  }
+}
