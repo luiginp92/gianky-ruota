@@ -5,6 +5,7 @@ SQLAlchemy==2.0.38
 pytz==2025.1
 web3==7.8.0
 pydantic==2.10.6
+python-telegram-bot[job-queue]==21.10
 # Altre dipendenze eventualmente già presenti:
 aiohappyeyeballs==2.4.6
 aiohttp==3.11.12
@@ -47,4 +48,3 @@ typing_extensions==4.12.2
 urllib3==2.3.0
 websockets==13.1
 yarl==1.18.3
-python-telegram-bot[job-queue]==21.10

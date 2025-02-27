@@ -1,34 +1,31 @@
-// static/main.js
-import { createAppKit } from '@reown/appkit'
-import { Ethers5Adapter } from '@reown/appkit-adapter-ethers5'
-import { polygon } from '@reown/appkit/networks'  // Assumendo che Reown supporti Polygon, altrimenti definisci manualmente
+// main.ts
+import { createAppKit } from '@reown/appkit';
+import { Ethers5Adapter } from '@reown/appkit-adapter-ethers5';
+// Se Reown AppKit supporta già Polygon, prova a importarlo direttamente; 
+// altrimenti, potresti dover usare il network mainnet o definire un network personalizzato.
+import { polygon } from '@reown/appkit/networks';  
 
-// 1. Usa il projectId ottenuto da https://cloud.reown.com
-const projectId = 'c17f0d55c1fb5debe77f860c40b7afdb'  // il tuo projectId
+// 1. Ottieni il Project ID da WalletConnect Cloud
+const projectId = 'c17f0d55c1fb5debe77f860c40b7afdb';
 
-// 2. Crea l'oggetto metadata per la tua applicazione
+// 2. Configura i metadata della tua app; assicurati che l'URL corrisponda esattamente al dominio del deploy.
 const metadata = {
-  name: 'GiankyBot',
+  name: 'GiankyCoin',
   description: 'Collega il tuo wallet per usare GiankyCoin sulla rete Polygon',
-  url: 'https://gianky-bot-test-f275065c7d33.herokuapp.com', // Deve corrispondere al dominio
+  url: 'https://gianky-bot-test-f275065c7d33.herokuapp.com', // Deve corrispondere al dominio esatto
   icons: ['https://assets.reown.com/reown-profile-pic.png']
-}
+};
 
-// 3. Crea un'istanza di AppKit utilizzando l'adapter per ethers v5
+// 3. Crea l'istanza di AppKit
 const modal = createAppKit({
-  adapters: [new Ethers5Adapter({ projectId, networks: [polygon] })],
-  metadata,
+  adapters: [new Ethers5Adapter()],
+  metadata: metadata,
   networks: [polygon],
-  projectId,
+  projectId: projectId,
   features: {
-    analytics: true
+    analytics: true // Opzionale, si sincronizza con le impostazioni nel Cloud
   }
-})
+});
 
-// 4. Esporta il modal o collega gli eventi dei pulsanti
-// Ad esempio, se nella tua pagina hai un pulsante con id "connectWalletBtn":
-document.getElementById('connectWalletBtn')?.addEventListener('click', () => {
-  modal.open()  // Apre il modal per il collegamento del wallet
-})
-
-// Puoi anche gestire altri eventi (per cambio rete, ecc.) se necessario.
+// Esporta il modal per poterlo usare in altri moduli o per l'apertura del modal da un pulsante
+export default modal;

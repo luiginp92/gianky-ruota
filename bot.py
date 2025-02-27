@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackContext
+from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, HTTPXRequest
 
-# Token hardcoded come richiesto
-TELEGRAM_BOT_TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
+# Sostituisci con il token del tuo bot
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+# Inserisci l'URL della tua mini app deployata (ad es. su Heroku)
+WEB_APP_URL = "https://tuo-app.herokuapp.com"
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-async def start_telegram(update: Update, context: CallbackContext):
-    message = update.effective_message
-    if message:
-        # Crea un pulsante che porta all'interfaccia web
-        keyboard = [[InlineKeyboardButton("Gioca Ora", url="https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await message.reply_text(
-            "Benvenuto in GiankyCoin - La Ruota della Fortuna ti aspetta!\n\n"
-            "Premi il pulsante qui sotto per girare la ruota e vincere premi fantastici!",
-            reply_markup=reply_markup
-        )
-    else:
-        logging.error("Nessun messaggio efficace trovato in update")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Apri Mini App", web_app=WebAppInfo(url=WEB_APP_URL))]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Clicca qui per aprire la mini app:", reply_markup=reply_markup)
 
 def main():
-    application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start_telegram))
-    application.run_polling()
+    request = HTTPXRequest(connect_timeout=30, read_timeout=30)
+    app = ApplicationBuilder().token(TOKEN).request(request).build()
+    
+    # Aggiungi il comando /start
+    app.add_handler(CommandHandler("start", start))
+    
+    logging.info("Bot in esecuzione...")
+    app.run_polling()
 
 if __name__ == '__main__':
     main()

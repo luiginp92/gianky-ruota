@@ -1,0 +1,17 @@
+import { type UseAppKitNetworkReturn } from '@reown/appkit-core';
+import { AppKit } from '../src/client.js';
+import type { AppKitOptions } from '../src/utils/TypesUtil.js';
+export * from '@reown/appkit-scaffold-ui';
+export * from '../src/library/react/index.js';
+export * from '../src/utils/index.js';
+export type * from '@reown/appkit-core';
+export type { CaipNetwork, CaipAddress, CaipNetworkId } from '@reown/appkit-common';
+export { CoreHelperUtil, AccountController } from '@reown/appkit-core';
+export declare let modal: AppKit | undefined;
+export type CreateAppKit = Omit<AppKitOptions, 'sdkType' | 'sdkVersion'>;
+export declare function createAppKit(options: CreateAppKit): AppKit;
+export { AppKit };
+export type { AppKitOptions };
+export * from '../src/library/react/index.js';
+export declare function useAppKitNetwork(): UseAppKitNetworkReturn;
+export { useAppKitAccount } from '@reown/appkit-core/react';
