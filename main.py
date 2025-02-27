@@ -3,24 +3,23 @@
 Gianky Coin Mini App - main.py
 --------------------------------
 Questa mini app (basata su FastAPI) permette di:
-  - Visualizzare la home (ora con contenuto inline per test)
+  - Visualizzare la home (pagina di test inline)
   - Gestire il collegamento del wallet tramite un form semplice
   - Visualizzare il saldo del wallet
 """
 
 import os
 import logging
-import pytz
-from fastapi import FastAPI, Request, Form, status
+from fastapi import FastAPI, Form, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from web3 import Web3
-from database import Session, User, GlobalCounter  # Assicurati che queste classi siano definite nel tuo progetto
+from database import Session, User, GlobalCounter  # Assicurati che queste classi siano definite
 
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
-# Monta la cartella "static" per eventuali file statici (non usata in questa versione per l'index)
+# Monta la cartella "static" per eventuali file statici (non usata per l'index in questa versione)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Configurazione Blockchain
@@ -69,6 +68,7 @@ def get_token_balance(wallet_address):
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
+    logging.info("Accesso alla home page '/'")
     html = """
     <!DOCTYPE html>
     <html lang="it">
@@ -88,7 +88,8 @@ async def index():
 @app.get("/connect", response_class=HTMLResponse)
 async def connect_get():
     html_content = """
-    <html>
+    <!DOCTYPE html>
+    <html lang="it">
       <body>
         <h2>Collega il Wallet</h2>
         <form action="/connect" method="post">
