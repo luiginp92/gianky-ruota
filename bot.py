@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import logging
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, HTTPXRequest
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.request import HTTPXRequest  # Corretto: importa da telegram.request
 
 # Sostituisci con il token del tuo bot
 TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 # Inserisci l'URL della tua mini app deployata (ad es. su Heroku)
-WEB_APP_URL = "https://tuo-app.herokuapp.com"
+WEB_APP_URL = "https://gianky-bot-test.herokuapp.com"
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -22,10 +23,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
     app = ApplicationBuilder().token(TOKEN).request(request).build()
-    
-    # Aggiungi il comando /start
     app.add_handler(CommandHandler("start", start))
-    
     logging.info("Bot in esecuzione...")
     app.run_polling()
 
