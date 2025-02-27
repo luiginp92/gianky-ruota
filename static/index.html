@@ -1,192 +1,154 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GiankyCoin Web App</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css?v=1.0.0">
   <style>
     body { background-color: #f8f9fa; padding-top: 20px; }
-    .header { background-color: #343a40; color: white; text-align: center; padding: 1rem; }
-    .content { padding: 1rem; }
+    .header { background-color: #343a40; color: white; padding: 1rem; text-align: center; }
+    .content { padding: 2rem; }
+    .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: #343a40; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
+    .balance-info { text-align: right; font-size: 0.9rem; }
   </style>
 </head>
 <body>
-  <div class="header">
+  <header class="header">
     <h1>GiankyCoin Web App</h1>
-  </div>
-
+    <div class="balance-info">
+      <div>MATIC: <span id="maticBalance">0</span></div>
+      <div>GiankyCoin: <span id="tokenBalance">0</span></div>
+    </div>
+  </header>
   <div class="container content">
-    <div class="text-center mb-3">
-      <img src="/wheel" alt="Ruota" style="max-width:300px;" />
+    <div class="row mb-4">
+      <div class="col text-center">
+        <img src="/wheel" alt="Ruota" class="img-fluid" style="max-width:300px;">
+      </div>
     </div>
-
-    <div class="text-center">
-      <button id="btnConnect" class="btn btn-success mb-2">Connetti Wallet</button><br/>
-      <button id="btnSpin" class="btn btn-primary mb-2">Gira la ruota</button>
-      <br/>
-      <div id="result" class="alert alert-info mt-3" style="display:none;"></div>
+    <div class="row text-center">
+      <div class="col">
+        <button id="btnSpin" class="btn btn-primary btn-custom">Gira la ruota</button>
+      </div>
     </div>
-
-    <!-- Sezione per mostrare i saldi (post-connessione) -->
-    <div id="balanceSection" class="text-center mt-4" style="display:none;">
-      <h5>Saldo MATIC: <span id="maticBalance">0</span></h5>
-      <h5>Saldo GKY: <span id="gkyBalance">0</span></h5>
+    <div class="row text-center mt-3">
+      <div class="col">
+        <button id="btnConnect" class="btn btn-success btn-custom">Connetti Wallet</button>
+      </div>
+      <div class="col">
+        <button id="btnBuySpins" class="btn btn-warning btn-custom">Acquista Extra Tiri</button>
+      </div>
+    </div>
+    <div class="row text-center mt-3">
+      <div class="col">
+        <button id="btnReferral" class="btn btn-info btn-custom">Ottieni Referral</button>
+      </div>
+      <div class="col">
+        <button id="btnTask" class="btn btn-secondary btn-custom">Completa Task</button>
+      </div>
+    </div>
+    <div class="row mt-4">
+      <div class="col">
+        <div id="result" class="alert alert-info" style="display:none;"></div>
+      </div>
     </div>
   </div>
-
-  <div class="footer">
-    <p>&copy; 2025 GiankyCoin</p>
-  </div>
-
+  <footer class="footer">
+    <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
+  </footer>
+  
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-  <!-- Ethers v5 (CDN) -->
+  <!-- Ethers v5 -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <!-- Esempio di Web3Modal v2. 
-       ATTENZIONE: alcune CDN non funzionano da mobile (404).  
-       Verifica se i link puntano a un CDN valido per wagmi e web3modal v2. -->
+  
+  <!-- Reown AppKit Integration -->
   <script type="module">
-    import { Web3Modal } from "https://cdn.skypack.dev/@web3modal/html@2.1.6"; 
-    import { EthereumClient, modalConnectors } from "https://cdn.skypack.dev/@web3modal/ethereum@2.1.6";
-    import { configureChains, createClient } from "https://cdn.skypack.dev/wagmi@0.10.16";
-    import { polygon } from "https://cdn.skypack.dev/wagmi@0.10.16/dist/chains.js";
-
-    const projectId = "c17f0d55c1fb5debe77f860c40b7afdb"; // Esempio
-
-    // Configura la catena polygon
-    const chains = [polygon];
-    const { provider } = configureChains(chains, []);
-    const wagmiClient = createClient({
-      autoConnect: false,
-      connectors: modalConnectors({ projectId, chains, version: "2" }),
-      provider
+    import { createAppKit } from "https://cdn.skypack.dev/@reown/appkit?min";
+    import { Ethers5Adapter } from "https://cdn.skypack.dev/@reown/appkit-adapter-ethers5?min";
+    import { mainnet, arbitrum } from "https://cdn.skypack.dev/@reown/appkit/networks?min";
+    
+    const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
+    const metadata = {
+      name: "GiankyBot",
+      description: "GiankyCoin Wallet Connect Integration",
+      url: "https://gianky-bot-test-f275065c7d33.herokuapp.com",
+      icons: ["https://assets.reown.com/reown-profile-pic.png"]
+    };
+    
+    const modal = createAppKit({
+      adapters: [new Ethers5Adapter()],
+      networks: [mainnet, arbitrum],
+      metadata,
+      projectId,
+      features: { analytics: true }
     });
-
-    const ethereumClient = new EthereumClient(wagmiClient, chains);
-
-    // Crea la modale di Web3Modal v2
-    const web3Modal = new Web3Modal({
-      projectId: projectId,
-      themeMode: "light",
-      accentColor: "default",
-      ethereumClient
-    });
-
-    async function connectWallet() {
+    
+    async function openWalletConnect() {
       try {
-        const instance = await web3Modal.connect();
-        console.log("Connessione wallet (WC v2) ottenuta:", instance);
-
-        // Ethers provider + signer
-        const ethersProvider = new ethers.providers.Web3Provider(instance);
-        const signer = ethersProvider.getSigner();
-        const walletAddress = await signer.getAddress();
-        console.log("Wallet address:", walletAddress);
-
-        // Salvataggio (potresti usare localStorage)
-        localStorage.setItem("walletAddress", walletAddress);
-
-        // Richiesta del nonce al backend
-        const nonceRes = await fetch("/api/auth/request_nonce", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: walletAddress })
-        });
-        const nonceData = await nonceRes.json();
-        if (!nonceRes.ok) {
-          throw new Error(nonceData.detail || "Errore request_nonce");
-        }
-        const nonce = nonceData.nonce;
-        console.log("Nonce:", nonce);
-
-        // Firma del nonce
-        const messageToSign = "GiankyStop: " + nonce;
-        const signature = await signer.signMessage(messageToSign);
-        console.log("Firma ottenuta:", signature);
-
-        // Verifica firma => token
-        const verifyRes = await fetch("/api/auth/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wallet_address: walletAddress,
-            signature
-          })
-        });
-        const verifyData = await verifyRes.json();
-        if (!verifyRes.ok) {
-          throw new Error(verifyData.detail || "Errore /auth/verify");
-        }
-        const token = verifyData.access_token;
-        console.log("JWT token:", token);
-        localStorage.setItem("jwtToken", token);
-
-        document.getElementById("result").style.display = "block";
-        document.getElementById("result").innerText = "Wallet collegato!";
-
-        // Mostra i saldi MATIC e GKY (dal provider)
-        document.getElementById("balanceSection").style.display = "block";
-
-        // Leggi saldo MATIC
-        const balanceWei = await ethersProvider.getBalance(walletAddress);
+        modal.open();
+      } catch (error) {
+        console.error("Errore nell'apertura di AppKit:", error);
+      }
+    }
+    
+    document.getElementById("btnConnect").addEventListener("click", openWalletConnect);
+  </script>
+  
+  <!-- Script per aggiornare i saldi -->
+  <script>
+    async function updateBalances() {
+      const wallet = localStorage.getItem("walletAddress");
+      if (!wallet) return;
+      const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
+      try {
+        const balanceWei = await provider.getBalance(wallet);
         const balanceMatic = ethers.utils.formatEther(balanceWei);
         document.getElementById("maticBalance").innerText = parseFloat(balanceMatic).toFixed(4);
-
-        // Per GKY => contract con address e ABI minimal
-        const GKY_ADDR = "0x370806781689E670f85311700445449aC7C3Ff7a";
-        const abiErc20 = [
-          {"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}
-        ];
-        const tokenContract = new ethers.Contract(GKY_ADDR, abiErc20, ethersProvider);
-        let gkyBalRaw = await tokenContract.balanceOf(walletAddress);
-        let gkyBal = ethers.utils.formatEther(gkyBalRaw);
-        document.getElementById("gkyBalance").innerText = parseFloat(gkyBal).toFixed(4);
-
       } catch (error) {
-        console.error("Errore connectWallet:", error);
-        document.getElementById("result").style.display = "block";
-        document.getElementById("result").innerText = "Errore connect: " + error.message;
+        console.error("Errore nel recuperare il saldo MATIC:", error);
       }
-    }
-
-    async function spinWheel() {
       try {
-        const token = localStorage.getItem("jwtToken");
-        if (!token) {
-          throw new Error("Collega prima il wallet.");
-        }
-        const spinRes = await fetch("/api/spin", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token
-          }
-        });
-        const spinData = await spinRes.json();
-        if (!spinRes.ok) {
-          throw new Error(spinData.detail || "Errore spin");
-        }
-        document.getElementById("result").style.display = "block";
-        document.getElementById("result").innerText = spinData.message;
-
-        // Aggiorna i saldi in caso di vittoria GKY
-        const walletAddress = localStorage.getItem("walletAddress");
-        if (walletAddress) {
-          // Rileggi il saldo...
-          // Oppure semplicemente richiami connectWallet() => ma meglio no. 
-          // Qui un mini-rileggere MATIC/GKY come sopra (omesso per brevità).
-        }
-      } catch (err) {
-        console.error(err);
-        document.getElementById("result").style.display = "block";
-        document.getElementById("result").innerText = "Errore spin: " + err.message;
+        const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
+        const abi = ["function balanceOf(address owner) view returns (uint256)"];
+        const tokenContract = new ethers.Contract(tokenAddress, abi, provider);
+        const tokenBalanceWei = await tokenContract.balanceOf(wallet);
+        const tokenBalance = ethers.utils.formatEther(tokenBalanceWei);
+        document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
+      } catch (error) {
+        console.error("Errore nel recuperare il saldo GiankyCoin:", error);
       }
     }
-
-    document.getElementById("btnConnect").addEventListener("click", connectWallet);
-    document.getElementById("btnSpin").addEventListener("click", spinWheel);
+    window.addEventListener("load", updateBalances);
+  </script>
+  
+  <!-- Eventi per altri pulsanti -->
+  <script>
+    document.getElementById("btnSpin").addEventListener("click", async function() {
+      try {
+        const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
+        const data = await res.json();
+        document.getElementById("result").style.display = "block";
+        document.getElementById("result").innerText = data.message;
+        updateBalances();
+      } catch (error) {
+        console.error(error);
+      }
+    });
+    
+    document.getElementById("btnBuySpins").addEventListener("click", function() {
+      window.location.href = "/static/buyspins.html";
+    });
+    
+    document.getElementById("btnReferral").addEventListener("click", function() {
+      window.location.href = "/static/referral.html";
+    });
+    
+    document.getElementById("btnTask").addEventListener("click", function() {
+      window.location.href = "/static/task.html";
+    });
   </script>
 </body>
 </html>
