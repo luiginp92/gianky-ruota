@@ -8,8 +8,8 @@ from telegram.request import HTTPXRequest
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
 
 # URL che punta direttamente a index.html (senza cartella /static)
-# Esempio: https://gianky-bot-test.herokuapp.com/index.html
-WEB_APP_URL = "https://gianky-bot-test.herokuapp.com/index.html"
+# Esempio: https://gianky-bot-test-f275065c7d33.herokuapp.com/
+WEB_APP_URL = "https://gianky-bot-test-f275065c7d33.herokuapp.com/"
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
