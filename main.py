@@ -26,7 +26,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Configurazione Blockchain
 POLYGON_RPC = "https://polygon-rpc.com"
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
-if not w3.isConnected():
+if not w3.is_connected():
     logging.error("❌ Errore: Blockchain non connessa!")
 
 # Parametri del contratto
