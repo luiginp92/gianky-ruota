@@ -3,7 +3,7 @@
 Gianky Coin Mini App - main.py
 --------------------------------
 Questa mini app (basata su FastAPI) permette di:
-  - Visualizzare la home servendo il file statico "index.html"
+  - Visualizzare la home (ora con contenuto inline per test)
   - Gestire il collegamento del wallet tramite un form semplice
   - Visualizzare il saldo del wallet
 """
@@ -12,7 +12,7 @@ import os
 import logging
 import pytz
 from fastapi import FastAPI, Request, Form, status
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from web3 import Web3
 from database import Session, User, GlobalCounter  # Assicurati che queste classi siano definite nel tuo progetto
@@ -20,7 +20,7 @@ from database import Session, User, GlobalCounter  # Assicurati che queste class
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
-# Monta la cartella "static" per servire i file statici
+# Monta la cartella "static" per eventuali file statici (non usata in questa versione per l'index)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Configurazione Blockchain
@@ -69,13 +69,21 @@ def get_token_balance(wallet_address):
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    index_path = os.path.join(base_dir, "static", "index.html")
-    logging.info(f"Servendo index da: {index_path}")
-    if not os.path.exists(index_path):
-        logging.error(f"index.html non trovato in {index_path}")
-        return HTMLResponse(content="<h1>File index.html non trovato!</h1>", status_code=404)
-    return FileResponse(index_path, media_type="text/html")
+    html = """
+    <!DOCTYPE html>
+    <html lang="it">
+    <head>
+      <meta charset="UTF-8">
+      <title>Gianky Coin Mini App</title>
+    </head>
+    <body>
+      <h1>Benvenuto in Gianky Coin Mini App</h1>
+      <p>Questa è una pagina di test inline.</p>
+      <p><a href="/connect">Collega il tuo wallet</a></p>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
 @app.get("/connect", response_class=HTMLResponse)
 async def connect_get():
@@ -123,13 +131,18 @@ async def balance(user_id: str):
             return RedirectResponse(url="/connect", status_code=status.HTTP_302_FOUND)
         gky_balance = get_token_balance(user.wallet_address)
         html_content = f"""
-        <html>
-          <body>
-            <h2>Saldo del Wallet</h2>
-            <p>Wallet: {user.wallet_address}</p>
-            <p>Saldo GKY: {gky_balance}</p>
-            <p>Saldo POL: 0 (non implementato)</p>
-          </body>
+        <!DOCTYPE html>
+        <html lang="it">
+        <head>
+          <meta charset="UTF-8">
+          <title>Saldo del Wallet</title>
+        </head>
+        <body>
+          <h2>Saldo del Wallet</h2>
+          <p>Wallet: {user.wallet_address}</p>
+          <p>Saldo GKY: {gky_balance}</p>
+          <p>Saldo POL: 0 (non implementato)</p>
+        </body>
         </html>
         """
         return HTMLResponse(content=html_content)
