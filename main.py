@@ -23,22 +23,25 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from web3 import Web3
-from web3.middleware.geth_poa import geth_poa_middleware  # Corretto
-
 from eth_account.messages import encode_defunct
 
 # Per JWT
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
 
-# Importa il modulo del database (assicurati che questo file sia presente)
+# Importa il modulo del database
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
+# ------------------------------------------------
+# CONFIGURAZIONI DI BASE E LOGGING
+# ------------------------------------------------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
+# ------------------------------------------------
 # CONFIGURAZIONI BLOCKCHAIN E COSTANTI
+# ------------------------------------------------
 POLYGON_RPC = "https://polygon-rpc.com"
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
@@ -54,14 +57,29 @@ else:
     STATIC_IMAGE_BYTES = None
     logging.error("File statico non trovato: ruota.png")
 
+# Middleware custom per POA
+def custom_geth_poa_middleware(make_request, web3=None):
+    def middleware(method, params):
+        response = make_request(method, params)
+        result = response.get("result")
+        if isinstance(result, dict) and "extraData" in result:
+            extra = result["extraData"]
+            if isinstance(extra, str) and len(extra) > 66:
+                response["result"]["extraData"] = "0x" + extra[-64:]
+        return response
+    return middleware
+
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
-w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
+# Variabile globale per tx duplicate
 USED_TX = set()
 
+# ------------------------------------------------
 # CONFIGURAZIONI JWT & AUTENTICAZIONE
-SECRET_KEY = "a_very_secret_key_change_me"  # In produzione usa una chiave più sicura
+# ------------------------------------------------
+SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con una chiave sicura in produzione
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -99,6 +117,9 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
          raise credentials_exception
     return user
 
+# ------------------------------------------------
+# FUNZIONI UTILI PER BLOCKCHAIN E GIOCO
+# ------------------------------------------------
 def get_dynamic_gas_price():
     try:
         base = w3.eth.gas_price
@@ -132,6 +153,7 @@ def invia_token(destinatario, quantita):
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
+    
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
@@ -210,6 +232,9 @@ def get_prize():
         else:
             return "NO PRIZE"
 
+# ------------------------------------------------
+# MODELLI DI INPUT CON Pydantic
+# ------------------------------------------------
 class AuthRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     telegram_id: Optional[str] = None
@@ -225,6 +250,9 @@ class ConfirmBuyRequest(BaseModel):
     tx_hash: str
     num_spins: int = Field(1, description="Solo 1 o 3 tiri extra", gt=0)
 
+# ------------------------------------------------
+# CONFIGURAZIONE DI FASTAPI E MOUNT DEL FRONTEND STATICO
+# ------------------------------------------------
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -235,7 +263,8 @@ async def home():
       <head>
         <meta http-equiv="refresh" content="0; url=/static/index.html" />
       </head>
-      <body></body>
+      <body>
+      </body>
     </html>
     """
 
