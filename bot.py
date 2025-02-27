@@ -4,7 +4,7 @@ from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMar
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.request import HTTPXRequest
 
-# Token del bot integrato (token reale)
+# Token del bot (inserito direttamente)
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
 
 # URL della mini app deployata su Heroku
