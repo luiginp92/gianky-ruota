@@ -20,7 +20,7 @@ from database import Session, User, GlobalCounter  # Assicurati che queste class
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
-# Monta la cartella "static" per servire i file statici (incluso index.html)
+# Monta la cartella "static" per servire i file statici
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Configurazione Blockchain
@@ -69,10 +69,14 @@ def get_token_balance(wallet_address):
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    # Serve il file "index.html" dalla cartella static
-    return FileResponse("static/index.html")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    index_path = os.path.join(base_dir, "static", "index.html")
+    logging.info(f"Servendo index da: {index_path}")
+    if not os.path.exists(index_path):
+        logging.error(f"index.html non trovato in {index_path}")
+        return HTMLResponse(content="<h1>File index.html non trovato!</h1>", status_code=404)
+    return FileResponse(index_path, media_type="text/html")
 
-# Endpoint per mostrare un semplice form di collegamento wallet
 @app.get("/connect", response_class=HTMLResponse)
 async def connect_get():
     html_content = """
@@ -110,7 +114,6 @@ async def connect_post(user_id: str = Form(...), wallet_address: str = Form(...)
         session.close()
     return RedirectResponse(url=f"/balance?user_id={user_id}", status_code=status.HTTP_302_FOUND)
 
-# Endpoint per mostrare il saldo del wallet
 @app.get("/balance", response_class=HTMLResponse)
 async def balance(user_id: str):
     session = Session()
