@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from web3 import Web3
-# Per web3.py versione 6.x, importa il middleware da questo modulo:
+# Correggi l'importazione del middleware (web3.py v6)
 from web3.middleware.geth_poa_middleware import geth_poa_middleware
 
 from eth_account.messages import encode_defunct
@@ -42,7 +42,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# Inizializza il database (se non esiste)
+# Inizializza il database
 init_db()
 
 # ------------------------------------------------
@@ -63,7 +63,7 @@ else:
     STATIC_IMAGE_BYTES = None
     logging.error("File statico non trovato: ruota.png")
 
-# Configura Web3 e inserisci il middleware POA
+# Configura Web3 e aggiungi il middleware per le reti POA (Polygon)
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
@@ -74,7 +74,7 @@ USED_TX = set()
 # ------------------------------------------------
 # CONFIGURAZIONI JWT & AUTENTICAZIONE
 # ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # In produzione utilizza una chiave sicura
+SECRET_KEY = "a_very_secret_key_change_me"  # In produzione usa una chiave sicura
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -258,8 +258,7 @@ async def home():
       <head>
         <meta http-equiv="refresh" content="0; url=/static/index.html" />
       </head>
-      <body>
-      </body>
+      <body></body>
     </html>
     """
 
