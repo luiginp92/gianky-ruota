@@ -30,35 +30,30 @@
   <!-- Ethers.js UMD -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   
-  <!-- Web3Modal Standalone UMD (v2.0.13) -->
-  <script src="https://unpkg.com/@web3modal/standalone@2.0.13/dist/index.umd.js"></script>
+  <!-- Web3Modal Standalone UMD (versione stabile) -->
+  <script src="https://unpkg.com/web3modal@1.9.3/dist/index.js"></script>
   
   <script>
-    document.addEventListener("DOMContentLoaded", function(){
-      // Crea l'istanza di Web3Modal usando l'oggetto esposto globalmente
-      const web3Modal = new window.Web3Modal({
-        projectId: "c17f0d55c1fb5debe77f860c40b7afdb",
-        theme: "light",
-        cacheProvider: false
+    document.addEventListener("DOMContentLoaded", function() {
+      const Web3Modal = window.Web3Modal.default;
+      const web3Modal = new Web3Modal({
+        cacheProvider: false,
+        providerOptions: {}
       });
       
-      document.getElementById("connectWallet").addEventListener("click", async function(){
+      document.getElementById("connectWallet").addEventListener("click", async function() {
         try {
-          // Apre la modal di scelta del wallet
           const instance = await web3Modal.connect();
-          // Crea un provider ethers a partire dall'istanza ottenuta
           const ethersProvider = new ethers.providers.Web3Provider(instance);
           const signer = ethersProvider.getSigner();
           const address = await signer.getAddress();
           document.getElementById("walletAddress").innerText = address;
           document.getElementById("walletInfo").style.display = "block";
           
-          // Recupera il saldo MATIC
           const balanceWei = await ethersProvider.getBalance(address);
           const balanceMatic = ethers.utils.formatEther(balanceWei);
           document.getElementById("maticBalance").innerText = parseFloat(balanceMatic).toFixed(4);
           
-          // Recupera il saldo di GiankyCoin (token su Polygon)
           const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
           const tokenAbi = ["function balanceOf(address owner) view returns (uint256)"];
           const tokenContract = new ethers.Contract(tokenAddress, tokenAbi, ethersProvider);
