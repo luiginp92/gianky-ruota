@@ -12,27 +12,40 @@
     <button id="connectWallet" class="btn btn-primary">Connetti Wallet</button>
   </div>
 
-  <!-- Ethers.js come modulo ES -->
-  <script type="module" src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script>
+  <!-- Import Ethers.js -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script>
 
-  <!-- Web3Modal -->
+  <!-- Import Web3Modal -->
   <script src="https://unpkg.com/web3modal"></script>
 
   <script>
   document.addEventListener("DOMContentLoaded", function() {
-    const Web3Modal = window.Web3Modal; // Assumendo che Web3Modal sia esposto globalmente
+    // Assicurarsi che Web3Modal sia disponibile globalmente
+    if (typeof Web3Modal === "undefined") {
+      console.error("Web3Modal non è definito. Verifica il caricamento della libreria.");
+      return;
+    }
+
+    // Istanziare Web3Modal
     const web3Modal = new Web3Modal({
-      cacheProvider: false, // Opzionale
-      providerOptions: {} // Necessario se hai provider specifici come WalletConnect
+      cacheProvider: false,  // Opzionale: abilita o disabilita la cache del provider
+      providerOptions: {}    // Necessario se si desidera supportare provider specifici come WalletConnect
     });
 
     document.getElementById("connectWallet").addEventListener("click", async function() {
       try {
+        // Connettersi al provider selezionato
         const connection = await web3Modal.connect();
         const provider = new ethers.providers.Web3Provider(connection);
-        console.log("Wallet connesso!");
+        console.log("Wallet connesso con successo!");
+
+        // Esempio: recupera l'indirizzo del wallet connesso
+        const signer = provider.getSigner();
+        const address = await signer.getAddress();
+        console.log(`Indirizzo del wallet: ${address}`);
       } catch (error) {
         console.error("Errore durante la connessione al wallet:", error);
+        alert("Errore durante la connessione al wallet. Si prega di riprovare.");
       }
     });
   });
