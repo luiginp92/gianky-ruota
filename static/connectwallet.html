@@ -10,19 +10,6 @@
     .container { max-width: 600px; margin: auto; }
     .balance { margin-top: 20px; }
   </style>
-  <!-- Import map per risolvere i bare module specifiers -->
-  <script type="importmap">
-  {
-    "imports": {
-      "abitype": "https://cdn.skypack.dev/abitype?min",
-      "@noble/curves/secp256k1": "https://cdn.skypack.dev/@noble/curves/secp256k1?min",
-      "@noble/hashes/sha3": "https://cdn.skypack.dev/@noble/hashes/sha3?min",
-      "ox/AbiConstructor": "https://cdn.skypack.dev/ox/AbiConstructor?min",
-      "ox/AbiFunction": "https://cdn.skypack.dev/ox/AbiFunction?min",
-      "ox/": "https://cdn.skypack.dev/ox/"
-    }
-  }
-  </script>
 </head>
 <body>
   <div class="container">
@@ -41,13 +28,15 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <!-- Ethers.js -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <!-- Reown AppKit Integration -->
+  
+  <!-- Reown AppKit Integration usando esm.sh per bundling completo -->
   <script type="module">
-    import { createAppKit } from "https://cdn.skypack.dev/@reown/appkit?min";
-    import { Ethers5Adapter } from "https://cdn.skypack.dev/@reown/appkit-adapter-ethers5?min";
-    import { polygon } from "https://cdn.skypack.dev/@reown/appkit/networks?min";
+    // Importa le librerie da esm.sh, che fornisce una versione già bundlata con tutte le dipendenze
+    import { createAppKit } from "https://esm.sh/@reown/appkit@3.0.1";
+    import { Ethers5Adapter } from "https://esm.sh/@reown/appkit-adapter-ethers5@3.0.1";
+    import { polygon } from "https://esm.sh/@reown/appkit/networks@3.0.1";
     
-    // Project id già impostato
+    // Imposta il project id (già fornito)
     const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
     const metadata = {
       name: "GiankyCoin",
