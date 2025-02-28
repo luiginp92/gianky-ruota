@@ -10,6 +10,14 @@
     .container { max-width: 600px; margin: auto; }
     .balance { margin-top: 20px; }
   </style>
+  <!-- Import map per risolvere i bare module specifiers -->
+  <script type="importmap">
+  {
+    "imports": {
+      "abitype": "https://cdn.skypack.dev/abitype?min"
+    }
+  }
+  </script>
 </head>
 <body>
   <div class="container">
@@ -38,7 +46,7 @@
     const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
     const metadata = {
       name: "GiankyCoin",
-      description: "Connetti il tuo wallet a GiankyCoin App",
+      description: "Connetti il tuo wallet per la GiankyCoin Web App",
       url: window.location.origin,
       icons: ["https://assets.reown.com/reown-profile-pic.png"]
     };
@@ -52,7 +60,7 @@
       features: { analytics: true }
     });
 
-    // Gestore dell'evento di connessione: quando l'utente si connette, aggiorna i dettagli del wallet
+    // Quando l'utente si connette, aggiorna i dettagli del wallet
     appKit.on("connect", async (wallet) => {
       console.log("Wallet connesso:", wallet);
       const address = wallet.address;
@@ -76,7 +84,7 @@
       document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
     });
 
-    // Apre la modal di connessione quando viene cliccato il pulsante
+    // Apre la modal di connessione quando l'utente clicca il pulsante
     document.getElementById("btnWalletConnect").addEventListener("click", () => {
       appKit.open();
     });
