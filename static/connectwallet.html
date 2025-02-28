@@ -14,7 +14,8 @@
   <script type="importmap">
   {
     "imports": {
-      "abitype": "https://cdn.skypack.dev/abitype?min"
+      "abitype": "https://cdn.skypack.dev/abitype?min",
+      "@noble/curves/secp256k1": "https://cdn.skypack.dev/@noble/curves/secp256k1?min"
     }
   }
   </script>
@@ -42,7 +43,7 @@
     import { Ethers5Adapter } from "https://cdn.skypack.dev/@reown/appkit-adapter-ethers5?min";
     import { polygon } from "https://cdn.skypack.dev/@reown/appkit/networks?min";
     
-    // Sostituisci con il tuo project id reale
+    // Imposta il project id come fornito
     const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
     const metadata = {
       name: "GiankyCoin",
