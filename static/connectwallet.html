@@ -26,49 +26,49 @@
   
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Ethers.js UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <!-- Web3Modal Standalone UMD (versione 2.0.13) -->
+  <script src="https://unpkg.com/@web3modal/standalone@2.0.13/dist/index.umd.js"></script>
   
-  <!-- Importa ethers v5 in formato ESM e Web3Modal Standalone v2 -->
-  <script type="module">
-    // Importa ethers v5 (ESM) dal CDN jsDelivr
-    import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.esm.min.js";
-    // Importa Web3Modal Standalone v2 (versione stabile) dal CDN unpkg
-    import { Web3Modal } from "https://unpkg.com/@web3modal/standalone@2.0.8/dist/index.esm.js";
-    
-    // Crea un'istanza di Web3Modal con il tuo project id (non vengono richiesti wagmi o altre librerie)
-    const web3Modal = new Web3Modal({
-      projectId: "c17f0d55c1fb5debe77f860c40b7afdb",
-      theme: "light",
-      cacheProvider: false
-      // Altre opzioni possono essere aggiunte se necessarie
-    });
-    
-    document.getElementById("connectWallet").addEventListener("click", async () => {
-      try {
-        // Apre la modal di scelta del wallet
-        const instance = await web3Modal.connect();
-        // Crea un provider ethers a partire dall'istanza ottenuta
-        const ethersProvider = new ethers.providers.Web3Provider(instance);
-        const signer = ethersProvider.getSigner();
-        const address = await signer.getAddress();
-        document.getElementById("walletAddress").innerText = address;
-        document.getElementById("walletInfo").style.display = "block";
-        
-        // Recupera il saldo MATIC
-        const balanceWei = await ethersProvider.getBalance(address);
-        const balanceMatic = ethers.utils.formatEther(balanceWei);
-        document.getElementById("maticBalance").innerText = parseFloat(balanceMatic).toFixed(4);
-        
-        // Recupera il saldo di GiankyCoin (contratto token su Polygon)
-        const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
-        const tokenAbi = ["function balanceOf(address owner) view returns (uint256)"];
-        const tokenContract = new ethers.Contract(tokenAddress, tokenAbi, ethersProvider);
-        const tokenBalanceWei = await tokenContract.balanceOf(address);
-        const tokenBalance = ethers.utils.formatEther(tokenBalanceWei);
-        document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
-      } catch (error) {
-        console.error("Errore durante la connessione al wallet:", error);
-        alert("Si è verificato un errore durante la connessione al wallet. Riprova.");
-      }
+  <script>
+    // Aspetta che il DOM sia completamente caricato
+    document.addEventListener("DOMContentLoaded", function(){
+      // Crea l'istanza di Web3Modal (la classe è esposta globalmente come Web3Modal)
+      const web3Modal = new window.Web3Modal.default({
+        projectId: "c17f0d55c1fb5debe77f860c40b7afdb",
+        theme: "light",
+        cacheProvider: false
+      });
+      
+      document.getElementById("connectWallet").addEventListener("click", async function(){
+        try {
+          // Apre la modal per la scelta del wallet
+          const instance = await web3Modal.connect();
+          // Crea un provider ethers a partire dall'istanza ottenuta
+          const ethersProvider = new ethers.providers.Web3Provider(instance);
+          const signer = ethersProvider.getSigner();
+          const address = await signer.getAddress();
+          document.getElementById("walletAddress").innerText = address;
+          document.getElementById("walletInfo").style.display = "block";
+          
+          // Recupera il saldo in MATIC
+          const balanceWei = await ethersProvider.getBalance(address);
+          const balanceMatic = ethers.utils.formatEther(balanceWei);
+          document.getElementById("maticBalance").innerText = parseFloat(balanceMatic).toFixed(4);
+          
+          // Recupera il saldo di GiankyCoin (token su Polygon)
+          const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
+          const tokenAbi = ["function balanceOf(address owner) view returns (uint256)"];
+          const tokenContract = new ethers.Contract(tokenAddress, tokenAbi, ethersProvider);
+          const tokenBalanceWei = await tokenContract.balanceOf(address);
+          const tokenBalance = ethers.utils.formatEther(tokenBalanceWei);
+          document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
+        } catch(error) {
+          console.error("Errore durante la connessione al wallet:", error);
+          alert("Si è verificato un errore durante la connessione al wallet. Riprova.");
+        }
+      });
     });
   </script>
 </body>
