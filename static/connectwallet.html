@@ -25,17 +25,24 @@
     </div>
   </div>
   
-  <!-- Includi ethers.js UMD dal CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.umd.min.js"></script>
+  <!-- Includi ethers.js UMD dal CDN di unpkg con versione specificata -->
+  <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   
   <script>
+    // Verifica che ethers sia stato caricato
+    if (typeof window.ethers === "undefined") {
+      console.error("ethers non è caricato");
+    } else {
+      console.log("ethers caricato:", window.ethers);
+    }
+    
     document.getElementById("connectWallet").addEventListener("click", async function() {
       const input = document.getElementById("walletAddressInput").value.trim();
       if (!input) {
         alert("Inserisci un indirizzo valido");
         return;
       }
-      // Verifica che l'indirizzo sia valido
+      // Verifica che l'indirizzo sia valido usando ethers.utils
       if (!window.ethers.utils.isAddress(input)) {
         alert("Indirizzo non valido");
         return;
@@ -45,7 +52,7 @@
         // Crea un provider per la rete Polygon usando un endpoint pubblico
         const provider = new window.ethers.providers.JsonRpcProvider("https://polygon-rpc.com/");
         
-        // Ottieni il saldo MATIC (in wei) e convertilo in MATIC
+        // Ottieni il saldo MATIC in wei e convertilo in MATIC
         const balanceWei = await provider.getBalance(input);
         const balanceMatic = window.ethers.utils.formatEther(balanceWei);
         
