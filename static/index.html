@@ -16,7 +16,7 @@
     #wheelCanvas {
       border: 1px solid #000;
       display: block;
-      margin: 0 auto;
+      margin: 20px auto;
     }
   </style>
 </head>
@@ -132,13 +132,19 @@
     });
   </script>
   
-  <!-- Integrazione della ruota con Winwheel.js -->
   <!-- Includi GSAP dal CDN cdnjs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-  <!-- Includi Winwheel.js dal CDN cdnjs -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
+  <!-- Includi Winwheel.js dal CDN di unpkg -->
+  <script src="https://unpkg.com/winwheel@2.7.0/Winwheel.min.js"></script>
   
   <script>
+    // Assicurati che Winwheel sia caricato
+    if (typeof Winwheel === "undefined") {
+      console.error("Winwheel non è definito");
+    } else {
+      console.log("Winwheel caricato:", Winwheel);
+    }
+    
     // Definisci i segmenti per la ruota
     const prizeData = [
       { text: '10 GKY',   color: '#F1C40F' },
@@ -155,28 +161,16 @@
       { text: 'NO PRIZE', color: '#BDC3C7' }
     ];
 
-    // Crea la ruota su un canvas (se non già presente)
-    // Se desideri che la ruota sia visibile in index, aggiungi un canvas qui:
-    const wheelCanvas = document.createElement("canvas");
-    wheelCanvas.id = "wheelCanvas";
-    wheelCanvas.width = 300;
-    wheelCanvas.height = 300;
-    // Inserisci il canvas nella sezione della ruota (sostituisci l'immagine mancante)
-    const wheelContainer = document.querySelector(".row.mb-4 .col.text-center");
-    wheelContainer.innerHTML = ""; // Rimuovi l'immagine esistente
-    wheelContainer.appendChild(wheelCanvas);
-
-    // Crea l'array dei segmenti per Winwheel
+    // Crea la ruota su "wheelCanvas"
     const segmentsForWheel = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
     }));
 
-    // Inizializza la ruota con Winwheel.js
     const theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: prizeData.length,
-      outerRadius: 140,  // Adatta in base alle dimensioni del canvas
+      outerRadius: 140, // Adattato per un canvas 300x300
       segments: segmentsForWheel,
       animation: {
         type: 'spinToStop',
@@ -188,10 +182,8 @@
       }
     });
 
-    // Opzionalmente, puoi collegare il pulsante "Gira la ruota" a questa ruota:
-    // Se vuoi che il pulsante "btnSpin" avvii l'animazione della ruota:
+    // Collegare il pulsante "Gira la ruota" (btnSpin)
     document.getElementById("btnSpin").addEventListener("click", () => {
-      // Per questo esempio, usiamo l'animazione casuale interna di Winwheel.js
       theWheel.startAnimation();
     });
   </script>
