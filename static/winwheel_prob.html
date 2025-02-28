@@ -2,58 +2,103 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gira la Ruota</title>
+  <title>Gira la Ruota - GiankyBot (Probabilità)</title>
   <style>
-    body { text-align: center; font-family: sans-serif; padding: 20px; }
-    canvas { border: 1px solid #000; margin: 20px auto; display: block; }
-    button { padding: 10px 20px; font-size: 1rem; cursor: pointer; }
+    body { 
+      text-align: center; 
+      font-family: sans-serif; 
+      padding: 20px; 
+    }
+    canvas { 
+      border: 1px solid #000; 
+      margin: 20px auto; 
+      display: block; 
+    }
+    button { 
+      padding: 10px 20px; 
+      font-size: 1rem; 
+      cursor: pointer; 
+    }
   </style>
 </head>
 <body>
   <h1>Gira la Ruota</h1>
-  <!-- Canvas su cui viene disegnata la ruota -->
+  <!-- Canvas su cui verrà disegnata la ruota -->
   <canvas id="canvas" width="500" height="500"></canvas>
   <br>
   <button id="spinButton">Gira la ruota</button>
   
-  <!-- Includi GSAP dal CDN di cdnjs -->
+  <!-- Includi GSAP dal CDN cdnjs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-  <!-- Includi Winwheel.js dal CDN di cdnjs -->
+  <!-- Includi Winwheel.js dal CDN cdnjs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
-    // Crea la ruota con 12 segmenti
+    // Dati dei premi e probabilità
+    // Assicurati che la somma delle probabilità sia 1 (o 100%)
+    const prizeData = [
+      { text: '10 GKY',   color: '#F1C40F', prob: 0.10 },
+      { text: '20 GKY',   color: '#E67E22', prob: 0.05 },
+      { text: '50 GKY',   color: '#E74C3C', prob: 0.10 },
+      { text: '100 GKY',  color: '#9B59B6', prob: 0.10 },
+      { text: '250 GKY',  color: '#3498DB', prob: 0.10 },
+      { text: '500 GKY',  color: '#1ABC9C', prob: 0.05 },
+      { text: '1000 GKY', color: '#2ECC71', prob: 0.05 },
+      { text: 'NFT BASIC',    color: '#F39C12', prob: 0.05 },
+      { text: 'NFT STARTER',  color: '#C0392B', prob: 0.05 },
+      { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.15 },
+      { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.10 },
+      { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.10 }
+    ];
+
+    // Crea l'array di segmenti per la ruota
+    const segmentsForWheel = prizeData.map(item => ({
+      fillStyle: item.color,
+      text: item.text
+    }));
+
+    // Crea la ruota con Winwheel.js
     const theWheel = new Winwheel({
       canvasId: 'canvas',
-      numSegments: 12,
+      numSegments: prizeData.length,
       outerRadius: 200,
-      segments: [
-        { fillStyle: '#F1C40F', text: '10 GKY' },
-        { fillStyle: '#E67E22', text: '20 GKY' },
-        { fillStyle: '#E74C3C', text: '50 GKY' },
-        { fillStyle: '#9B59B6', text: '100 GKY' },
-        { fillStyle: '#3498DB', text: '250 GKY' },
-        { fillStyle: '#1ABC9C', text: '500 GKY' },
-        { fillStyle: '#2ECC71', text: '1000 GKY' },
-        { fillStyle: '#F39C12', text: 'NFT BASIC' },
-        { fillStyle: '#C0392B', text: 'NFT STARTER' },
-        { fillStyle: '#BDC3C7', text: 'NO PRIZE' },
-        { fillStyle: '#BDC3C7', text: 'NO PRIZE' },
-        { fillStyle: '#BDC3C7', text: 'NO PRIZE' }
-      ],
+      segments: segmentsForWheel,
       animation: {
         type: 'spinToStop',
-        duration: 3,   // Durata in secondi
-        spins: 5,      // Numero di giri completi
+        duration: 5,  // Durata in secondi
+        spins: 8,     // Numero di giri completi
+        // callbackFinished verrà chiamata quando la ruota si ferma
         callbackFinished: function(indicatedSegment) {
           alert("Hai vinto: " + indicatedSegment.text);
         }
       }
     });
-    
-    // Avvia l'animazione al click del bottone
-    document.getElementById("spinButton").addEventListener("click", function(){
+
+    // Funzione per selezionare il premio basato sulle probabilità
+    function pickPrize() {
+      const rnd = Math.random(); // Numero casuale tra 0 e 1
+      let sum = 0;
+      for (let i = 0; i < prizeData.length; i++) {
+        sum += prizeData[i].prob;
+        if (rnd <= sum) {
+          return i; // Ritorna l'indice del premio selezionato
+        }
+      }
+      return prizeData.length - 1; // Di default l'ultimo premio
+    }
+
+    // Quando viene cliccato il bottone, calcola l'angolo di stop basato sul premio scelto
+    document.getElementById("spinButton").addEventListener("click", () => {
+      const chosenIndex = pickPrize();
+      const anglePerSegment = 360 / prizeData.length;
+      // Calcola l'angolo centrale dello spicchio scelto
+      const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
+      // Aggiungi giri extra (ad esempio, 5 giri completi)
+      const extraSpins = 360 * 5;
+      // Calcola l'angolo finale: (360 - angolo centrato) + extraSpins
+      const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
+      theWheel.animation.stopAngle = finalAngle;
+      console.log("Premio scelto (indice):", chosenIndex, "Stop Angle:", finalAngle);
       theWheel.startAnimation();
     });
   </script>
