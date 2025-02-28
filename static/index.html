@@ -12,6 +12,12 @@
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: #343a40; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
+    /* Stili per il canvas della ruota */
+    #wheelCanvas {
+      border: 1px solid #000;
+      display: block;
+      margin: 0 auto;
+    }
   </style>
 </head>
 <body>
@@ -25,7 +31,8 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <img src="/wheel" alt="Ruota" class="img-fluid" style="max-width:300px;">
+        <!-- Sostituisci l'immagine con un canvas per la ruota -->
+        <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
     <div class="row text-center">
@@ -64,7 +71,7 @@
   <!-- Ethers v5 -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   
-  <!-- Modifica: Imposta il reindirizzamento per il pulsante "Connetti Wallet" -->
+  <!-- Pulsante "Connetti Wallet": reindirizza alla pagina connectwallet.html -->
   <script>
     document.getElementById("btnConnect").addEventListener("click", function() {
       window.location.href = "/static/connectwallet.html";
@@ -98,7 +105,7 @@
     window.addEventListener("load", updateBalances);
   </script>
   
-  <!-- Eventi per altri pulsanti -->
+  <!-- Eventi per gli altri pulsanti -->
   <script>
     document.getElementById("btnSpin").addEventListener("click", async function() {
       try {
@@ -122,6 +129,70 @@
     
     document.getElementById("btnTask").addEventListener("click", function() {
       window.location.href = "/static/task.html";
+    });
+  </script>
+  
+  <!-- Integrazione della ruota con Winwheel.js -->
+  <!-- Includi GSAP dal CDN cdnjs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+  <!-- Includi Winwheel.js dal CDN cdnjs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
+  
+  <script>
+    // Definisci i segmenti per la ruota
+    const prizeData = [
+      { text: '10 GKY',   color: '#F1C40F' },
+      { text: '20 GKY',   color: '#E67E22' },
+      { text: '50 GKY',   color: '#E74C3C' },
+      { text: '100 GKY',  color: '#9B59B6' },
+      { text: '250 GKY',  color: '#3498DB' },
+      { text: '500 GKY',  color: '#1ABC9C' },
+      { text: '1000 GKY', color: '#2ECC71' },
+      { text: 'NFT BASIC', color: '#F39C12' },
+      { text: 'NFT STARTER', color: '#C0392B' },
+      { text: 'NO PRIZE', color: '#BDC3C7' },
+      { text: 'NO PRIZE', color: '#BDC3C7' },
+      { text: 'NO PRIZE', color: '#BDC3C7' }
+    ];
+
+    // Crea la ruota su un canvas (se non già presente)
+    // Se desideri che la ruota sia visibile in index, aggiungi un canvas qui:
+    const wheelCanvas = document.createElement("canvas");
+    wheelCanvas.id = "wheelCanvas";
+    wheelCanvas.width = 300;
+    wheelCanvas.height = 300;
+    // Inserisci il canvas nella sezione della ruota (sostituisci l'immagine mancante)
+    const wheelContainer = document.querySelector(".row.mb-4 .col.text-center");
+    wheelContainer.innerHTML = ""; // Rimuovi l'immagine esistente
+    wheelContainer.appendChild(wheelCanvas);
+
+    // Crea l'array dei segmenti per Winwheel
+    const segmentsForWheel = prizeData.map(item => ({
+      fillStyle: item.color,
+      text: item.text
+    }));
+
+    // Inizializza la ruota con Winwheel.js
+    const theWheel = new Winwheel({
+      canvasId: 'wheelCanvas',
+      numSegments: prizeData.length,
+      outerRadius: 140,  // Adatta in base alle dimensioni del canvas
+      segments: segmentsForWheel,
+      animation: {
+        type: 'spinToStop',
+        duration: 3,  // 3 secondi di animazione
+        spins: 5,
+        callbackFinished: function(indicatedSegment) {
+          alert("Hai vinto: " + indicatedSegment.text);
+        }
+      }
+    });
+
+    // Opzionalmente, puoi collegare il pulsante "Gira la ruota" a questa ruota:
+    // Se vuoi che il pulsante "btnSpin" avvii l'animazione della ruota:
+    document.getElementById("btnSpin").addEventListener("click", () => {
+      // Per questo esempio, usiamo l'animazione casuale interna di Winwheel.js
+      theWheel.startAnimation();
     });
   </script>
 </body>
