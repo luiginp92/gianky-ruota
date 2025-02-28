@@ -1,71 +1,51 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Connetti Wallet - GiankyCoin</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <style>
-    body { padding: 20px; }
-    .container { max-width: 600px; margin: auto; }
-    .balance { margin-top: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Connetti il tuo Wallet</h1>
-    <p>Premi il pulsante per scegliere il tuo wallet e autorizzare il collegamento:</p>
-    <button id="connectWallet" class="btn btn-primary">Connetti Wallet</button>
-    <div id="walletInfo" class="balance" style="display:none;">
-      <h3>Dettagli del Wallet</h3>
-      <p><strong>Indirizzo:</strong> <span id="walletAddress"></span></p>
-      <p><strong>Saldo MATIC:</strong> <span id="maticBalance"></span></p>
-      <p><strong>Saldo GiankyCoin:</strong> <span id="tokenBalance"></span></p>
-    </div>
-  </div>
-  
-  <!-- Bootstrap JS -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  
-  <!-- Ethers.js UMD -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  
-  <!-- Web3Modal Standalone UMD (versione stabile) -->
-  <script src="https://unpkg.com/web3modal@1.9.3/dist/index.js"></script>
-  
-  <script>
-    document.addEventListener("DOMContentLoaded", function() {
-      const Web3Modal = window.Web3Modal.default;
-      const web3Modal = new Web3Modal({
-        cacheProvider: false,
-        providerOptions: {}
-      });
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const Web3Modal = window.Web3Modal.default;
+  const WalletConnectProvider = window.WalletConnectProvider.default;
+  const providerOptions = {
+    walletconnect: {
+      package: WalletConnectProvider, // Importante: WalletConnectProvider da Web3Modal
+      options: {
+        rpc: {
+          137: "https://polygon-rpc.com/" // RPC URL di Polygon Mainnet
+        },
+        network: "matic"
+      }
+    }
+  };
+
+  const web3Modal = new Web3Modal({
+    cacheProvider: true, // optional: Abilita o disabilita la cache del provider
+    providerOptions // required
+  });
+
+  document.getElementById("connectWallet").addEventListener("click", async function() {
+    try {
+      const instance = await web3Modal.connect();
+      const ethersProvider = new ethers.providers.Web3Provider(instance);
+      const signer = ethersProvider.getSigner();
+      const address = await signer.getAddress();
+      document.getElementById("walletAddress").innerText = address;
+      document.getElementById("walletInfo").style.display = "block";
       
-      document.getElementById("connectWallet").addEventListener("click", async function() {
-        try {
-          const instance = await web3Modal.connect();
-          const ethersProvider = new ethers.providers.Web3Provider(instance);
-          const signer = ethersProvider.getSigner();
-          const address = await signer.getAddress();
-          document.getElementById("walletAddress").innerText = address;
-          document.getElementById("walletInfo").style.display = "block";
-          
-          const balanceWei = await ethersProvider.getBalance(address);
-          const balanceMatic = ethers.utils.formatEther(balanceWei);
-          document.getElementById("maticBalance").innerText = parseFloat(balanceMatic).toFixed(4);
-          
-          const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
-          const tokenAbi = ["function balanceOf(address owner) view returns (uint256)"];
-          const tokenContract = new ethers.Contract(tokenAddress, tokenAbi, ethersProvider);
-          const tokenBalanceWei = await tokenContract.balanceOf(address);
-          const tokenBalance = ethers.utils.formatEther(tokenBalanceWei);
-          document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
-        } catch(error) {
-          console.error("Errore durante la connessione al wallet:", error);
-          alert("Si è verificato un errore durante la connessione al wallet. Riprova.");
-        }
-      });
-    });
-  </script>
-</body>
-</html>
+      const balanceWei = await ethersProvider.getBalance(address);
+      const balanceMatic = ethers.utils.formatEther(balanceWei);
+      document.getElementById("maticBalance").innerText = parseFloat(balanceMatic).toFixed(4);
+      
+      const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a"; // Verifica che sia corretto
+      const tokenAbi = ["function balanceOf(address owner) external view returns (uint256)"];
+      const tokenContract = new ethers.Contract(tokenAddress, tokenAbi, signer);
+      try {
+        const tokenBalanceWei = await tokenContract.balanceOf(address);
+        const tokenBalance = ethers.utils.formatEther(tokenBalanceWei);
+        document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
+      } catch (contractError) {
+        console.error("Errore nel contratto:", contractError);
+      }
+    } catch(error) {
+      console.error("Errore durante la connessione al wallet:", error);
+      alert("Si è verificato un errore durante la connessione al wallet. Riprova.");
+    }
+  });
+});
+</script>
