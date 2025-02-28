@@ -17,10 +17,10 @@
   <br>
   <button id="spinButton">Gira la ruota</button>
   
-  <!-- Includi GSAP (necessario per l'animazione) -->
-  <script src="https://cdn.jsdelivr.net/npm/gsap@3.11.4/dist/gsap.min.js"></script>
-  <!-- Includi Winwheel.js -->
-  <script src="https://cdn.jsdelivr.net/npm/winwheel@2.7.0/Winwheel.min.js"></script>
+  <!-- Includi GSAP dal CDN di cdnjs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+  <!-- Includi Winwheel.js dal CDN di cdnjs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
     // Crea la ruota con 12 segmenti
@@ -52,7 +52,7 @@
       }
     });
     
-    // Al click del bottone, avvia l'animazione
+    // Avvia l'animazione al click del bottone
     document.getElementById("spinButton").addEventListener("click", function(){
       theWheel.startAnimation();
     });
