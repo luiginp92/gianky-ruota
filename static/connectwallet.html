@@ -29,14 +29,22 @@
   <!-- Ethers.js -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   
-  <!-- Reown AppKit Integration usando esm.sh per bundling completo -->
+  <!-- Reown AppKit Integration tramite esm.sh in modalità bundle -->
   <script type="module">
-    // Importa le librerie da esm.sh, che fornisce una versione già bundlata con tutte le dipendenze
-    import { createAppKit } from "https://esm.sh/@reown/appkit@3.0.1";
-    import { Ethers5Adapter } from "https://esm.sh/@reown/appkit-adapter-ethers5@3.0.1";
-    import { polygon } from "https://esm.sh/@reown/appkit/networks@3.0.1";
+    // Importa Reown AppKit e l'adapter in modalità bundle per includere tutte le dipendenze necessarie
+    import { createAppKit } from "https://esm.sh/@reown/appkit?bundle";
+    import { Ethers5Adapter } from "https://esm.sh/@reown/appkit-adapter-ethers5?bundle";
     
-    // Imposta il project id (già fornito)
+    // Definisci manualmente il network Polygon (per evitare di importarlo da un modulo esterno)
+    const polygon = {
+      chainId: 137,
+      name: "Polygon",
+      rpcUrls: ["https://polygon-rpc.com"],
+      nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+      blockExplorerUrls: ["https://polygonscan.com"]
+    };
+    
+    // Usa il project id fornito
     const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
     const metadata = {
       name: "GiankyCoin",
@@ -44,8 +52,7 @@
       url: window.location.origin,
       icons: ["https://assets.reown.com/reown-profile-pic.png"]
     };
-
-    // Crea l'istanza di AppKit
+    
     const appKit = createAppKit({
       adapters: [new Ethers5Adapter()],
       networks: [polygon],
@@ -53,7 +60,7 @@
       projectId,
       features: { analytics: true }
     });
-
+    
     // Quando l'utente si connette, aggiorna i dettagli del wallet
     appKit.on("connect", async (wallet) => {
       console.log("Wallet connesso:", wallet);
@@ -77,7 +84,7 @@
       const tokenBalance = ethers.utils.formatEther(tokenBalanceWei);
       document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
     });
-
+    
     // Apre la modal di connessione quando l'utente clicca il pulsante
     document.getElementById("btnWalletConnect").addEventListener("click", () => {
       appKit.open();
