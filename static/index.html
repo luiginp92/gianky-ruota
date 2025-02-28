@@ -64,37 +64,11 @@
   <!-- Ethers v5 -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   
-  <!-- Reown AppKit Integration -->
-  <script type="module">
-    import { createAppKit } from "https://cdn.skypack.dev/@reown/appkit?min";
-    import { Ethers5Adapter } from "https://cdn.skypack.dev/@reown/appkit-adapter-ethers5?min";
-    import { mainnet, arbitrum } from "https://cdn.skypack.dev/@reown/appkit/networks?min";
-    
-    const projectId = "c17f0d55c1fb5debe77f860c40b7afdb";
-    const metadata = {
-      name: "GiankyBot",
-      description: "GiankyCoin Wallet Connect Integration",
-      url: "https://gianky-bot-test-f275065c7d33.herokuapp.com",
-      icons: ["https://assets.reown.com/reown-profile-pic.png"]
-    };
-    
-    const modal = createAppKit({
-      adapters: [new Ethers5Adapter()],
-      networks: [mainnet, arbitrum],
-      metadata,
-      projectId,
-      features: { analytics: true }
+  <!-- Modifica: Imposta il reindirizzamento per il pulsante "Connetti Wallet" -->
+  <script>
+    document.getElementById("btnConnect").addEventListener("click", function() {
+      window.location.href = "/static/connectwallet.html";
     });
-    
-    async function openWalletConnect() {
-      try {
-        modal.open();
-      } catch (error) {
-        console.error("Errore nell'apertura di AppKit:", error);
-      }
-    }
-    
-    document.getElementById("btnConnect").addEventListener("click", openWalletConnect);
   </script>
   
   <!-- Script per aggiornare i saldi -->
