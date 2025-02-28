@@ -12,36 +12,29 @@
     <button id="connectWallet" class="btn btn-primary">Connetti Wallet</button>
   </div>
 
-  <!-- Ethers.js -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.2.umd.min.js"></script>
+  <!-- Import Ethers.js -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.2/umd/ethers.min.js"></script>
 
-  <!-- Web3Modal -->
-  <script src="https://unpkg.com/web3modal@latest/dist/web3modal.min.js"></script>
+  <!-- Import Web3Modal -->
+  <script src="https://unpkg.com/web3modal@latest/umd/web3modal.min.js"></script>
 
   <script>
   document.addEventListener("DOMContentLoaded", function() {
-    // Assicurarsi che Web3Modal e ethers siano disponibili
-    if (typeof Web3Modal === "undefined" || typeof ethers === "undefined") {
-      console.error("Web3Modal o ethers.js non sono definiti.");
-      return;
-    }
-
     const web3Modal = new Web3Modal({
-      network: "mainnet",  // Opzionale: specifica una rete; es. 'mainnet' o 'testnet'
-      cacheProvider: true,  // Opzionale: abilita o disabilita la cache del provider
-      providerOptions: {}  // Opzionale: aggiungi qui provider specifici come WalletConnect
+      cacheProvider: false,  // Optional: true if you want to enable caching
+      providerOptions: {}    // Required: specify any provider options here if needed
     });
 
     document.getElementById("connectWallet").addEventListener("click", async function() {
       try {
-        const connection = await web3Modal.connect();
-        const provider = new ethers.providers.Web3Provider(connection);
-        const signer = provider.getSigner();
+        const provider = await web3Modal.connect();
+        const ethersProvider = new ethers.providers.Web3Provider(provider);
+        const signer = ethersProvider.getSigner();
         const address = await signer.getAddress();
-        console.log(`Indirizzo del wallet: ${address}`);
+        console.log(`Connected wallet address: ${address}`);
       } catch (error) {
-        console.error("Errore durante la connessione al wallet:", error);
-        alert("Errore durante la connessione al wallet. Si prega di riprovare.");
+        console.error("Error connecting to wallet:", error);
+        alert("Failed to connect wallet. Please try again.");
       }
     });
   });
