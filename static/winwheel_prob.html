@@ -28,14 +28,13 @@
   <br>
   <button id="spinButton">Gira la ruota</button>
   
-  <!-- Includi GSAP dal CDN cdnjs -->
+  <!-- Includi GSAP dal CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-  <!-- Includi Winwheel.js dal CDN cdnjs -->
+  <!-- Includi Winwheel.js dal CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
-    // Dati dei premi e probabilità
-    // Assicurati che la somma delle probabilità sia 1 (o 100%)
+    // Dati dei premi e probabilità (la somma delle prob è 1)
     const prizeData = [
       { text: '10 GKY',   color: '#F1C40F', prob: 0.10 },
       { text: '20 GKY',   color: '#E67E22', prob: 0.05 },
@@ -44,8 +43,8 @@
       { text: '250 GKY',  color: '#3498DB', prob: 0.10 },
       { text: '500 GKY',  color: '#1ABC9C', prob: 0.05 },
       { text: '1000 GKY', color: '#2ECC71', prob: 0.05 },
-      { text: 'NFT BASIC',    color: '#F39C12', prob: 0.05 },
-      { text: 'NFT STARTER',  color: '#C0392B', prob: 0.05 },
+      { text: 'NFT BASIC', color: '#F39C12', prob: 0.05 },
+      { text: 'NFT STARTER', color: '#C0392B', prob: 0.05 },
       { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.15 },
       { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.10 },
       { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.10 }
@@ -67,40 +66,66 @@
         type: 'spinToStop',
         duration: 5,  // Durata in secondi
         spins: 8,     // Numero di giri completi
-        // callbackFinished verrà chiamata quando la ruota si ferma
         callbackFinished: function(indicatedSegment) {
           alert("Hai vinto: " + indicatedSegment.text);
+          // Se il premio non è "NO PRIZE", distribuiscilo tramite il backend
+          distributePrize(indicatedSegment);
         }
       }
     });
 
     // Funzione per selezionare il premio basato sulle probabilità
     function pickPrize() {
-      const rnd = Math.random(); // Numero casuale tra 0 e 1
+      const rnd = Math.random();
       let sum = 0;
       for (let i = 0; i < prizeData.length; i++) {
         sum += prizeData[i].prob;
         if (rnd <= sum) {
-          return i; // Ritorna l'indice del premio selezionato
+          return i;
         }
       }
-      return prizeData.length - 1; // Di default l'ultimo premio
+      return prizeData.length - 1;
     }
 
-    // Quando viene cliccato il bottone, calcola l'angolo di stop basato sul premio scelto
     document.getElementById("spinButton").addEventListener("click", () => {
       const chosenIndex = pickPrize();
       const anglePerSegment = 360 / prizeData.length;
-      // Calcola l'angolo centrale dello spicchio scelto
       const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
-      // Aggiungi giri extra (ad esempio, 5 giri completi)
       const extraSpins = 360 * 5;
-      // Calcola l'angolo finale: (360 - angolo centrato) + extraSpins
       const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
       theWheel.animation.stopAngle = finalAngle;
       console.log("Premio scelto (indice):", chosenIndex, "Stop Angle:", finalAngle);
       theWheel.startAnimation();
     });
+
+    async function distributePrize(segment) {
+      if (segment.text === "NO PRIZE") {
+        console.log("Nessun premio da distribuire.");
+        return;
+      }
+      const wallet = localStorage.getItem("walletAddress");
+      if (!wallet) {
+        console.error("Wallet non connesso, impossibile distribuire il premio.");
+        return;
+      }
+      try {
+        const response = await fetch("/api/distribute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletAddress: wallet,
+            prize: segment.text
+          })
+        });
+        if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
+        const data = await response.json();
+        console.log("Premio distribuito:", data);
+        alert(data.message);
+      } catch (error) {
+        console.error("Errore nella distribuzione del premio:", error);
+        alert("Errore nella distribuzione del premio. Contatta l'assistenza.");
+      }
+    }
   </script>
 </body>
 </html>

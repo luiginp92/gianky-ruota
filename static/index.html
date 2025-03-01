@@ -12,9 +12,7 @@
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: #343a40; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
-    /* Stile per il canvas della ruota */
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
-    /* Stile per il contatore dei giri gratuiti */
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
 </head>
@@ -30,7 +28,7 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Canvas per la ruota (sostituisce l'immagine "/wheel") -->
+        <!-- Canvas per la ruota (verrà eventualmente gestito da Winwheel) -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -70,14 +68,14 @@
   <!-- Ethers.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   
-  <!-- Reindirizzamento per "Connetti Wallet" -->
+  <!-- Gestione pulsante "Connetti Wallet" -->
   <script defer>
     document.getElementById("btnConnect").addEventListener("click", function() {
       window.location.href = "/static/connectwallet.html";
     });
   </script>
   
-  <!-- Script per aggiornare i saldi -->
+  <!-- Aggiornamento saldi -->
   <script defer>
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
@@ -104,7 +102,7 @@
     window.addEventListener("load", updateBalances);
   </script>
   
-  <!-- Funzioni per il contatore dei giri gratuiti -->
+  <!-- Gestione giri gratuiti -->
   <script defer>
     function getFreeSpins() {
       let freeSpins = parseInt(localStorage.getItem("freeSpins") || "0", 10);
@@ -132,7 +130,7 @@
     window.addEventListener("load", getFreeSpins);
   </script>
   
-  <!-- Gestione degli altri pulsanti -->
+  <!-- Gestione pulsanti e spin (questo script lascia invariata la logica di base; il reale "spin" ed eventuale distribuzione del premio possono essere gestiti via winwheel_prob.html se usato) -->
   <script defer>
     document.getElementById("btnSpin").addEventListener("click", async function() {
       if (getFreeSpins() <= 0) {
@@ -141,13 +139,14 @@
       }
       decrementFreeSpins();
       try {
+        // Chiamata all'endpoint spin (la logica di assegnazione premio lato backend è minimal qui)
         const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
         const data = await res.json();
         document.getElementById("result").style.display = "block";
         document.getElementById("result").innerText = data.message;
         updateBalances();
       } catch (error) {
-        console.error(error);
+        console.error("Errore nello spin:", error);
       }
     });
     document.getElementById("btnBuySpins").addEventListener("click", function() {
@@ -161,11 +160,9 @@
     });
   </script>
   
-  <!-- Includi GSAP dal CDN cdnjs -->
+  <!-- Inclusione librerie per animazioni e ruota -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-  <!-- Includi TweenMax (GSAP v2) -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
-  <!-- Includi Winwheel.js tramite jsDelivr da GitHub -->
   <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
   <script defer>
@@ -176,77 +173,8 @@
       }
       console.log("Winwheel caricato:", Winwheel);
       
-      const prizeData = [
-        { text: '10 GKY',   color: '#F1C40F' },
-        { text: '20 GKY',   color: '#E67E22' },
-        { text: '50 GKY',   color: '#E74C3C' },
-        { text: '100 GKY',  color: '#9B59B6' },
-        { text: '250 GKY',  color: '#3498DB' },
-        { text: '500 GKY',  color: '#1ABC9C' },
-        { text: '1000 GKY', color: '#2ECC71' },
-        { text: 'NFT BASIC', color: '#F39C12' },
-        { text: 'NFT STARTER', color: '#C0392B' },
-        { text: 'NO PRIZE', color: '#BDC3C7' },
-        { text: 'NO PRIZE', color: '#BDC3C7' },
-        { text: 'NO PRIZE', color: '#BDC3C7' }
-      ];
-      
-      const segmentsForWheel = prizeData.map(item => ({
-        fillStyle: item.color,
-        text: item.text
-      }));
-      
-      window.theWheel = new Winwheel({
-        canvasId: 'wheelCanvas',
-        numSegments: prizeData.length,
-        outerRadius: 140,
-        segments: segmentsForWheel,
-        animation: {
-          type: 'spinToStop',
-          duration: 3,
-          spins: 5,
-          callbackFinished: function(indicatedSegment) {
-            alert("Hai vinto: " + indicatedSegment.text);
-            // Distribuisci il premio REALMENTE tramite il backend
-            distributePrize(indicatedSegment);
-          }
-        }
-      });
-      
-      document.getElementById("btnSpin").addEventListener("click", () => {
-        theWheel.startAnimation();
-      });
-      
-      async function distributePrize(segment) {
-        if (segment.text === "NO PRIZE") {
-          console.log("Nessun premio da distribuire.");
-          return;
-        }
-        const wallet = localStorage.getItem("walletAddress");
-        if (!wallet) {
-          console.error("Wallet non connesso, impossibile distribuire il premio.");
-          return;
-        }
-        try {
-          const response = await fetch("/api/distribute", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              walletAddress: wallet,
-              prize: segment.text
-            })
-          });
-          if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
-          const data = await response.json();
-          console.log("Premio distribuito:", data);
-          document.getElementById("result").style.display = "block";
-          document.getElementById("result").innerText = data.message;
-          updateBalances();
-        } catch (error) {
-          console.error("Errore nella distribuzione del premio:", error);
-          alert("Errore nella distribuzione del premio. Contatta l'assistenza.");
-        }
-      }
+      // Se necessario, qui puoi inizializzare la ruota con i segmenti
+      // oppure reindirizzare alla pagina dedicata (winwheel_prob.html)
     });
   </script>
 </body>

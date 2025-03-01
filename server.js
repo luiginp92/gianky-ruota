@@ -27,7 +27,7 @@ const tokenAbi = [
 
 const tokenContract = new ethers.Contract(TOKEN_ADDRESS, tokenAbi, distributionWallet);
 
-// Mappa dei premi a quantità da trasferire (valori esempio, in token con 18 decimali)
+// Mappa dei premi a quantità da trasferire (valori in token con 18 decimali)
 const prizeAmounts = {
   "10 GKY": ethers.utils.parseUnits("10", 18),
   "20 GKY": ethers.utils.parseUnits("20", 18),
@@ -36,7 +36,7 @@ const prizeAmounts = {
   "250 GKY": ethers.utils.parseUnits("250", 18),
   "500 GKY": ethers.utils.parseUnits("500", 18),
   "1000 GKY": ethers.utils.parseUnits("1000", 18),
-  // Per NFT, potresti gestirlo diversamente
+  // Per NFT, gestisci diversamente se necessario
   "NFT BASIC": ethers.BigNumber.from("0"),
   "NFT STARTER": ethers.BigNumber.from("0")
 };
@@ -57,7 +57,7 @@ app.post('/api/distribute', async (req, res) => {
     return res.status(400).json({ message: "Premio non valido" });
   }
   if (amount.eq(0)) {
-    // Per premi NFT, puoi inviare una risposta specifica o chiamare un'altra funzione
+    // Gestione premi NFT: modifica qui se necessario
     return res.json({ message: `Premio ${prize} assegnato. Verifica la tua collezione NFT.` });
   }
   
@@ -72,9 +72,8 @@ app.post('/api/distribute', async (req, res) => {
   }
 });
 
-// Endpoint spin (puoi personalizzare questo endpoint)
+// Endpoint spin (la logica di spin è simulata lato client)
 app.post('/api/spin', async (req, res) => {
-  // Simula uno spin (il vero calcolo del premio avviene lato client)
   res.json({ message: "Spin completato! Buona fortuna!" });
 });
 
