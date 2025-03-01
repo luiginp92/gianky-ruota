@@ -7,6 +7,13 @@ module.exports = {
     path: path.resolve(__dirname, 'dist')
   },
   mode: 'development', // Usa "production" per build ottimizzate
+  devServer: {
+    static: {
+      directory: path.join(__dirname, "static")
+    },
+    port: 8080,
+    open: true
+  },
   module: {
     rules: [
       {
