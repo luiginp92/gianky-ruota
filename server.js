@@ -36,7 +36,6 @@ const prizeAmounts = {
   "250 GKY": ethers.utils.parseUnits("250", 18),
   "500 GKY": ethers.utils.parseUnits("500", 18),
   "1000 GKY": ethers.utils.parseUnits("1000", 18),
-  // Per NFT, gestisci diversamente se necessario
   "NFT BASIC": ethers.BigNumber.from("0"),
   "NFT STARTER": ethers.BigNumber.from("0")
 };
@@ -57,12 +56,10 @@ app.post('/api/distribute', async (req, res) => {
     return res.status(400).json({ message: "Premio non valido" });
   }
   if (amount.eq(0)) {
-    // Gestione premi NFT: modifica qui se necessario
     return res.json({ message: `Premio ${prize} assegnato. Verifica la tua collezione NFT.` });
   }
   
   try {
-    // Invia la transazione per trasferire il premio
     const tx = await tokenContract.transfer(walletAddress, amount);
     await tx.wait();
     res.json({ message: `Premio ${prize} distribuito con successo! Transazione: ${tx.hash}` });
@@ -72,7 +69,7 @@ app.post('/api/distribute', async (req, res) => {
   }
 });
 
-// Endpoint spin (la logica di spin è simulata lato client)
+// Endpoint spin (simulato)
 app.post('/api/spin', async (req, res) => {
   res.json({ message: "Spin completato! Buona fortuna!" });
 });
