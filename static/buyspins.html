@@ -42,68 +42,70 @@
   </div>
   
   <script>
-    // Funzione per recuperare il token di accesso da localStorage
-    function getAccessToken() {
-      return localStorage.getItem("access_token");
-    }
-
-    // Quando viene premuto "Richiedi Acquisto", chiamiamo l'endpoint /api/buyspins
-    document.getElementById("requestPurchase").addEventListener("click", async () => {
-      const token = getAccessToken();
-      if (!token) {
-        alert("Token di accesso mancante. Effettua l'autenticazione.");
-        return;
+    document.addEventListener("DOMContentLoaded", function(){
+      // Funzione per recuperare il token di accesso da localStorage
+      function getAccessToken() {
+        return localStorage.getItem("access_token");
       }
-      const numSpins = document.getElementById("numSpins").value;
-      try {
-        const res = await fetch("/api/buyspins", {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}` 
-          },
-          body: JSON.stringify({ num_spins: parseInt(numSpins) })
-        });
-        if (!res.ok) throw new Error("Errore: " + res.status);
-        const data = await res.json();
-        document.getElementById("instructionMessage").innerText = data.message;
-        document.getElementById("instructions").style.display = "block";
-      } catch (error) {
-        console.error("Errore nella richiesta di acquisto:", error);
-        alert("Errore nella richiesta di acquisto.");
-      }
-    });
-  
-    // Quando viene premuto "Conferma Acquisto", chiamiamo l'endpoint /api/confirmbuy
-    document.getElementById("confirmPurchase").addEventListener("click", async () => {
-      const token = getAccessToken();
-      if (!token) {
-        alert("Token di accesso mancante. Effettua l'autenticazione.");
-        return;
-      }
-      const numSpins = document.getElementById("numSpins").value;
-      const txHash = document.getElementById("txHash").value.trim();
-      if (!txHash) {
-        alert("Inserisci il txHash.");
-        return;
-      }
-      try {
-        const res = await fetch("/api/confirmbuy", {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}` 
-          },
-          body: JSON.stringify({ tx_hash: txHash, num_spins: parseInt(numSpins) })
-        });
-        if (!res.ok) throw new Error("Errore: " + res.status);
-        const data = await res.json();
-        alert(data.message);
-        window.location.href = "/static/index.html";
-      } catch (error) {
-        console.error("Errore nella conferma dell'acquisto:", error);
-        alert("Errore nella conferma dell'acquisto.");
-      }
+    
+      // Quando viene premuto "Richiedi Acquisto", chiamiamo l'endpoint /api/buyspins
+      document.getElementById("requestPurchase").addEventListener("click", async () => {
+        const token = getAccessToken();
+        if (!token) {
+          alert("Token di accesso mancante. Effettua l'autenticazione.");
+          return;
+        }
+        const numSpins = document.getElementById("numSpins").value;
+        try {
+          const res = await fetch("/api/buyspins", {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}` 
+            },
+            body: JSON.stringify({ num_spins: parseInt(numSpins) })
+          });
+          if (!res.ok) throw new Error("Errore: " + res.status);
+          const data = await res.json();
+          document.getElementById("instructionMessage").innerText = data.message;
+          document.getElementById("instructions").style.display = "block";
+        } catch (error) {
+          console.error("Errore nella richiesta di acquisto:", error);
+          alert("Errore nella richiesta di acquisto.");
+        }
+      });
+    
+      // Quando viene premuto "Conferma Acquisto", chiamiamo l'endpoint /api/confirmbuy
+      document.getElementById("confirmPurchase").addEventListener("click", async () => {
+        const token = getAccessToken();
+        if (!token) {
+          alert("Token di accesso mancante. Effettua l'autenticazione.");
+          return;
+        }
+        const numSpins = document.getElementById("numSpins").value;
+        const txHash = document.getElementById("txHash").value.trim();
+        if (!txHash) {
+          alert("Inserisci il txHash.");
+          return;
+        }
+        try {
+          const res = await fetch("/api/confirmbuy", {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}` 
+            },
+            body: JSON.stringify({ tx_hash: txHash, num_spins: parseInt(numSpins) })
+          });
+          if (!res.ok) throw new Error("Errore: " + res.status);
+          const data = await res.json();
+          alert(data.message);
+          window.location.href = "/static/index.html";
+        } catch (error) {
+          console.error("Errore nella conferma dell'acquisto:", error);
+          alert("Errore nella conferma dell'acquisto.");
+        }
+      });
     });
   </script>
 </body>
