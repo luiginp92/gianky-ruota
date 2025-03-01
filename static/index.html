@@ -29,19 +29,18 @@
     </div>
   </header>
   <div class="container content">
-    <!-- Sezione della ruota -->
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Qui il canvas della ruota verrà disegnato -->
+        <!-- Canvas per la ruota -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
-    <!-- Altri contenuti e pulsanti -->
     <div class="row text-center">
       <div class="col">
         <button id="btnSpin" class="btn btn-primary btn-custom">Gira la ruota</button>
       </div>
     </div>
+    <!-- (Il resto della pagina rimane invariato) -->
     <div class="row text-center mt-3">
       <div class="col">
         <button id="btnConnect" class="btn btn-success btn-custom">Connetti Wallet</button>
@@ -80,7 +79,7 @@
     });
   </script>
   
-  <!-- Aggiornamento saldi -->
+  <!-- Script per aggiornare i saldi -->
   <script>
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
@@ -133,57 +132,59 @@
   
   <!-- Includi GSAP dal CDN cdnjs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-  <!-- Includi Winwheel.js dal CDN cdnjs (usa la versione 2.8.0 se disponibile) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.8.0/Winwheel.min.js"></script>
+  <!-- Includi Winwheel.js dal CDN di jsDelivr -->
+  <script src="https://cdn.jsdelivr.net/npm/winwheel@2.7.0/Winwheel.min.js"></script>
   
   <script>
-    // Verifica che Winwheel sia caricato
-    if (typeof Winwheel === "undefined") {
-      console.error("Winwheel non è definito");
-    } else {
-      console.log("Winwheel caricato:", Winwheel);
-    }
-    
-    // Definisci i segmenti per la ruota
-    const prizeData = [
-      { text: '10 GKY',   color: '#F1C40F' },
-      { text: '20 GKY',   color: '#E67E22' },
-      { text: '50 GKY',   color: '#E74C3C' },
-      { text: '100 GKY',  color: '#9B59B6' },
-      { text: '250 GKY',  color: '#3498DB' },
-      { text: '500 GKY',  color: '#1ABC9C' },
-      { text: '1000 GKY', color: '#2ECC71' },
-      { text: 'NFT BASIC', color: '#F39C12' },
-      { text: 'NFT STARTER', color: '#C0392B' },
-      { text: 'NO PRIZE', color: '#BDC3C7' },
-      { text: 'NO PRIZE', color: '#BDC3C7' },
-      { text: 'NO PRIZE', color: '#BDC3C7' }
-    ];
-    
-    const segmentsForWheel = prizeData.map(item => ({
-      fillStyle: item.color,
-      text: item.text
-    }));
-    
-    // Inizializza la ruota sul canvas "wheelCanvas"
-    const theWheel = new Winwheel({
-      canvasId: 'wheelCanvas',
-      numSegments: prizeData.length,
-      outerRadius: 140, // Adattato per un canvas 300x300
-      segments: segmentsForWheel,
-      animation: {
-        type: 'spinToStop',
-        duration: 3,  // 3 secondi di animazione
-        spins: 5,
-        callbackFinished: function(indicatedSegment) {
-          alert("Hai vinto: " + indicatedSegment.text);
-        }
+    // Assicurati che Winwheel sia definito
+    window.addEventListener("load", function() {
+      if (typeof Winwheel === "undefined") {
+        console.error("Winwheel non è definito");
+      } else {
+        console.log("Winwheel caricato:", Winwheel);
       }
-    });
-    
-    // Collegare il pulsante "Gira la ruota" (btnSpin)
-    document.getElementById("btnSpin").addEventListener("click", () => {
-      theWheel.startAnimation();
+      
+      // Definisci i segmenti per la ruota
+      const prizeData = [
+        { text: '10 GKY',   color: '#F1C40F' },
+        { text: '20 GKY',   color: '#E67E22' },
+        { text: '50 GKY',   color: '#E74C3C' },
+        { text: '100 GKY',  color: '#9B59B6' },
+        { text: '250 GKY',  color: '#3498DB' },
+        { text: '500 GKY',  color: '#1ABC9C' },
+        { text: '1000 GKY', color: '#2ECC71' },
+        { text: 'NFT BASIC', color: '#F39C12' },
+        { text: 'NFT STARTER', color: '#C0392B' },
+        { text: 'NO PRIZE', color: '#BDC3C7' },
+        { text: 'NO PRIZE', color: '#BDC3C7' },
+        { text: 'NO PRIZE', color: '#BDC3C7' }
+      ];
+      
+      const segmentsForWheel = prizeData.map(item => ({
+        fillStyle: item.color,
+        text: item.text
+      }));
+      
+      // Inizializza la ruota sul canvas "wheelCanvas"
+      const theWheel = new Winwheel({
+        canvasId: 'wheelCanvas',
+        numSegments: prizeData.length,
+        outerRadius: 140, // Adattato per un canvas 300x300
+        segments: segmentsForWheel,
+        animation: {
+          type: 'spinToStop',
+          duration: 3,  // 3 secondi di animazione
+          spins: 5,
+          callbackFinished: function(indicatedSegment) {
+            alert("Hai vinto: " + indicatedSegment.text);
+          }
+        }
+      });
+      
+      // Collegare il pulsante "Gira la ruota" (btnSpin)
+      document.getElementById("btnSpin").addEventListener("click", () => {
+        theWheel.startAnimation();
+      });
     });
   </script>
 </body>
