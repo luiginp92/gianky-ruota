@@ -29,7 +29,7 @@
       <p>
         <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio di distribuzione:
         <br>
-        <code id="distributionAddress">0xBc0c054066966a7A6C875981a18376e2296e5815</code>
+        <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
         <br>
         Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo nel campo sottostante per confermare l'acquisto.
       </p>
@@ -67,8 +67,6 @@
         }
         const data = await res.json();
         document.getElementById("instructionMessage").innerText = data.message;
-        // Imposta in modo fisso il portafoglio di distribuzione
-        document.getElementById("distributionAddress").innerText = "0xBc0c054066966a7A6C875981a18376e2296e5815";
         document.getElementById("instructions").style.display = "block";
       } catch (error) {
         console.error("Errore nella richiesta di acquisto:", error);
@@ -99,6 +97,8 @@
         }
         const data = await res.json();
         alert(data.message);
+        // Dopo la conferma, reindirizza alla pagina index
+        window.location.href = "/static/index.html";
       } catch (error) {
         console.error("Errore nella conferma dell'acquisto:", error);
         alert("Errore nella conferma dell'acquisto.");
