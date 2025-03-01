@@ -1,63 +1,32 @@
 #!/usr/bin/env python3
 """
-Gianky Coin Web App – main.py
------------------------------
-Questa applicazione espone tramite API REST la logica del gioco con:
- • Autenticazione basata sulla firma del wallet (JWT)
- • Validazioni robuste con Pydantic
- • Endpoints per gioco, acquisti, referral, ecc.
- • Un frontend minimale per interagire con il sistema
+Gianky Coin Bot - main.py
+--------------------------
+Questo file implementa un bot Telegram che:
+  - Collega il wallet (/connect)
+  - Mostra la ruota statica (/ruota) con un contatore aggiornato dei tiri disponibili.
+  - Al click sul pulsante "Gira la ruota!" consuma uno spin, calcola il premio e aggiorna il messaggio.
+  - Ogni giorno (fuso orario italiano) è disponibile un giro gratuito; extra spin possono essere acquistati.
+  - È disponibile una task settimanale di condivisione per vincere 1 giro extra.
+  - Gli utenti possono ottenere un link referral (/referral) e, se un nuovo utente si registra tramite quel link, l’invitante riceve 2 extra spin.
+  - Il comando /giankyadmin mostra un report globale delle entrate e uscite.
+  - La funzione /confirmbuy conferma manualmente l'acquisto di extra spin.
 """
+
+#######################################
+# IMPORTAZIONI E CONFIGURAZIONI INIZIALI
+#######################################
 
 import logging
 import random
 import datetime
 import os
+import io
+import asyncio
 import pytz
-from typing import Optional
-
-from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-import uvicorn
 
 from web3 import Web3
-from eth_account.messages import encode_defunct
-
-# Per JWT
-from jose import JWTError, jwt
-from fastapi.security import OAuth2PasswordBearer
-
-# Importa il modulo del database
-from database import Session, User, PremioVinto, GlobalCounter, init_db
-
-# ------------------------------------------------
-# CONFIGURAZIONI DI BASE E LOGGING
-# ------------------------------------------------
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-
-# ------------------------------------------------
-# CONFIGURAZIONI BLOCKCHAIN E COSTANTI
-# ------------------------------------------------
-POLYGON_RPC = "https://polygon-rpc.com"
-WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
-CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
-PRIVATE_KEY = os.getenv("PRIVATE_KEY_GKY")
-if not PRIVATE_KEY:
-    raise ValueError("❌ Errore: la chiave privata non è impostata.")
-
-IMAGE_PATH = "ruota.png"
-if os.path.exists(IMAGE_PATH):
-    with open(IMAGE_PATH, "rb") as f:
-        STATIC_IMAGE_BYTES = f.read()
-else:
-    STATIC_IMAGE_BYTES = None
-    logging.error("File statico non trovato: ruota.png")
-
-# Middleware custom per POA
+# Middleware custom per POA: gestisce il campo extraData
 def custom_geth_poa_middleware(make_request, web3=None):
     def middleware(method, params):
         response = make_request(method, params)
@@ -69,57 +38,74 @@ def custom_geth_poa_middleware(make_request, web3=None):
         return response
     return middleware
 
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputFile,
+)
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
+from telegram.request import HTTPXRequest
+
+from database import Session, User, PremioVinto, GlobalCounter
+
+#######################################
+# CONFIGURAZIONE DEL LOGGING
+#######################################
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+
+#######################################
+# COSTANTI E CONFIGURAZIONI DEL BOT
+#######################################
+
+TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
+IMAGE_PATH = "ruota.png"      # Immagine statica della ruota
+BOT_USERNAME = "giankytestbot" # Username del bot (senza @)
+
+POLYGON_RPC = "https://polygon-rpc.com"
+# Istanza Web3 con il middleware custom (per operazioni generali)
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
+
+# Istanza Web3 senza middleware (usata esclusivamente per la verifica della transazione)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
-# Variabile globale per tx duplicate
+WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
+CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
+
+PRIVATE_KEY = os.getenv("PRIVATE_KEY_GKY")
+if not PRIVATE_KEY:
+    raise ValueError("❌ Errore: la chiave privata non è impostata.")
+
+#######################################
+# CACHING DEL FILE DI IMMAGINE STATICA
+#######################################
+
+if os.path.exists(IMAGE_PATH):
+    with open(IMAGE_PATH, "rb") as f:
+        STATIC_IMAGE_BYTES = f.read()
+else:
+    STATIC_IMAGE_BYTES = None
+    logging.error("File statico non trovato: ruota.png")
+
+#######################################
+# VARIABILE GLOBALE PER TX DUPLICATI
+#######################################
+
 USED_TX = set()
 
-# ------------------------------------------------
-# CONFIGURAZIONI JWT & AUTENTICAZIONE
-# ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con una chiave sicura in produzione
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+#######################################
+# FUNZIONI UTILI: GAS, TRANSAZIONI, PREMI, AGGIORNAMENTO CONTATORI
+#######################################
 
-def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/verify")
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-         status_code=status.HTTP_401_UNAUTHORIZED,
-         detail="Could not validate credentials",
-         headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-         wallet_address: str = payload.get("wallet_address")
-         if wallet_address is None:
-             raise credentials_exception
-    except JWTError:
-         raise credentials_exception
-    session = Session()
-    try:
-        user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
-    finally:
-        session.close()
-    if user is None:
-         raise credentials_exception
-    return user
-
-# ------------------------------------------------
-# FUNZIONI UTILI PER BLOCKCHAIN E GIOCO
-# ------------------------------------------------
 def get_dynamic_gas_price():
     try:
         base = w3.eth.gas_price
@@ -153,7 +139,6 @@ def invia_token(destinatario, quantita):
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
-    
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
@@ -170,6 +155,7 @@ def invia_token(destinatario, quantita):
         session.close()
     return True
 
+# Funzione di verifica che usa w3_no_mw per ottenere e decodificare la transazione.
 def verifica_transazione_gky(user_address, tx_hash, cost):
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
@@ -209,106 +195,208 @@ def get_prize():
     r = random.random() * 100
     if r < 0.02:
         return "NFT BASISC"
-    elif r < 0.06:
+    elif r < 0.02 + 0.04:  # r < 0.06
         return "NFT STARTER"
     else:
         r2 = r - 0.06
-        if r2 < 40.575:
+        if r2 < 30:
             return "NO PRIZE"
-        elif r2 < 40.575 + 30.2875:
+        elif r2 < 30 + 25:  # r2 < 55
             return "10 GKY"
-        elif r2 < 40.575 + 30.2875 + 25.2875:
+        elif r2 < 55 + 20:  # r2 < 75
             return "20 GKY"
-        elif r2 < 96.15 + 2:
+        elif r2 < 75 + 2:   # r2 < 77
             return "50 GKY"
-        elif r2 < 98.15 + 1:
+        elif r2 < 77 + 1:   # r2 < 78
             return "100 GKY"
-        elif r2 < 99.15 + 0.5:
+        elif r2 < 78 + 0.5: # r2 < 78.5
             return "250 GKY"
-        elif r2 < 99.65 + 0.25:
+        elif r2 < 78.5 + 0.25: # r2 < 78.75
             return "500 GKY"
-        elif r2 < 99.90 + 0.1:
+        elif r2 < 78.75 + 0.1: # r2 < 78.85
             return "1000 GKY"
         else:
             return "NO PRIZE"
 
-# ------------------------------------------------
-# MODELLI DI INPUT CON Pydantic
-# ------------------------------------------------
-class AuthRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
-    telegram_id: Optional[str] = None
+#######################################
+# COMANDI DEL BOT ESISTENTI
+#######################################
 
-class AuthVerifyRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
-    signature: str
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.args and context.args[0].startswith("ref_"):
+        inviter_id = context.args[0].split("_")[1]
+        telegram_id = str(update.message.from_user.id)
+        session = Session()
+        try:
+            user = session.query(User).filter_by(telegram_id=telegram_id).first()
+            if not user:
+                user = User(telegram_id=telegram_id, extra_spins=0, referred_by=inviter_id)
+                session.add(user)
+                session.commit()
+                inviter = session.query(User).filter_by(telegram_id=inviter_id).first()
+                if inviter:
+                    inviter.extra_spins += 2
+                    session.commit()
+                    await update.message.reply_text(
+                        f"✅ Registrazione tramite referral completata! L'utente {inviter_id} ha guadagnato 2 extra tiri."
+                    )
+            else:
+                if not user.referred_by:
+                    user.referred_by = inviter_id
+                    session.commit()
+                    inviter = session.query(User).filter_by(telegram_id=inviter_id).first()
+                    if inviter:
+                        inviter.extra_spins += 2
+                        session.commit()
+                        await update.message.reply_text(
+                            f"✅ Referral registrato! L'utente {inviter_id} ha guadagnato 2 extra tiri."
+                        )
+        except Exception as e:
+            logging.error(f"Errore in referral in start: {e}")
+            session.rollback()
+        finally:
+            session.close()
+    await update.message.reply_text(
+        "🎉 Benvenuto in Gianky Coin!\n\n"
+        "Usa /connect <wallet_address> per collegare il wallet,\n"
+        "usa /ruota per visualizzare la ruota e il contatore dei tiri disponibili,\n"
+        "/buyspins per acquistare extra tiri,\n"
+        "/sharetask per completare la task di condivisione e guadagnare 1 giro extra (1 volta a settimana),\n"
+        "oppure /referral per ottenere il tuo link referral."
+    )
 
-class BuySpinsRequest(BaseModel):
-    num_spins: int = Field(..., description="Numero di extra spin (1 o 3)", gt=0)
+async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    telegram_id = str(update.message.from_user.id)
+    link = f"https://t.me/{BOT_USERNAME}?start=ref_{telegram_id}"
+    await update.message.reply_text(f"💡 Il tuo link referral:\n{link}")
 
-class ConfirmBuyRequest(BaseModel):
-    tx_hash: str
-    num_spins: int = Field(1, description="Solo 1 o 3 tiri extra", gt=0)
+async def connect(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    telegram_id = str(update.message.from_user.id)
+    if context.args and not context.args[0].startswith("ref_"):
+        wallet_address = context.args[0]
+        if not Web3.is_address(wallet_address):
+            await update.message.reply_text("❌ Indirizzo non valido.")
+            return
+        session = Session()
+        try:
+            user = session.query(User).filter_by(telegram_id=telegram_id).first()
+            if not user:
+                user = User(telegram_id=telegram_id, wallet_address=wallet_address, extra_spins=0)
+                session.add(user)
+            else:
+                user.wallet_address = wallet_address
+            session.commit()
+            await update.message.reply_text("✅ Wallet collegato!")
+        except Exception as e:
+            logging.error(f"Errore connessione wallet: {e}")
+            session.rollback()
+            await update.message.reply_text("❌ Errore durante la connessione del wallet.")
+        finally:
+            session.close()
+    else:
+        await update.message.reply_text("❌ Usa: /connect <wallet_address>")
 
-# ------------------------------------------------
-# NUOVI ENDPOINT PER EXTRA SPINS (NON MODIFICARE ALTRO)
-# ------------------------------------------------
-class ExtraSpinsRequest(BaseModel):
-    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
-
-class ExtraSpinsConfirmRequest(BaseModel):
-    tx_hash: str
-    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
-
-@app.post("/api/extraSpinsRequest")
-async def extra_spins_request(request: ExtraSpinsRequest, current_user: User = Depends(get_current_user)):
+async def ruota(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    telegram_id = str(update.message.from_user.id)
     session = Session()
     try:
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di acquistare extra spin.")
-        if request.num_spins not in [1, 3, 10]:
-            raise HTTPException(status_code=400, detail="❌ Numero di tiri extra non valido. Valori ammessi: 1, 3, 10")
-        
-        if request.num_spins == 1:
-            cost = 50
-        elif request.num_spins == 3:
-            cost = 125
-        elif request.num_spins == 10:
-            cost = 300
-
-        message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
-                   f"{WALLET_DISTRIBUZIONE}\n"
-                   f"Quindi usa l'endpoint /api/extraSpinsConfirm con i dati della transazione.")
-        return {"message": message}
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
     except Exception as e:
-        logging.error(f"Errore in extraSpinsRequest: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la richiesta di acquisto degli extra spin.")
+        logging.error(f"Errore recupero utente: {e}")
+        user = None
+    finally:
+        session.close()
+    if not user or not user.wallet_address:
+        await update.message.reply_text("⚠️ Collega il wallet con /connect")
+        return
+    italy_tz = pytz.timezone("Europe/Rome")
+    now_italy = datetime.datetime.now(italy_tz)
+    if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
+        available = 1 + (user.extra_spins or 0)
+    else:
+        available = user.extra_spins or 0
+    caption = f"🎰 Ruota pronta! Tiri disponibili: {available}\nPremi il pulsante per girarla."
+    keyboard = [[InlineKeyboardButton("🎡 Gira la ruota!", callback_data="spin")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if STATIC_IMAGE_BYTES:
+        photo = InputFile(io.BytesIO(STATIC_IMAGE_BYTES), filename="ruota.png")
+        await update.message.reply_photo(photo=photo, caption=caption, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text("⚠️ Immagine della ruota non trovata.")
+
+async def buyspins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    telegram_id = str(update.message.from_user.id)
+    session = Session()
+    try:
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if not user or not user.wallet_address:
+            await update.message.reply_text("⚠️ Collega il wallet con /connect")
+            return
+        if not context.args:
+            await update.message.reply_text("❌ Specifica il numero di tiri extra (1 o 3).")
+            return
+        try:
+            num_spins = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Numero di tiri deve essere un intero.")
+            return
+        if num_spins == 1:
+            cost = 50
+        elif num_spins == 3:
+            cost = 125
+        else:
+            await update.message.reply_text("❌ Puoi acquistare solo 1 o 3 tiri extra.")
+            return
+        await update.message.reply_text(
+            f"✅ Per acquistare {num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n**{WALLET_DISTRIBUZIONE}**\nUsa /confirmbuy <tx_hash> [<num>]"
+        )
+    except Exception as e:
+        logging.error(f"Errore in buyspins: {e}")
+        await update.message.reply_text("❌ Errore durante l'acquisto dei tiri extra.")
     finally:
         session.close()
 
-@app.post("/api/extraSpinsConfirm")
-async def extra_spins_confirm(request: ExtraSpinsConfirmRequest, current_user: User = Depends(get_current_user)):
+async def confirmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /confirmbuy <tx_hash> [<num>]
+
+    Questa funzione conferma manualmente l'acquisto di extra spin.
+    Se viene fornito solo il tx_hash, si assume per default 1 spin (costo 50 GKY).
+    Se viene specificato il numero, sono ammessi solo 1 o 3 tiri extra.
+    La transazione viene verificata (usando un'istanza Web3 senza middleware) e viene
+    controllato che non sia già stata usata.
+    """
+    telegram_id = str(update.message.from_user.id)
     session = Session()
     try:
-        if request.tx_hash in USED_TX:
-            raise HTTPException(status_code=400, detail="❌ Questa transazione è già stata usata per l'acquisto degli extra tiri.")
-        if request.num_spins not in [1, 3, 10]:
-            raise HTTPException(status_code=400, detail="❌ Numero di tiri extra non valido. Valori ammessi: 1, 3, 10")
-        
-        if request.num_spins == 1:
-            cost = 50
-        elif request.num_spins == 3:
-            cost = 125
-        elif request.num_spins == 10:
-            cost = 300
-        
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di confermare l'acquisto.")
-        
-        if verifica_transazione_gky(current_user.wallet_address, request.tx_hash, cost):
-            current_user.extra_spins = (current_user.extra_spins or 0) + request.num_spins
+        if not context.args or len(context.args) < 1:
+            await update.message.reply_text("❌ Usa: /confirmbuy <tx_hash> [<num>]")
+            return
+        tx_hash = context.args[0]
+        if tx_hash in USED_TX:
+            await update.message.reply_text("❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
+            return
+        if len(context.args) == 1:
+            num_spins = 1
+        else:
+            try:
+                num_spins = int(context.args[1])
+            except:
+                await update.message.reply_text("❌ Numero di tiri deve essere un intero.")
+                return
+            if num_spins not in [1, 3]:
+                await update.message.reply_text("❌ Solo 1 o 3 tiri extra sono ammessi.")
+                return
+
+        cost = 50 if num_spins == 1 else 125
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if not user or not user.wallet_address:
+            await update.message.reply_text("⚠️ Collega il wallet con /connect")
+            return
+        if verifica_transazione_gky(user.wallet_address, tx_hash, cost):
+            user.extra_spins = (user.extra_spins or 0) + num_spins
             session.commit()
-            USED_TX.add(request.tx_hash)
+            USED_TX.add(tx_hash)
             counter = session.query(GlobalCounter).first()
             if counter is not None:
                 counter.total_in += cost
@@ -316,205 +404,73 @@ async def extra_spins_confirm(request: ExtraSpinsConfirmRequest, current_user: U
                 counter = GlobalCounter(total_in=cost, total_out=0.0)
                 session.add(counter)
             session.commit()
-            return {"message": f"✅ Acquisto confermato! Extra tiri disponibili: {current_user.extra_spins}"}
+            await update.message.reply_text(f"✅ Acquisto confermato! Extra tiri disponibili: {user.extra_spins}")
         else:
-            raise HTTPException(status_code=400, detail="❌ Transazione non valida o importo insufficiente.")
-    except HTTPException as he:
-        raise he
+            await update.message.reply_text("❌ Transazione non valida o importo insufficiente.")
     except Exception as e:
-        logging.error(f"Errore in extraSpinsConfirm: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la conferma degli extra spin.")
+        logging.error(f"Errore in confirmbuy: {e}")
+        await update.message.reply_text("❌ Errore durante la conferma degli extra tiri.")
     finally:
         session.close()
 
-# ------------------------------------------------
-# RESTO DEGLI ENDPOINT ESISTENTI
-# ------------------------------------------------
-@app.get("/", response_class=HTMLResponse)
-async def home():
-    return """
-    <html>
-      <head>
-        <meta http-equiv="refresh" content="0; url=/static/index.html" />
-      </head>
-      <body>
-      </body>
-    </html>
-    """
-
-@app.on_event("startup")
-def on_startup():
-    init_db()
-
-@app.post("/api/auth/request_nonce")
-async def request_nonce(auth: AuthRequest):
-    nonce = str(random.randint(100000, 999999))
-    session = Session()
-    try:
-        user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
-        if not user:
-            user = User(wallet_address=auth.wallet_address, telegram_id=auth.telegram_id, extra_spins=0)
-            session.add(user)
-        user.nonce = nonce
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Errore in request_nonce: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la richiesta del nonce.")
-    finally:
-        session.close()
-    return {"nonce": nonce}
-
-@app.post("/api/auth/verify")
-async def auth_verify(auth: AuthVerifyRequest):
-    session = Session()
-    try:
-        user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
-        if not user or not user.nonce:
-            raise HTTPException(status_code=400, detail="Richiedi prima un nonce.")
-        message = encode_defunct(text=user.nonce)
-        try:
-            recovered_address = w3.eth.account.recover_message(message, signature=auth.signature)
-        except Exception as e:
-            logging.error(f"Errore nella verifica della firma: {e}")
-            raise HTTPException(status_code=400, detail="Firma non valida.")
-        if recovered_address.lower() != auth.wallet_address.lower():
-            raise HTTPException(status_code=400, detail="Firma non corrisponde all'indirizzo.")
-        access_token = create_access_token(data={"wallet_address": auth.wallet_address})
-        user.nonce = None
-        session.commit()
-        return {"access_token": access_token, "token_type": "bearer"}
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Errore in auth_verify: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la verifica dell'autenticazione.")
-    finally:
-        session.close()
-
-@app.get("/api/ruota")
-async def api_ruota(current_user: User = Depends(get_current_user)):
-    session = Session()
-    try:
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di giocare.")
-        italy_tz = pytz.timezone("Europe/Rome")
-        now_italy = datetime.datetime.now(italy_tz)
-        if (not current_user.last_play_date) or (current_user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
-            available = 1 + (current_user.extra_spins or 0)
-        else:
-            available = current_user.extra_spins or 0
-        ruota_url = "/wheel" if STATIC_IMAGE_BYTES else None
-        return {
-            "message": f"🎰 Ruota pronta! Tiri disponibili: {available}",
-            "available_spins": available,
-            "ruota_image_url": ruota_url
-        }
-    except Exception as e:
-        logging.error(f"Errore in ruota: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante il recupero dello stato della ruota.")
-    finally:
-        session.close()
-
-@app.get("/wheel")
-async def get_wheel():
-    if STATIC_IMAGE_BYTES:
-        return FileResponse(IMAGE_PATH, media_type="image/png")
-    else:
-        raise HTTPException(status_code=404, detail="Immagine della ruota non trovata.")
-
-@app.post("/api/spin")
-async def api_spin(current_user: User = Depends(get_current_user)):
-    session = Session()
-    try:
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di giocare.")
-        italy_tz = pytz.timezone("Europe/Rome")
-        now_italy = datetime.datetime.now(italy_tz)
-        if (not current_user.last_play_date) or (current_user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
-            available = 1 + (current_user.extra_spins or 0)
-            current_user.last_play_date = now_italy
-            session.commit()
-        else:
-            available = current_user.extra_spins or 0
-            if available > 0:
-                current_user.extra_spins -= 1
-                session.commit()
-                available -= 1
-            else:
-                raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
-        prize = get_prize()
-        if prize == "NO PRIZE":
-            result_text = "😔 Nessun premio vinto. Riprova!"
-        elif "GKY" in prize:
-            amount = int(prize.split(" ")[0])
-            if invia_token(current_user.wallet_address, amount):
-                result_text = f"🎉 Hai vinto {amount} GKY!"
-            else:
-                result_text = "❌ Errore nell'invio dei token."
-        else:
-            result_text = f"🎉 Hai vinto: {prize}!"
-            premio_record = PremioVinto(
-                telegram_id=current_user.telegram_id or "N/A",
-                wallet=current_user.wallet_address,
-                premio=prize,
-                user_id=current_user.id
-            )
-            session.add(premio_record)
-            session.commit()
-        return {
-            "message": result_text,
-            "available_spins": available
-        }
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        logging.error(f"Errore nello spin: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante il giro della ruota.")
-    finally:
-        session.close()
-
-@app.post("/api/referral")
-async def api_referral(current_user: User = Depends(get_current_user)):
-    referral_link = f"https://t.me/tuo_bot?start=ref_{current_user.wallet_address}"
-    return {"referral_link": referral_link}
-
-@app.post("/api/sharetask")
-async def api_sharetask(current_user: User = Depends(get_current_user)):
+async def sharetask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     video_url = "https://www.youtube.com/watch?v=AbpPYERGCXI&ab_channel=GKY-OFFICIAL"
-    return {
-        "message": "📢 Condividi questo video per vincere 1 giro extra. (La task può essere completata 1 volta a settimana.)",
-        "video_url": video_url,
-        "instruction": "Dopo aver condiviso, usa l'endpoint /api/claim_share_reward."
-    }
+    keyboard = [[InlineKeyboardButton("Condividi e vinci", url=video_url)]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "📢 Condividi questo video per vincere 1 giro extra.\n(La task può essere completata 1 volta a settimana.)",
+        reply_markup=reply_markup
+    )
+    confirm_keyboard = [[InlineKeyboardButton("Conferma task", callback_data="confirm_share_task")]]
+    confirm_markup = InlineKeyboardMarkup(confirm_keyboard)
+    await update.message.reply_text("Quando hai condiviso, premi il pulsante:", reply_markup=confirm_markup)
 
-@app.post("/api/claim_share_reward")
-async def api_claim_share_reward(current_user: User = Depends(get_current_user)):
+async def confirm_share_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.message.reply_text("⏳ Attendi, il check della task durerà max 10 minuti...")
+    asyncio.create_task(delayed_reward(query))
+
+async def delayed_reward(query):
+    await asyncio.sleep(600)
+    reward_keyboard = [[InlineKeyboardButton("Prendi premio", callback_data="claim_share_reward")]]
+    reward_markup = InlineKeyboardMarkup(reward_keyboard)
+    try:
+        await query.message.reply_text("✅ Check completato. Premi 'Prendi premio' per ottenere 1 giro extra.", reply_markup=reward_markup)
+    except Exception as e:
+        logging.error(f"Errore in delayed_reward: {e}")
+
+async def claim_share_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    telegram_id = str(query.from_user.id)
     session = Session()
     try:
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if not user:
+            await query.edit_message_caption("⚠️ Utente non trovato. Usa /connect per collegare il wallet.")
+            return
         now = datetime.datetime.now(pytz.timezone("Europe/Rome"))
-        if current_user.last_share_task is not None:
-            diff = now - current_user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
+        if user.last_share_task is not None:
+            diff = now - user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
             if diff < datetime.timedelta(days=7):
                 remaining = datetime.timedelta(days=7) - diff
-                raise HTTPException(status_code=400, detail=f"⏳ Hai già completato la task. Riprova tra {remaining}.")
-        current_user.extra_spins += 1
-        current_user.last_share_task = now
+                await query.edit_message_caption(f"⏳ Hai già completato la task. Rifalla per guadagnare un nuovo giro extra.\nRiprova tra {remaining}.")
+                return
+        user.extra_spins += 1
+        user.last_share_task = now
         session.commit()
-        return {"message": f"🎉 Task completata! Hai guadagnato 1 giro extra. Extra tiri disponibili: {current_user.extra_spins}"}
-    except HTTPException as he:
-        raise he
+        await query.edit_message_caption(f"🎉 Task completata! Hai guadagnato 1 giro extra.\nExtra tiri disponibili: {user.extra_spins}")
     except Exception as e:
         logging.error(f"Errore in claim_share_reward: {e}")
-        raise HTTPException(status_code=500, detail="❌ Errore durante il riscatto del premio.")
+        await query.edit_message_caption("❌ Errore durante il riscatto del premio.")
     finally:
         session.close()
 
-@app.get("/api/giankyadmin")
-async def api_giankyadmin(current_user: User = Depends(get_current_user)):
+async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = Session()
     try:
+        from sqlalchemy import func
         counter = session.query(GlobalCounter).first()
         if counter is None:
             report_text = "Nessun dato disponibile ancora."
@@ -527,12 +483,102 @@ async def api_giankyadmin(current_user: User = Depends(get_current_user)):
                 f"Uscite totali: {total_out} GKY\n"
                 f"Bilancio: {total_in - total_out} GKY"
             )
-        return {"report": report_text}
+        await update.message.reply_text(report_text)
     except Exception as e:
         logging.error(f"Errore nel report admin: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la generazione del report.")
+        await update.message.reply_text("❌ Errore durante la generazione del report.")
     finally:
         session.close()
 
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    try:
+        await query.answer()
+    except Exception as e:
+        logging.error(f"Errore in query.answer(): {e}")
+    telegram_id = str(query.from_user.id)
+    session = Session()
+    try:
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if not user or not user.wallet_address:
+            await query.edit_message_caption("⚠️ Collega il wallet con /connect")
+            return
+        italy_tz = pytz.timezone("Europe/Rome")
+        now_italy = datetime.datetime.now(italy_tz)
+        if user.last_play_date is None or user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
+            available = 1 + (user.extra_spins or 0)
+            user.last_play_date = now_italy
+            session.commit()
+        else:
+            available = user.extra_spins or 0
+            if available > 0:
+                user.extra_spins -= 1
+                session.commit()
+                available -= 1
+            else:
+                await query.edit_message_caption("⚠️ Hai esaurito i tiri disponibili per oggi. Acquista extra tiri con /buyspins.")
+                return
+        prize = get_prize()
+        if prize == "NO PRIZE":
+            result_text = "😔 Nessun premio vinto. Riprova!"
+        elif "GKY" in prize:
+            amount = int(prize.split(" ")[0])
+            if invia_token(user.wallet_address, amount):
+                result_text = f"🎉 Hai vinto {amount} GKY!"
+            else:
+                result_text = "❌ Errore nell'invio dei token."
+        else:
+            result_text = f"🎉 Hai vinto: {prize}!"
+            premio_record = PremioVinto(telegram_id=telegram_id, wallet=user.wallet_address, premio=prize, user_id=user.id)
+            session.add(premio_record)
+            session.commit()
+        if user.last_play_date.astimezone(italy_tz).date() != now_italy.date():
+            new_available = 1 + (user.extra_spins or 0)
+        else:
+            new_available = user.extra_spins or 0
+        new_caption = f"{result_text}\n\n🎰 Ruota pronta! Tiri disponibili: {new_available}"
+        try:
+            await query.edit_message_caption(caption=new_caption)
+        except Exception as e:
+            logging.error(f"Errore nell'aggiornamento della didascalia: {e}")
+            await query.message.reply_text(new_caption)
+    except Exception as e:
+        logging.error(f"Errore nel callback della ruota: {e}")
+        try:
+            await query.edit_message_caption("❌ Errore durante il giro della ruota.")
+        except Exception:
+            await query.message.reply_text("❌ Errore durante il giro della ruota.")
+    finally:
+        session.close()
+
+#######################################
+# FUNZIONE PRINCIPALE
+#######################################
+
+def main():
+    request = HTTPXRequest(connect_timeout=30, read_timeout=30)
+    app = ApplicationBuilder().token(TOKEN).request(request).build()
+    
+    # Aggiungi gli handler dei comandi
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("connect", connect))
+    app.add_handler(CommandHandler("ruota", ruota))
+    app.add_handler(CommandHandler("buyspins", buyspins))
+    app.add_handler(CommandHandler("confirmbuy", confirmbuy))
+    app.add_handler(CommandHandler("referral", referral))
+    app.add_handler(CommandHandler("sharetask", sharetask))
+    app.add_handler(CommandHandler("giankyadmin", giankyadmin))
+    
+    # Aggiungi gli handler per le callback
+    app.add_handler(CallbackQueryHandler(confirm_share_task, pattern="^confirm_share_task$"))
+    # Se la funzione claim_share_reward è necessaria, va aggiunta qui
+    # app.add_handler(CallbackQueryHandler(claim_share_reward, pattern="^claim_share_reward$"))
+    app.add_handler(CallbackQueryHandler(button))
+    
+    # Rimosso il task automatico per la verifica delle transazioni.
+    
+    logging.info("✅ Bot in esecuzione...")
+    app.run_polling()
+
 if __name__ == '__main__':
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    main()
