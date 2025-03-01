@@ -74,6 +74,67 @@ app.post('/api/spin', async (req, res) => {
   res.json({ message: "Spin completato! Buona fortuna!" });
 });
 
+/* -------------------------------------------------
+   FUNZIONE DI ACQUISTO EXTRA SPIN
+--------------------------------------------------*/
+
+// In-memory store per tracciare gli extra spin acquistati per ogni wallet
+let extraSpinsStore = {};
+
+// Endpoint per richiedere l'acquisto degli extra spin
+// Il corpo della richiesta deve contenere: walletAddress e numSpins
+// Valori ammessi per numSpins: 1, 3, 10
+app.post('/api/buyspins', (req, res) => {
+  const { walletAddress, numSpins } = req.body;
+  if (!walletAddress || !numSpins) {
+    return res.status(400).json({ message: "Dati mancanti" });
+  }
+  if (![1, 3, 10].includes(numSpins)) {
+    return res.status(400).json({ message: "Numero di tiri extra non valido. Valori ammessi: 1, 3, 10" });
+  }
+  
+  let cost;
+  if (numSpins === 1) cost = "50";
+  else if (numSpins === 3) cost = "125";
+  else if (numSpins === 10) cost = "300";
+  
+  const distributionAddress = distributionWallet.address;
+  return res.json({ 
+    message: `Per acquistare ${numSpins} tiri extra, trasferisci ${cost} GKY al portafoglio: ${distributionAddress}. Dopo il trasferimento, conferma la transazione tramite l'endpoint /api/confirmbuy.` 
+  });
+});
+
+// Endpoint per confermare l'acquisto degli extra spin
+// Il corpo della richiesta deve contenere: walletAddress, numSpins e txHash
+app.post('/api/confirmbuy', async (req, res) => {
+  const { walletAddress, numSpins, txHash } = req.body;
+  if (!walletAddress || !numSpins || !txHash) {
+    return res.status(400).json({ message: "Dati mancanti" });
+  }
+  if (![1, 3, 10].includes(numSpins)) {
+    return res.status(400).json({ message: "Numero di tiri extra non valido. Valori ammessi: 1, 3, 10" });
+  }
+  
+  try {
+    // Verifica la transazione (simulazione: controlliamo che esista)
+    const tx = await provider.getTransaction(txHash);
+    if (!tx) {
+      return res.status(400).json({ message: "Transazione non trovata" });
+    }
+    
+    // Aggiorna l'extra spins per il wallet (in memoria)
+    if (!extraSpinsStore[walletAddress]) {
+      extraSpinsStore[walletAddress] = 0;
+    }
+    extraSpinsStore[walletAddress] += numSpins;
+    
+    return res.json({ message: `Acquisto confermato! Ora hai ${extraSpinsStore[walletAddress]} tiri extra.` });
+  } catch (error) {
+    console.error("Errore nella conferma dell'acquisto:", error);
+    return res.status(500).json({ message: "Errore durante la conferma dell'acquisto." });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server in ascolto sulla porta ${port}`);
 });

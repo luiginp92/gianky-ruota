@@ -70,12 +70,25 @@
   
   <!-- Script personalizzati -->
   <script defer>
-    // Gestione del pulsante "Connetti Wallet"
+    // Reindirizza a connectwallet.html quando si preme "Connetti Wallet"
     document.getElementById("btnConnect").addEventListener("click", function() {
       window.location.href = "/static/connectwallet.html";
     });
     
-    // Aggiornamento saldi
+    // Reindirizza a buyspins.html quando si preme "Acquista Extra Tiri"
+    document.getElementById("btnBuySpins").addEventListener("click", function() {
+      window.location.href = "/static/buyspins.html";
+    });
+    
+    // Altri pulsanti di navigazione
+    document.getElementById("btnReferral").addEventListener("click", function() {
+      window.location.href = "/static/referral.html";
+    });
+    document.getElementById("btnTask").addEventListener("click", function() {
+      window.location.href = "/static/task.html";
+    });
+    
+    // Aggiorna saldi prelevando dati dal wallet
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -100,7 +113,7 @@
     }
     window.addEventListener("load", updateBalances);
     
-    // Gestione dei giri gratuiti
+    // Gestione dei giri gratuiti (basata su localStorage)
     function getFreeSpins() {
       let freeSpins = parseInt(localStorage.getItem("freeSpins") || "0", 10);
       const lastReset = localStorage.getItem("lastReset");
@@ -124,7 +137,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Evento per "Gira la ruota": verifica giri gratuiti, decrementa e avvia l'animazione
+    // Evento per "Gira la ruota": controlla i giri gratuiti e avvia l'animazione della ruota
     document.getElementById("btnSpin").addEventListener("click", function() {
       if (getFreeSpins() <= 0) {
         alert("Non hai giri gratuiti disponibili. Acquista extra tiri.");
@@ -136,15 +149,6 @@
       } else {
         console.error("La ruota non è inizializzata");
       }
-    });
-    document.getElementById("btnBuySpins").addEventListener("click", function() {
-      window.location.href = "/static/buyspins.html";
-    });
-    document.getElementById("btnReferral").addEventListener("click", function() {
-      window.location.href = "/static/referral.html";
-    });
-    document.getElementById("btnTask").addEventListener("click", function() {
-      window.location.href = "/static/task.html";
     });
     
     // Inizializzazione della ruota con Winwheel
@@ -182,11 +186,9 @@
           spins: 5,
           callbackFinished: async function(indicatedSegment) {
             alert("Hai vinto: " + indicatedSegment.text);
-            // Se il premio non è "NO PRIZE", chiama l'API per distribuire il premio
             if (indicatedSegment.text !== "NO PRIZE") {
               await distributePrize(indicatedSegment);
             }
-            // Registra lo spin chiamando l'endpoint /api/spin e aggiorna i saldi
             try {
               const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
               const data = await res.json();
