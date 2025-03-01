@@ -42,9 +42,7 @@
   </div>
   
   <script>
-    // Il codice originale funzionante, con le integrazioni richieste:
-    const token = localStorage.getItem("token"); // Se esiste
-
+    // Quando viene premuto "Richiedi Acquisto"
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       if (!walletAddress) {
@@ -55,10 +53,7 @@
       try {
         const res = await fetch("/api/buyspins", {
           method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            ...(token && { "Authorization": "Bearer " + token })
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
@@ -71,6 +66,7 @@
       }
     });
 
+    // Quando viene premuto "Conferma Acquisto"
     document.getElementById("confirmPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       const numSpins = document.getElementById("numSpins").value;
@@ -82,10 +78,7 @@
       try {
         const res = await fetch("/api/confirmbuy", {
           method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            ...(token && { "Authorization": "Bearer " + token })
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins), txHash })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
