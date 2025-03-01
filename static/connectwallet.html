@@ -13,55 +13,65 @@
 <body>
   <div class="container">
     <h1>Connetti il tuo Wallet</h1>
-    <p>Inserisci il tuo indirizzo Polygon (0x...):</p>
-    <input type="text" id="walletAddressInput" class="form-control" placeholder="0x..." />
-    <button id="connectWallet" class="btn btn-primary mt-3">Connetti Wallet</button>
+    <p>Clicca sul pulsante per connettere il tuo wallet e autenticarti.</p>
+    <button id="connectWallet" class="btn btn-primary mt-3">Connetti e Autentica Wallet</button>
   </div>
   
   <!-- Includi ethers.js UMD dal CDN -->
   <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   
   <script>
-    if (typeof window.ethers === "undefined") {
-      console.error("ethers non è caricato");
-    } else {
-      console.log("ethers caricato:", window.ethers);
-    }
-    
-    document.getElementById("connectWallet").addEventListener("click", async function() {
-      const input = document.getElementById("walletAddressInput").value.trim();
-      if (!input) {
-        alert("Inserisci un indirizzo valido");
-        return;
-      }
-      if (!window.ethers.utils.isAddress(input)) {
-        alert("Indirizzo non valido");
+    async function connectAndAuthenticate() {
+      if (!window.ethereum) {
+        alert("MetaMask non è installato. Installa MetaMask per continuare.");
         return;
       }
       
       try {
-        const provider = new window.ethers.providers.JsonRpcProvider("https://polygon-rpc.com/");
-        const balanceWei = await provider.getBalance(input);
-        const balanceMatic = window.ethers.utils.formatEther(balanceWei);
+        // Richiedi l'accesso all'account
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const walletAddress = accounts[0];
+        // Salva l'indirizzo del wallet in localStorage
+        localStorage.setItem("walletAddress", walletAddress);
         
-        const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
-        const tokenAbi = ["function balanceOf(address owner) view returns (uint256)"];
-        const tokenContract = new window.ethers.Contract(tokenAddress, tokenAbi, provider);
-        const tokenBalanceWei = await tokenContract.balanceOf(input);
-        const tokenBalance = window.ethers.utils.formatEther(tokenBalanceWei);
+        // Crea un provider e signer con ethers
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
         
-        // Salva l'indirizzo del wallet e il token (qui usiamo l'indirizzo come token)
-        localStorage.setItem("walletAddress", input);
-        localStorage.setItem("token", input);
-        localStorage.setItem("maticBalance", parseFloat(balanceMatic).toFixed(4));
-        localStorage.setItem("tokenBalance", parseFloat(tokenBalance).toFixed(4));
+        // Richiedi il nonce dall'endpoint /api/auth/request_nonce
+        const nonceRes = await fetch("/api/auth/request_nonce", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: walletAddress })
+        });
+        if (!nonceRes.ok) throw new Error("Errore nella richiesta del nonce.");
+        const nonceData = await nonceRes.json();
+        const nonce = nonceData.nonce;
         
+        // Firma il nonce con il wallet
+        const signature = await signer.signMessage(nonce);
+        
+        // Verifica la firma tramite /api/auth/verify per ottenere il token JWT
+        const verifyRes = await fetch("/api/auth/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: walletAddress, signature: signature })
+        });
+        if (!verifyRes.ok) throw new Error("Errore nell'autenticazione.");
+        const verifyData = await verifyRes.json();
+        const accessToken = verifyData.access_token;
+        // Salva il token in localStorage
+        localStorage.setItem("access_token", accessToken);
+        
+        // Redirect all'app principale
         window.location.href = "/static/index.html";
       } catch (error) {
-        console.error("Errore nel collegamento del wallet:", error);
-        alert("Errore nel collegamento del wallet. Riprova.");
+        console.error("Errore durante la connessione e l'autenticazione:", error);
+        alert("Errore durante la connessione e l'autenticazione. Riprova.");
       }
-    });
+    }
+    
+    document.getElementById("connectWallet").addEventListener("click", connectAndAuthenticate);
   </script>
 </body>
 </html>

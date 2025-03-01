@@ -250,6 +250,9 @@ class ConfirmBuyRequest(BaseModel):
     tx_hash: str
     num_spins: int = Field(1, description="Solo 1 o 3 tiri extra", gt=0)
 
+class DistributePrizeRequest(BaseModel):
+    prize: str
+
 # ------------------------------------------------
 # CONFIGURAZIONE DI FASTAPI E MOUNT DEL FRONTEND STATICO
 # ------------------------------------------------
@@ -450,6 +453,37 @@ async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depend
     except Exception as e:
         logging.error(f"Errore in confirmbuy: {e}")
         raise HTTPException(status_code=500, detail="Errore durante la conferma degli extra spin.")
+    finally:
+        session.close()
+
+@app.post("/api/distribute")
+async def api_distribute(request: DistributePrizeRequest, current_user: User = Depends(get_current_user)):
+    session = Session()
+    try:
+        prize = request.prize
+        if prize == "NO PRIZE":
+            return {"message": "Nessun premio da distribuire."}
+        if "GKY" in prize:
+            amount = int(prize.split(" ")[0])
+            if invia_token(current_user.wallet_address, amount):
+                return {"message": f"🎉 Hai vinto {amount} GKY!"}
+            else:
+                raise HTTPException(status_code=500, detail="Errore nell'invio dei token.")
+        else:
+            premio_record = PremioVinto(
+                telegram_id=current_user.telegram_id or "N/A",
+                wallet=current_user.wallet_address,
+                premio=prize,
+                user_id=current_user.id
+            )
+            session.add(premio_record)
+            session.commit()
+            return {"message": f"🎉 Hai vinto: {prize}!"}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"Errore in /api/distribute: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante la distribuzione del premio.")
     finally:
         session.close()
 

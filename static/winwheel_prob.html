@@ -108,12 +108,19 @@
         console.error("Wallet non connesso, impossibile distribuire il premio.");
         return;
       }
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("Token di accesso mancante. Effettua l'autenticazione.");
+        return;
+      }
       try {
         const response = await fetch("/api/distribute", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
           body: JSON.stringify({
-            walletAddress: wallet,
             prize: segment.text
           })
         });
