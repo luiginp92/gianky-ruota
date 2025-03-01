@@ -3,8 +3,8 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questa applicazione espone tramite API REST la logica del gioco con:
- • Autenticazione basata sulla firma del wallet (JWT)
- • Validazioni robuste con Pydantic
+ • Verifica della transazione blockchain (importo e destinatario)
+ • Controllo per non utilizzare lo stesso tx più volte
  • Endpoints per gioco, acquisti, referral, ecc.
  • Un frontend minimale per interagire con il sistema
 """
@@ -16,7 +16,7 @@ import os
 import pytz
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Header, Depends, status
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -24,10 +24,6 @@ import uvicorn
 
 from web3 import Web3
 from eth_account.messages import encode_defunct
-
-# Per JWT
-from jose import JWTError, jwt
-from fastapi.security import OAuth2PasswordBearer
 
 # Importa il modulo del database
 from database import Session, User, PremioVinto, GlobalCounter, init_db
@@ -77,44 +73,29 @@ w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 USED_TX = set()
 
 # ------------------------------------------------
-# CONFIGURAZIONI JWT & AUTENTICAZIONE
+# "AUTENTICAZIONE" MINIMA BASATA SU HEADER
 # ------------------------------------------------
-SECRET_KEY = "a_very_secret_key_change_me"  # Sostituisci con una chiave sicura in produzione
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-
-def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/verify")
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-         status_code=status.HTTP_401_UNAUTHORIZED,
-         detail="Could not validate credentials",
-         headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-         wallet_address: str = payload.get("wallet_address")
-         if wallet_address is None:
-             raise credentials_exception
-    except JWTError:
-         raise credentials_exception
+# Invece di usare JWT, ci affidiamo al semplice invio dell'indirizzo wallet tramite l'header "X-Wallet-Address"
+def get_current_user(x_wallet_address: Optional[str] = Header(None)):
+    if not x_wallet_address:
+        raise HTTPException(status_code=401, detail="Non autenticato: manca l'indirizzo del wallet nell'header X-Wallet-Address")
     session = Session()
     try:
-        user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
+        user = session.query(User).filter(User.wallet_address.ilike(x_wallet_address)).first()
     finally:
         session.close()
     if user is None:
-         raise credentials_exception
+        # Se l'utente non esiste, lo creiamo automaticamente (o si può scegliere di restituire errore)
+        session = Session()
+        try:
+            user = User(wallet_address=x_wallet_address, extra_spins=0)
+            session.add(user)
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            raise HTTPException(status_code=500, detail="Errore nella creazione dell'utente")
+        finally:
+            session.close()
     return user
 
 # ------------------------------------------------
@@ -235,14 +216,6 @@ def get_prize():
 # ------------------------------------------------
 # MODELLI DI INPUT CON Pydantic
 # ------------------------------------------------
-class AuthRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
-    telegram_id: Optional[str] = None
-
-class AuthVerifyRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
-    signature: str
-
 class BuySpinsRequest(BaseModel):
     num_spins: int = Field(..., description="Numero di extra spin (1 o 3)", gt=0)
 
@@ -275,141 +248,10 @@ async def home():
 def on_startup():
     init_db()
 
-@app.post("/api/auth/request_nonce")
-async def request_nonce(auth: AuthRequest):
-    nonce = str(random.randint(100000, 999999))
-    session = Session()
-    try:
-        user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
-        if not user:
-            user = User(wallet_address=auth.wallet_address, telegram_id=auth.telegram_id, extra_spins=0)
-            session.add(user)
-        user.nonce = nonce
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Errore in request_nonce: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la richiesta del nonce.")
-    finally:
-        session.close()
-    return {"nonce": nonce}
-
-@app.post("/api/auth/verify")
-async def auth_verify(auth: AuthVerifyRequest):
-    session = Session()
-    try:
-        user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
-        if not user or not user.nonce:
-            raise HTTPException(status_code=400, detail="Richiedi prima un nonce.")
-        message = encode_defunct(text=user.nonce)
-        try:
-            recovered_address = w3.eth.account.recover_message(message, signature=auth.signature)
-        except Exception as e:
-            logging.error(f"Errore nella verifica della firma: {e}")
-            raise HTTPException(status_code=400, detail="Firma non valida.")
-        if recovered_address.lower() != auth.wallet_address.lower():
-            raise HTTPException(status_code=400, detail="Firma non corrisponde all'indirizzo.")
-        access_token = create_access_token(data={"wallet_address": auth.wallet_address})
-        user.nonce = None
-        session.commit()
-        return {"access_token": access_token, "token_type": "bearer"}
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Errore in auth_verify: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la verifica dell'autenticazione.")
-    finally:
-        session.close()
-
-@app.get("/api/ruota")
-async def api_ruota(current_user: User = Depends(get_current_user)):
-    session = Session()
-    try:
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di giocare.")
-        italy_tz = pytz.timezone("Europe/Rome")
-        now_italy = datetime.datetime.now(italy_tz)
-        if (not current_user.last_play_date) or (current_user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
-            available = 1 + (current_user.extra_spins or 0)
-        else:
-            available = current_user.extra_spins or 0
-        ruota_url = "/wheel" if STATIC_IMAGE_BYTES else None
-        return {
-            "message": f"🎰 Ruota pronta! Tiri disponibili: {available}",
-            "available_spins": available,
-            "ruota_image_url": ruota_url
-        }
-    except Exception as e:
-        logging.error(f"Errore in ruota: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante il recupero dello stato della ruota.")
-    finally:
-        session.close()
-
-@app.get("/wheel")
-async def get_wheel():
-    if STATIC_IMAGE_BYTES:
-        return FileResponse(IMAGE_PATH, media_type="image/png")
-    else:
-        raise HTTPException(status_code=404, detail="Immagine della ruota non trovata.")
-
-@app.post("/api/spin")
-async def api_spin(current_user: User = Depends(get_current_user)):
-    session = Session()
-    try:
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di giocare.")
-        italy_tz = pytz.timezone("Europe/Rome")
-        now_italy = datetime.datetime.now(italy_tz)
-        if (not current_user.last_play_date) or (current_user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
-            available = 1 + (current_user.extra_spins or 0)
-            current_user.last_play_date = now_italy
-            session.commit()
-        else:
-            available = current_user.extra_spins or 0
-            if available > 0:
-                current_user.extra_spins -= 1
-                session.commit()
-                available -= 1
-            else:
-                raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
-        prize = get_prize()
-        if prize == "NO PRIZE":
-            result_text = "😔 Nessun premio vinto. Riprova!"
-        elif "GKY" in prize:
-            amount = int(prize.split(" ")[0])
-            if invia_token(current_user.wallet_address, amount):
-                result_text = f"🎉 Hai vinto {amount} GKY!"
-            else:
-                result_text = "❌ Errore nell'invio dei token."
-        else:
-            result_text = f"🎉 Hai vinto: {prize}!"
-            premio_record = PremioVinto(
-                telegram_id=current_user.telegram_id or "N/A",
-                wallet=current_user.wallet_address,
-                premio=prize,
-                user_id=current_user.id
-            )
-            session.add(premio_record)
-            session.commit()
-        return {
-            "message": result_text,
-            "available_spins": available
-        }
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        logging.error(f"Errore nello spin: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante il giro della ruota.")
-    finally:
-        session.close()
-
 @app.post("/api/buyspins")
 async def api_buyspins(request: BuySpinsRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di acquistare extra spin.")
         if request.num_spins not in [1, 3]:
             raise HTTPException(status_code=400, detail="❌ Puoi acquistare solo 1 o 3 tiri extra.")
         cost = 50 if request.num_spins == 1 else 125
@@ -432,8 +274,6 @@ async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depend
         if request.num_spins not in [1, 3]:
             raise HTTPException(status_code=400, detail="❌ Solo 1 o 3 tiri extra sono ammessi.")
         cost = 50 if request.num_spins == 1 else 125
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di confermare l'acquisto.")
         if verifica_transazione_gky(current_user.wallet_address, request.tx_hash, cost):
             current_user.extra_spins = (current_user.extra_spins or 0) + request.num_spins
             session.commit()
@@ -470,6 +310,7 @@ async def api_distribute(request: DistributePrizeRequest, current_user: User = D
             else:
                 raise HTTPException(status_code=500, detail="Errore nell'invio dei token.")
         else:
+            # Per premi diversi, registriamo il premio
             premio_record = PremioVinto(
                 telegram_id=current_user.telegram_id or "N/A",
                 wallet=current_user.wallet_address,
