@@ -50,7 +50,9 @@
         const tokenBalanceWei = await tokenContract.balanceOf(input);
         const tokenBalance = window.ethers.utils.formatEther(tokenBalanceWei);
         
+        // Salva l'indirizzo del wallet e il token (qui usiamo l'indirizzo come token)
         localStorage.setItem("walletAddress", input);
+        localStorage.setItem("token", input);
         localStorage.setItem("maticBalance", parseFloat(balanceMatic).toFixed(4));
         localStorage.setItem("tokenBalance", parseFloat(tokenBalance).toFixed(4));
         
