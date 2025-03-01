@@ -7,6 +7,7 @@
   <style>
     body { padding: 20px; }
     .container { max-width: 600px; margin: auto; }
+    .instruction-box { background-color: #f1f1f1; padding: 15px; border-radius: 8px; margin-top: 15px; }
   </style>
 </head>
 <body>
@@ -22,10 +23,17 @@
       </select>
     </div>
     <button id="requestPurchase" class="btn btn-primary">Richiedi Acquisto</button>
-    <hr>
-    <div id="instructions" style="display:none;">
+    
+    <div id="instructions" style="display:none;" class="instruction-box">
       <h3>Istruzioni per l'acquisto</h3>
       <p id="instructionMessage"></p>
+      <p>
+        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio di distribuzione:
+        <br>
+        <code id="distributionAddress"></code>
+        <br>
+        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo nel campo sottostante per confermare l'acquisto.
+      </p>
       <div class="mb-3">
         <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
         <input type="text" id="txHash" class="form-control" placeholder="TxHash della transazione">
@@ -35,7 +43,10 @@
   </div>
   
   <script>
-    // Quando viene premuto "Richiedi Acquisto"
+    // In base al costo scelto, indica le istruzioni e il portafoglio di distribuzione
+    // Nota: Il portafoglio di distribuzione viene preso dal backend; qui lo impostiamo manualmente in base a ciò che l'API restituisce.
+    // In questa versione, dopo aver cliccato "Richiedi Acquisto", l'API /api/buyspins restituisce il messaggio che include il portafoglio.
+    
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       if (!walletAddress) {
@@ -51,6 +62,11 @@
         });
         const data = await res.json();
         document.getElementById("instructionMessage").innerText = data.message;
+        // Estrai l'indirizzo di distribuzione dal messaggio (assumendo che il messaggio contenga il portafoglio dopo i due punti)
+        const match = data.message.match(/portafoglio:\s*([^.\n]+)/i);
+        if (match && match[1]) {
+          document.getElementById("distributionAddress").innerText = match[1].trim();
+        }
         document.getElementById("instructions").style.display = "block";
       } catch (error) {
         console.error("Errore nella richiesta di acquisto:", error);
@@ -75,7 +91,7 @@
         });
         const data = await res.json();
         alert(data.message);
-        // Puoi aggiungere eventuale reindirizzamento o aggiornamento dello stato qui
+        // Qui puoi eventualmente reindirizzare l'utente o aggiornare lo stato della pagina
       } catch (error) {
         console.error("Errore nella conferma dell'acquisto:", error);
         alert("Errore nella conferma dell'acquisto.");
