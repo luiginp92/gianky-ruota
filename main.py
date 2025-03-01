@@ -251,11 +251,85 @@ class ConfirmBuyRequest(BaseModel):
     num_spins: int = Field(1, description="Solo 1 o 3 tiri extra", gt=0)
 
 # ------------------------------------------------
-# CONFIGURAZIONE DI FASTAPI E MOUNT DEL FRONTEND STATICO
+# NUOVI ENDPOINT PER EXTRA SPINS (NON MODIFICARE ALTRO)
 # ------------------------------------------------
-app = FastAPI(title="Gianky Coin Web App API")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+class ExtraSpinsRequest(BaseModel):
+    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
 
+class ExtraSpinsConfirmRequest(BaseModel):
+    tx_hash: str
+    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
+
+@app.post("/api/extraSpinsRequest")
+async def extra_spins_request(request: ExtraSpinsRequest, current_user: User = Depends(get_current_user)):
+    session = Session()
+    try:
+        if not current_user.wallet_address:
+            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di acquistare extra spin.")
+        if request.num_spins not in [1, 3, 10]:
+            raise HTTPException(status_code=400, detail="❌ Numero di tiri extra non valido. Valori ammessi: 1, 3, 10")
+        
+        if request.num_spins == 1:
+            cost = 50
+        elif request.num_spins == 3:
+            cost = 125
+        elif request.num_spins == 10:
+            cost = 300
+
+        message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
+                   f"{WALLET_DISTRIBUZIONE}\n"
+                   f"Quindi usa l'endpoint /api/extraSpinsConfirm con i dati della transazione.")
+        return {"message": message}
+    except Exception as e:
+        logging.error(f"Errore in extraSpinsRequest: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante la richiesta di acquisto degli extra spin.")
+    finally:
+        session.close()
+
+@app.post("/api/extraSpinsConfirm")
+async def extra_spins_confirm(request: ExtraSpinsConfirmRequest, current_user: User = Depends(get_current_user)):
+    session = Session()
+    try:
+        if request.tx_hash in USED_TX:
+            raise HTTPException(status_code=400, detail="❌ Questa transazione è già stata usata per l'acquisto degli extra tiri.")
+        if request.num_spins not in [1, 3, 10]:
+            raise HTTPException(status_code=400, detail="❌ Numero di tiri extra non valido. Valori ammessi: 1, 3, 10")
+        
+        if request.num_spins == 1:
+            cost = 50
+        elif request.num_spins == 3:
+            cost = 125
+        elif request.num_spins == 10:
+            cost = 300
+        
+        if not current_user.wallet_address:
+            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di confermare l'acquisto.")
+        
+        if verifica_transazione_gky(current_user.wallet_address, request.tx_hash, cost):
+            current_user.extra_spins = (current_user.extra_spins or 0) + request.num_spins
+            session.commit()
+            USED_TX.add(request.tx_hash)
+            counter = session.query(GlobalCounter).first()
+            if counter is not None:
+                counter.total_in += cost
+            else:
+                counter = GlobalCounter(total_in=cost, total_out=0.0)
+                session.add(counter)
+            session.commit()
+            return {"message": f"✅ Acquisto confermato! Extra tiri disponibili: {current_user.extra_spins}"}
+        else:
+            raise HTTPException(status_code=400, detail="❌ Transazione non valida o importo insufficiente.")
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"Errore in extraSpinsConfirm: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante la conferma degli extra spin.")
+    finally:
+        session.close()
+
+# ------------------------------------------------
+# RESTO DEGLI ENDPOINT ESISTENTI
+# ------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def home():
     return """
@@ -401,59 +475,7 @@ async def api_spin(current_user: User = Depends(get_current_user)):
     finally:
         session.close()
 
-@app.post("/api/buyspins")
-async def api_buyspins(request: BuySpinsRequest, current_user: User = Depends(get_current_user)):
-    session = Session()
-    try:
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di acquistare extra spin.")
-        if request.num_spins not in [1, 3]:
-            raise HTTPException(status_code=400, detail="❌ Puoi acquistare solo 1 o 3 tiri extra.")
-        cost = 50 if request.num_spins == 1 else 125
-        message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
-                   f"{WALLET_DISTRIBUZIONE}\n"
-                   f"Quindi usa l'endpoint /api/confirmbuy con i dati della transazione.")
-        return {"message": message}
-    except Exception as e:
-        logging.error(f"Errore in buyspins: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la richiesta di acquisto degli extra spin.")
-    finally:
-        session.close()
-
-@app.post("/api/confirmbuy")
-async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depends(get_current_user)):
-    session = Session()
-    try:
-        if request.tx_hash in USED_TX:
-            raise HTTPException(status_code=400, detail="❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
-        if request.num_spins not in [1, 3]:
-            raise HTTPException(status_code=400, detail="❌ Solo 1 o 3 tiri extra sono ammessi.")
-        cost = 50 if request.num_spins == 1 else 125
-        if not current_user.wallet_address:
-            raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di confermare l'acquisto.")
-        if verifica_transazione_gky(current_user.wallet_address, request.tx_hash, cost):
-            current_user.extra_spins = (current_user.extra_spins or 0) + request.num_spins
-            session.commit()
-            USED_TX.add(request.tx_hash)
-            counter = session.query(GlobalCounter).first()
-            if counter is not None:
-                counter.total_in += cost
-            else:
-                counter = GlobalCounter(total_in=cost, total_out=0.0)
-                session.add(counter)
-            session.commit()
-            return {"message": f"✅ Acquisto confermato! Extra tiri disponibili: {current_user.extra_spins}"}
-        else:
-            raise HTTPException(status_code=400, detail="❌ Transazione non valida o importo insufficiente.")
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        logging.error(f"Errore in confirmbuy: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la conferma degli extra spin.")
-    finally:
-        session.close()
-
-@app.get("/api/referral")
+@app.post("/api/referral")
 async def api_referral(current_user: User = Depends(get_current_user)):
     referral_link = f"https://t.me/tuo_bot?start=ref_{current_user.wallet_address}"
     return {"referral_link": referral_link}

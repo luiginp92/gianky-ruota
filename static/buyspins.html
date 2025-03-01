@@ -42,7 +42,7 @@
   </div>
   
   <script>
-    // Quando viene premuto "Richiedi Acquisto", chiamiamo il nuovo endpoint per ottenere le istruzioni
+    // Quando viene premuto "Richiedi Acquisto", chiamiamo l'endpoint /api/extraSpinsRequest
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       if (!walletAddress) {
@@ -54,7 +54,7 @@
         const res = await fetch("/api/extraSpinsRequest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
+          body: JSON.stringify({ num_spins: parseInt(numSpins), wallet_address: walletAddress })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
@@ -65,8 +65,8 @@
         alert("Errore nella richiesta di acquisto.");
       }
     });
-    
-    // Quando viene premuto "Conferma Acquisto", chiamiamo il nuovo endpoint per confermare
+  
+    // Quando viene premuto "Conferma Acquisto", chiamiamo l'endpoint /api/extraSpinsConfirm
     document.getElementById("confirmPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       const numSpins = document.getElementById("numSpins").value;
@@ -79,7 +79,7 @@
         const res = await fetch("/api/extraSpinsConfirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins), txHash })
+          body: JSON.stringify({ tx_hash: txHash, num_spins: parseInt(numSpins), wallet_address: walletAddress })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
