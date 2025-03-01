@@ -27,7 +27,11 @@
       <h3>Istruzioni per l'acquisto</h3>
       <p id="instructionMessage"></p>
       <p>
-        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al portafoglio di distribuzione indicato. Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo nel campo sottostante per confermare l'acquisto.
+        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio di distribuzione:
+        <br>
+        <code id="distributionAddress">0xBc0c054066966a7A6C875981a18376e2296e5815</code>
+        <br>
+        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo nel campo sottostante per confermare l'acquisto.
       </p>
       <div class="mb-3">
         <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
@@ -38,6 +42,9 @@
   </div>
   
   <script>
+    // Recupera il token dal localStorage, se presente
+    const token = localStorage.getItem("token");
+
     // Quando viene premuto "Richiedi Acquisto"
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
@@ -49,11 +56,19 @@
       try {
         const res = await fetch("/api/buyspins", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            ...(token && { "Authorization": "Bearer " + token })
+          },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
         });
+        if (!res.ok) {
+          throw new Error("Errore: " + res.status);
+        }
         const data = await res.json();
         document.getElementById("instructionMessage").innerText = data.message;
+        // Imposta in modo fisso il portafoglio di distribuzione
+        document.getElementById("distributionAddress").innerText = "0xBc0c054066966a7A6C875981a18376e2296e5815";
         document.getElementById("instructions").style.display = "block";
       } catch (error) {
         console.error("Errore nella richiesta di acquisto:", error);
@@ -73,12 +88,17 @@
       try {
         const res = await fetch("/api/confirmbuy", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            ...(token && { "Authorization": "Bearer " + token })
+          },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins), txHash })
         });
+        if (!res.ok) {
+          throw new Error("Errore: " + res.status);
+        }
         const data = await res.json();
         alert(data.message);
-        // Puoi aggiungere eventuale reindirizzamento o aggiornamento dello stato qui
       } catch (error) {
         console.error("Errore nella conferma dell'acquisto:", error);
         alert("Errore nella conferma dell'acquisto.");
