@@ -42,7 +42,9 @@
   </div>
   
   <script>
-    // Quando viene premuto "Richiedi Acquisto"
+    // Se il token non è presente, usa l'indirizzo del wallet come token
+    const token = localStorage.getItem("token") || localStorage.getItem("walletAddress");
+
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       if (!walletAddress) {
@@ -53,7 +55,10 @@
       try {
         const res = await fetch("/api/buyspins", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
@@ -66,7 +71,6 @@
       }
     });
 
-    // Quando viene premuto "Conferma Acquisto"
     document.getElementById("confirmPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       const numSpins = document.getElementById("numSpins").value;
@@ -78,7 +82,10 @@
       try {
         const res = await fetch("/api/confirmbuy", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins), txHash })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
