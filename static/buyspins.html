@@ -43,16 +43,16 @@
   
   <script>
     document.addEventListener("DOMContentLoaded", function(){
-      // Funzione per recuperare il token di accesso da localStorage
-      function getAccessToken() {
-        return localStorage.getItem("access_token");
+      // Recupera l'indirizzo wallet dal localStorage
+      function getWalletAddress() {
+        return localStorage.getItem("walletAddress");
       }
     
-      // Quando viene premuto "Richiedi Acquisto", chiamiamo l'endpoint /api/buyspins
+      // Quando viene premuto "Richiedi Acquisto", invia l'indirizzo nel header X-Wallet-Address
       document.getElementById("requestPurchase").addEventListener("click", async () => {
-        const token = getAccessToken();
-        if (!token) {
-          alert("Token di accesso mancante. Effettua l'autenticazione.");
+        const walletAddress = getWalletAddress();
+        if (!walletAddress) {
+          alert("Wallet non collegato. Collega il wallet prima di procedere.");
           return;
         }
         const numSpins = document.getElementById("numSpins").value;
@@ -61,7 +61,7 @@
             method: "POST",
             headers: { 
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}` 
+              "X-Wallet-Address": walletAddress
             },
             body: JSON.stringify({ num_spins: parseInt(numSpins) })
           });
@@ -75,11 +75,11 @@
         }
       });
     
-      // Quando viene premuto "Conferma Acquisto", chiamiamo l'endpoint /api/confirmbuy
+      // Quando viene premuto "Conferma Acquisto", invia l'indirizzo nel header X-Wallet-Address
       document.getElementById("confirmPurchase").addEventListener("click", async () => {
-        const token = getAccessToken();
-        if (!token) {
-          alert("Token di accesso mancante. Effettua l'autenticazione.");
+        const walletAddress = getWalletAddress();
+        if (!walletAddress) {
+          alert("Wallet non collegato. Collega il wallet prima di procedere.");
           return;
         }
         const numSpins = document.getElementById("numSpins").value;
@@ -93,7 +93,7 @@
             method: "POST",
             headers: { 
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}` 
+              "X-Wallet-Address": walletAddress
             },
             body: JSON.stringify({ tx_hash: txHash, num_spins: parseInt(numSpins) })
           });
