@@ -42,9 +42,6 @@
   </div>
   
   <script>
-    // Recupera il token dal localStorage, se presente
-    const token = localStorage.getItem("token");
-
     // Quando viene premuto "Richiedi Acquisto"
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
@@ -56,15 +53,9 @@
       try {
         const res = await fetch("/api/buyspins", {
           method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            ...(token && { "Authorization": "Bearer " + token })
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
         });
-        if (!res.ok) {
-          throw new Error("Errore: " + res.status);
-        }
         const data = await res.json();
         document.getElementById("instructionMessage").innerText = data.message;
         document.getElementById("instructions").style.display = "block";
@@ -86,18 +77,12 @@
       try {
         const res = await fetch("/api/confirmbuy", {
           method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            ...(token && { "Authorization": "Bearer " + token })
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins), txHash })
         });
-        if (!res.ok) {
-          throw new Error("Errore: " + res.status);
-        }
         const data = await res.json();
         alert(data.message);
-        // Dopo la conferma, reindirizza alla pagina index
+        // Reindirizza alla pagina index dopo la conferma
         window.location.href = "/static/index.html";
       } catch (error) {
         console.error("Errore nella conferma dell'acquisto:", error);
