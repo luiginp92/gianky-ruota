@@ -13,11 +13,9 @@
     .footer { background-color: #343a40; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
     /* Stile per il canvas della ruota */
-    #wheelCanvas {
-      border: 1px solid #000;
-      display: block;
-      margin: 20px auto;
-    }
+    #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
+    /* Stile per il contatore dei giri gratuiti */
+    #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
 </head>
 <body>
@@ -27,11 +25,12 @@
       <div>MATIC: <span id="maticBalance">0</span></div>
       <div>GiankyCoin: <span id="tokenBalance">0</span></div>
     </div>
+    <div id="freeSpins">Giri gratuiti disponibili: <span id="freeSpinsCount">0</span></div>
   </header>
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Canvas per la ruota -->
+        <!-- Canvas per la ruota (sostituisce l'immagine "/wheel") -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -105,9 +104,42 @@
     window.addEventListener("load", updateBalances);
   </script>
   
-  <!-- Eventi per gli altri pulsanti -->
+  <!-- Funzioni per il contatore dei giri gratuiti -->
+  <script defer>
+    function getFreeSpins() {
+      let freeSpins = parseInt(localStorage.getItem("freeSpins") || "0", 10);
+      const lastReset = localStorage.getItem("lastReset");
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      if (!lastReset || new Date(lastReset) < today) {
+        freeSpins = 1;
+        localStorage.setItem("freeSpins", freeSpins);
+        localStorage.setItem("lastReset", new Date().toISOString());
+      }
+      document.getElementById("freeSpinsCount").innerText = freeSpins;
+      return freeSpins;
+    }
+    
+    function decrementFreeSpins() {
+      let freeSpins = getFreeSpins();
+      if (freeSpins > 0) {
+        freeSpins--;
+        localStorage.setItem("freeSpins", freeSpins);
+        document.getElementById("freeSpinsCount").innerText = freeSpins;
+      }
+    }
+    
+    window.addEventListener("load", getFreeSpins);
+  </script>
+  
+  <!-- Gestione degli altri pulsanti -->
   <script defer>
     document.getElementById("btnSpin").addEventListener("click", async function() {
+      if (getFreeSpins() <= 0) {
+        alert("Non hai giri gratuiti disponibili. Acquista extra tiri.");
+        return;
+      }
+      decrementFreeSpins();
       try {
         const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
         const data = await res.json();
@@ -131,10 +163,10 @@
   
   <!-- Includi GSAP dal CDN cdnjs -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-  <!-- Includi TweenMax dal CDN (GSAP v2) per supportare Winwheel.js -->
+  <!-- Includi TweenMax (GSAP v2) -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
-  <!-- Includi Winwheel.js dal CDN di jsDelivr -->
-  <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@2.7.0/Winwheel.min.js"></script>
+  <!-- Includi Winwheel.js tramite jsDelivr da GitHub -->
+  <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
   <script defer>
     window.addEventListener("load", function() {
@@ -144,7 +176,6 @@
       }
       console.log("Winwheel caricato:", Winwheel);
       
-      // Definisci i segmenti per la ruota
       const prizeData = [
         { text: '10 GKY',   color: '#F1C40F' },
         { text: '20 GKY',   color: '#E67E22' },
@@ -165,26 +196,57 @@
         text: item.text
       }));
       
-      // Inizializza la ruota sul canvas "wheelCanvas"
-      const theWheel = new Winwheel({
+      window.theWheel = new Winwheel({
         canvasId: 'wheelCanvas',
         numSegments: prizeData.length,
-        outerRadius: 140, // Adattato per un canvas 300x300
+        outerRadius: 140,
         segments: segmentsForWheel,
         animation: {
           type: 'spinToStop',
-          duration: 3,  // 3 secondi di animazione
+          duration: 3,
           spins: 5,
           callbackFinished: function(indicatedSegment) {
             alert("Hai vinto: " + indicatedSegment.text);
+            // Distribuisci il premio REALMENTE tramite il backend
+            distributePrize(indicatedSegment);
           }
         }
       });
       
-      // Collegare il pulsante "Gira la ruota" (btnSpin)
       document.getElementById("btnSpin").addEventListener("click", () => {
         theWheel.startAnimation();
       });
+      
+      async function distributePrize(segment) {
+        if (segment.text === "NO PRIZE") {
+          console.log("Nessun premio da distribuire.");
+          return;
+        }
+        const wallet = localStorage.getItem("walletAddress");
+        if (!wallet) {
+          console.error("Wallet non connesso, impossibile distribuire il premio.");
+          return;
+        }
+        try {
+          const response = await fetch("/api/distribute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              walletAddress: wallet,
+              prize: segment.text
+            })
+          });
+          if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
+          const data = await response.json();
+          console.log("Premio distribuito:", data);
+          document.getElementById("result").style.display = "block";
+          document.getElementById("result").innerText = data.message;
+          updateBalances();
+        } catch (error) {
+          console.error("Errore nella distribuzione del premio:", error);
+          alert("Errore nella distribuzione del premio. Contatta l'assistenza.");
+        }
+      }
     });
   </script>
 </body>

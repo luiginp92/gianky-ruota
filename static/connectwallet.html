@@ -18,11 +18,10 @@
     <button id="connectWallet" class="btn btn-primary mt-3">Connetti Wallet</button>
   </div>
   
-  <!-- Includi ethers.js UMD dal CDN di unpkg (versione 5.7.2) -->
+  <!-- Includi ethers.js UMD dal CDN -->
   <script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   
   <script>
-    // Verifica che ethers sia stato caricato
     if (typeof window.ethers === "undefined") {
       console.error("ethers non è caricato");
     } else {
@@ -35,34 +34,27 @@
         alert("Inserisci un indirizzo valido");
         return;
       }
-      // Verifica che l'indirizzo sia valido
       if (!window.ethers.utils.isAddress(input)) {
         alert("Indirizzo non valido");
         return;
       }
       
       try {
-        // Crea un provider per la rete Polygon usando l'endpoint pubblico
         const provider = new window.ethers.providers.JsonRpcProvider("https://polygon-rpc.com/");
-        
-        // Recupera il saldo MATIC in wei e convertilo in MATIC
         const balanceWei = await provider.getBalance(input);
         const balanceMatic = window.ethers.utils.formatEther(balanceWei);
         
-        // Recupera il saldo di GiankyCoin dal contratto token
         const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
         const tokenAbi = ["function balanceOf(address owner) view returns (uint256)"];
         const tokenContract = new window.ethers.Contract(tokenAddress, tokenAbi, provider);
         const tokenBalanceWei = await tokenContract.balanceOf(input);
         const tokenBalance = window.ethers.utils.formatEther(tokenBalanceWei);
         
-        // Salva i dati nel localStorage
         localStorage.setItem("walletAddress", input);
         localStorage.setItem("maticBalance", parseFloat(balanceMatic).toFixed(4));
         localStorage.setItem("tokenBalance", parseFloat(tokenBalance).toFixed(4));
         
-        // Reindirizza automaticamente alla pagina index
-        window.location.href = "index.html";
+        window.location.href = "/static/index.html";
       } catch (error) {
         console.error("Errore nel collegamento del wallet:", error);
         alert("Errore nel collegamento del wallet. Riprova.");
