@@ -42,7 +42,8 @@
   </div>
   
   <script>
-    const token = localStorage.getItem("token");
+    // Il codice originale funzionante, con le integrazioni richieste:
+    const token = localStorage.getItem("token"); // Se esiste
 
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
