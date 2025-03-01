@@ -12,7 +12,7 @@
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: #343a40; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
-    /* Stili per il canvas della ruota */
+    /* Stile per il canvas della ruota */
     #wheelCanvas {
       border: 1px solid #000;
       display: block;
@@ -29,12 +29,14 @@
     </div>
   </header>
   <div class="container content">
+    <!-- Sezione della ruota -->
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Sostituisci l'immagine con un canvas per la ruota -->
+        <!-- Qui il canvas della ruota verrà disegnato -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
+    <!-- Altri contenuti e pulsanti -->
     <div class="row text-center">
       <div class="col">
         <button id="btnSpin" class="btn btn-primary btn-custom">Gira la ruota</button>
@@ -68,17 +70,17 @@
   
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- Ethers v5 -->
+  <!-- Ethers.js -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   
-  <!-- Pulsante "Connetti Wallet": reindirizza alla pagina connectwallet.html -->
+  <!-- Reindirizzamento per "Connetti Wallet" -->
   <script>
     document.getElementById("btnConnect").addEventListener("click", function() {
       window.location.href = "/static/connectwallet.html";
     });
   </script>
   
-  <!-- Script per aggiornare i saldi -->
+  <!-- Aggiornamento saldi -->
   <script>
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
@@ -118,15 +120,12 @@
         console.error(error);
       }
     });
-    
     document.getElementById("btnBuySpins").addEventListener("click", function() {
       window.location.href = "/static/buyspins.html";
     });
-    
     document.getElementById("btnReferral").addEventListener("click", function() {
       window.location.href = "/static/referral.html";
     });
-    
     document.getElementById("btnTask").addEventListener("click", function() {
       window.location.href = "/static/task.html";
     });
@@ -134,11 +133,11 @@
   
   <!-- Includi GSAP dal CDN cdnjs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-  <!-- Includi Winwheel.js dal CDN di unpkg -->
-  <script src="https://unpkg.com/winwheel@2.7.0/Winwheel.min.js"></script>
+  <!-- Includi Winwheel.js dal CDN cdnjs (usa la versione 2.8.0 se disponibile) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.8.0/Winwheel.min.js"></script>
   
   <script>
-    // Assicurati che Winwheel sia caricato
+    // Verifica che Winwheel sia caricato
     if (typeof Winwheel === "undefined") {
       console.error("Winwheel non è definito");
     } else {
@@ -160,13 +159,13 @@
       { text: 'NO PRIZE', color: '#BDC3C7' },
       { text: 'NO PRIZE', color: '#BDC3C7' }
     ];
-
-    // Crea la ruota su "wheelCanvas"
+    
     const segmentsForWheel = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
     }));
-
+    
+    // Inizializza la ruota sul canvas "wheelCanvas"
     const theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: prizeData.length,
@@ -181,7 +180,7 @@
         }
       }
     });
-
+    
     // Collegare il pulsante "Gira la ruota" (btnSpin)
     document.getElementById("btnSpin").addEventListener("click", () => {
       theWheel.startAnimation();
