@@ -124,21 +124,17 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Evento per il pulsante "Gira la ruota" (invoca API spin e visualizza il risultato)
-    document.getElementById("btnSpin").addEventListener("click", async function() {
+    // Evento per "Gira la ruota": verifica giri gratuiti, decrementa e avvia l'animazione
+    document.getElementById("btnSpin").addEventListener("click", function() {
       if (getFreeSpins() <= 0) {
         alert("Non hai giri gratuiti disponibili. Acquista extra tiri.");
         return;
       }
       decrementFreeSpins();
-      try {
-        const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
-        const data = await res.json();
-        document.getElementById("result").style.display = "block";
-        document.getElementById("result").innerText = data.message;
-        updateBalances();
-      } catch (error) {
-        console.error("Errore nello spin:", error);
+      if (window.theWheel) {
+        window.theWheel.startAnimation();
+      } else {
+        console.error("La ruota non è inizializzata");
       }
     });
     document.getElementById("btnBuySpins").addEventListener("click", function() {
@@ -184,17 +180,28 @@
           type: 'spinToStop',
           duration: 3,
           spins: 5,
-          callbackFinished: function(indicatedSegment) {
+          callbackFinished: async function(indicatedSegment) {
             alert("Hai vinto: " + indicatedSegment.text);
+            // Se il premio non è "NO PRIZE", chiama l'API per distribuire il premio
             if (indicatedSegment.text !== "NO PRIZE") {
-              distributePrize(indicatedSegment);
+              await distributePrize(indicatedSegment);
+            }
+            // Registra lo spin chiamando l'endpoint /api/spin e aggiorna i saldi
+            try {
+              const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
+              const data = await res.json();
+              document.getElementById("result").style.display = "block";
+              document.getElementById("result").innerText = data.message;
+              updateBalances();
+            } catch (error) {
+              console.error("Errore nello spin:", error);
             }
           }
         }
       });
     });
     
-    // Funzione per distribuire il premio tramite backend
+    // Funzione per chiamare l'API di distribuzione premio
     async function distributePrize(segment) {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
