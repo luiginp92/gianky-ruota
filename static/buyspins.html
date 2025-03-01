@@ -42,7 +42,8 @@
   </div>
   
   <script>
-    // Quando viene premuto "Richiedi Acquisto"
+    const token = localStorage.getItem("token");
+
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       if (!walletAddress) {
@@ -53,9 +54,13 @@
       try {
         const res = await fetch("/api/buyspins", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            ...(token && { "Authorization": "Bearer " + token })
+          },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
         });
+        if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
         document.getElementById("instructionMessage").innerText = data.message;
         document.getElementById("instructions").style.display = "block";
@@ -65,7 +70,6 @@
       }
     });
 
-    // Quando viene premuto "Conferma Acquisto"
     document.getElementById("confirmPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       const numSpins = document.getElementById("numSpins").value;
@@ -77,12 +81,15 @@
       try {
         const res = await fetch("/api/confirmbuy", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            ...(token && { "Authorization": "Bearer " + token })
+          },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins), txHash })
         });
+        if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
         alert(data.message);
-        // Reindirizza alla pagina index dopo la conferma
         window.location.href = "/static/index.html";
       } catch (error) {
         console.error("Errore nella conferma dell'acquisto:", error);

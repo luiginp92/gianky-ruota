@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GiankyCoin Web App</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css?v=1.0.0">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
     body { background-color: #f8f9fa; padding-top: 20px; }
     .header { background-color: #343a40; color: white; padding: 1rem; text-align: center; }
@@ -28,7 +28,6 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Canvas per la ruota -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -68,19 +67,14 @@
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
-  <!-- Script personalizzati -->
   <script defer>
-    // Reindirizza a connectwallet.html quando si preme "Connetti Wallet"
+    // Navigazione
     document.getElementById("btnConnect").addEventListener("click", function() {
       window.location.href = "/static/connectwallet.html";
     });
-    
-    // Reindirizza a buyspins.html quando si preme "Acquista Extra Tiri"
     document.getElementById("btnBuySpins").addEventListener("click", function() {
       window.location.href = "/static/buyspins.html";
     });
-    
-    // Altri pulsanti di navigazione
     document.getElementById("btnReferral").addEventListener("click", function() {
       window.location.href = "/static/referral.html";
     });
@@ -88,7 +82,6 @@
       window.location.href = "/static/task.html";
     });
     
-    // Aggiorna saldi prelevando dati dal wallet
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -113,7 +106,6 @@
     }
     window.addEventListener("load", updateBalances);
     
-    // Gestione dei giri gratuiti (basata su localStorage)
     function getFreeSpins() {
       let freeSpins = parseInt(localStorage.getItem("freeSpins") || "0", 10);
       const lastReset = localStorage.getItem("lastReset");
@@ -137,7 +129,6 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Evento per "Gira la ruota": controlla i giri gratuiti e avvia l'animazione della ruota
     document.getElementById("btnSpin").addEventListener("click", function() {
       if (getFreeSpins() <= 0) {
         alert("Non hai giri gratuiti disponibili. Acquista extra tiri.");
@@ -151,19 +142,18 @@
       }
     });
     
-    // Inizializzazione della ruota con Winwheel
     window.addEventListener("load", function() {
       if (typeof Winwheel === "undefined") {
         console.error("Winwheel non è definito");
         return;
       }
       const prizeData = [
-        { text: '10 GKY',   color: '#F1C40F' },
-        { text: '20 GKY',   color: '#E67E22' },
-        { text: '50 GKY',   color: '#E74C3C' },
-        { text: '100 GKY',  color: '#9B59B6' },
-        { text: '250 GKY',  color: '#3498DB' },
-        { text: '500 GKY',  color: '#1ABC9C' },
+        { text: '10 GKY', color: '#F1C40F' },
+        { text: '20 GKY', color: '#E67E22' },
+        { text: '50 GKY', color: '#E74C3C' },
+        { text: '100 GKY', color: '#9B59B6' },
+        { text: '250 GKY', color: '#3498DB' },
+        { text: '500 GKY', color: '#1ABC9C' },
         { text: '1000 GKY', color: '#2ECC71' },
         { text: 'NFT BASIC', color: '#F39C12' },
         { text: 'NFT STARTER', color: '#C0392B' },
@@ -187,48 +177,20 @@
           callbackFinished: async function(indicatedSegment) {
             alert("Hai vinto: " + indicatedSegment.text);
             if (indicatedSegment.text !== "NO PRIZE") {
-              await distributePrize(indicatedSegment);
-            }
-            try {
-              const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
-              const data = await res.json();
-              document.getElementById("result").style.display = "block";
-              document.getElementById("result").innerText = data.message;
-              updateBalances();
-            } catch (error) {
-              console.error("Errore nello spin:", error);
+              try {
+                const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
+                const data = await res.json();
+                document.getElementById("result").style.display = "block";
+                document.getElementById("result").innerText = data.message;
+                updateBalances();
+              } catch (error) {
+                console.error("Errore nello spin:", error);
+              }
             }
           }
         }
       });
     });
-    
-    // Funzione per chiamare l'API di distribuzione premio
-    async function distributePrize(segment) {
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) {
-        console.error("Wallet non connesso, impossibile distribuire il premio.");
-        return;
-      }
-      try {
-        const response = await fetch("/api/distribute", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            walletAddress: wallet,
-            prize: segment.text
-          })
-        });
-        if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
-        const data = await response.json();
-        console.log("Premio distribuito:", data);
-        alert(data.message);
-        updateBalances();
-      } catch (error) {
-        console.error("Errore nella distribuzione del premio:", error);
-        alert("Errore nella distribuzione del premio. Contatta l'assistenza.");
-      }
-    }
   </script>
 </body>
 </html>
