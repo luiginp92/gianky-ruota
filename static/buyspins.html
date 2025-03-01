@@ -42,19 +42,14 @@
   </div>
   
   <script>
-    // Quando viene premuto "Richiedi Acquisto", chiamiamo l'endpoint /api/extraSpinsRequest
+    // Quando viene premuto "Richiedi Acquisto", chiamiamo l'endpoint /api/buyspins
     document.getElementById("requestPurchase").addEventListener("click", async () => {
-      const walletAddress = localStorage.getItem("walletAddress");
-      if (!walletAddress) {
-        alert("Wallet non connesso. Connettiti prima.");
-        return;
-      }
       const numSpins = document.getElementById("numSpins").value;
       try {
-        const res = await fetch("/api/extraSpinsRequest", {
+        const res = await fetch("/api/buyspins", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ num_spins: parseInt(numSpins), wallet_address: walletAddress })
+          body: JSON.stringify({ num_spins: parseInt(numSpins) })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
@@ -66,9 +61,8 @@
       }
     });
   
-    // Quando viene premuto "Conferma Acquisto", chiamiamo l'endpoint /api/extraSpinsConfirm
+    // Quando viene premuto "Conferma Acquisto", chiamiamo l'endpoint /api/confirmbuy
     document.getElementById("confirmPurchase").addEventListener("click", async () => {
-      const walletAddress = localStorage.getItem("walletAddress");
       const numSpins = document.getElementById("numSpins").value;
       const txHash = document.getElementById("txHash").value.trim();
       if (!txHash) {
@@ -76,10 +70,10 @@
         return;
       }
       try {
-        const res = await fetch("/api/extraSpinsConfirm", {
+        const res = await fetch("/api/confirmbuy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tx_hash: txHash, num_spins: parseInt(numSpins), wallet_address: walletAddress })
+          body: JSON.stringify({ tx_hash: txHash, num_spins: parseInt(numSpins) })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
