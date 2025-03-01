@@ -26,6 +26,13 @@
     <div id="instructions" style="display:none;">
       <h3>Istruzioni per l'acquisto</h3>
       <p id="instructionMessage"></p>
+      <p>
+        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio di distribuzione:
+        <br>
+        <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
+        <br>
+        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo nel campo sottostante per confermare l'acquisto.
+      </p>
       <div class="mb-3">
         <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
         <input type="text" id="txHash" class="form-control" placeholder="TxHash della transazione">
@@ -35,7 +42,7 @@
   </div>
   
   <script>
-    // Quando viene premuto "Richiedi Acquisto"
+    // Quando viene premuto "Richiedi Acquisto", chiamiamo il nuovo endpoint per ottenere le istruzioni
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       if (!walletAddress) {
@@ -44,11 +51,12 @@
       }
       const numSpins = document.getElementById("numSpins").value;
       try {
-        const res = await fetch("/api/buyspins", {
+        const res = await fetch("/api/extraSpinsRequest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
         });
+        if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
         document.getElementById("instructionMessage").innerText = data.message;
         document.getElementById("instructions").style.display = "block";
@@ -57,8 +65,8 @@
         alert("Errore nella richiesta di acquisto.");
       }
     });
-  
-    // Quando viene premuto "Conferma Acquisto"
+    
+    // Quando viene premuto "Conferma Acquisto", chiamiamo il nuovo endpoint per confermare
     document.getElementById("confirmPurchase").addEventListener("click", async () => {
       const walletAddress = localStorage.getItem("walletAddress");
       const numSpins = document.getElementById("numSpins").value;
@@ -68,14 +76,15 @@
         return;
       }
       try {
-        const res = await fetch("/api/confirmbuy", {
+        const res = await fetch("/api/extraSpinsConfirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins), txHash })
         });
+        if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
         alert(data.message);
-        // Puoi aggiungere eventuale reindirizzamento o aggiornamento dello stato qui
+        window.location.href = "/static/index.html";
       } catch (error) {
         console.error("Errore nella conferma dell'acquisto:", error);
         alert("Errore nella conferma dell'acquisto.");
