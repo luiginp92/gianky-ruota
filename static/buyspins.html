@@ -27,11 +27,11 @@
       <h3>Istruzioni per l'acquisto</h3>
       <p id="instructionMessage"></p>
       <p>
-        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio di distribuzione:
+        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio:
         <br>
         <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
         <br>
-        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo nel campo sottostante per confermare l'acquisto.
+        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo qui per confermare l'acquisto.
       </p>
       <div class="mb-3">
         <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
@@ -42,7 +42,7 @@
   </div>
   
   <script>
-    // Funzione di accesso sicuro a localStorage per evitare errori
+    // Funzione di accesso sicuro a localStorage
     function safeGetItem(key) {
       try {
         return localStorage.getItem(key);
@@ -53,12 +53,12 @@
     }
     
     document.addEventListener("DOMContentLoaded", function(){
-      // Recupera l'indirizzo wallet in modo sicuro
+      // Recupera l'indirizzo wallet
       function getWalletAddress() {
         return safeGetItem("walletAddress");
       }
     
-      // Quando viene premuto "Richiedi Acquisto", invia wallet_address e num_spins nel body della richiesta
+      // Gestione della richiesta di acquisto
       document.getElementById("requestPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
@@ -82,7 +82,7 @@
         }
       });
     
-      // Quando viene premuto "Conferma Acquisto", invia wallet_address, num_spins e tx_hash nel body della richiesta
+      // Gestione della conferma di acquisto
       document.getElementById("confirmPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
@@ -90,7 +90,7 @@
           return;
         }
         const numSpins = document.getElementById("numSpins").value;
-        const txHash = document.getElementById("txHash").value.trim();
+        let txHash = document.getElementById("txHash").value.trim();
         if (!txHash) {
           alert("Inserisci il txHash.");
           return;

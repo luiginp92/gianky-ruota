@@ -75,7 +75,7 @@ USED_TX = set()
 # ------------------------------------------------
 # "AUTENTICAZIONE" BASATA SUL WALLET PASSATO NEL BODY
 # ------------------------------------------------
-# In questo metodo, il wallet viene passato esplicitamente nel body delle richieste.
+# Il wallet viene passato esplicitamente nel body delle richieste.
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -154,8 +154,17 @@ def invia_token(destinatario, quantita):
 
 def verifica_transazione_gky(wallet_address, tx_hash, cost):
     try:
+        # Sanitize il tx_hash: rimuove eventuali prefissi indesiderati e assicura che inizi con "0x"
+        tx_hash = tx_hash.strip()
+        if not tx_hash.startswith("0x"):
+            idx = tx_hash.find("0x")
+            if idx != -1:
+                tx_hash = tx_hash[idx:]
+            else:
+                logging.error("TX hash non valido: non contiene '0x'")
+                return False
         tx = w3_no_mw.eth.get_transaction(tx_hash)
-        # Controlla che il mittente della transazione sia il wallet indicato
+        # Verifica che il mittente della tx sia il wallet indicato
         if tx["from"].lower() != wallet_address.lower():
             logging.error("TX non inviata dal wallet specificato.")
             return False
@@ -315,7 +324,7 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
     finally:
         session.close()
 
-# Altri endpoint rimangono invariati (es. /api/referral, /api/sharetask, ecc.)
+# Altri endpoint (es. /api/referral) rimangono invariati
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
