@@ -77,22 +77,22 @@ app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ------------------------------------------------
-# MODELLI DI INPUT
+# MODELLI DI INPUT (rimosso il pattern per wallet_address)
 # ------------------------------------------------
 class SpinRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str
 
 class BuySpinsRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str
     num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
 
 class ConfirmBuyRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str
     tx_hash: str
     num_spins: int = Field(..., description="Numero di tiri extra (1, 3 o 10)", gt=0)
 
 class DistributePrizeRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str
     prize: str
 
 # ------------------------------------------------
@@ -245,7 +245,7 @@ def get_prize():
             return "NO PRIZE"
 
 # ------------------------------------------------
-# ENDPOINT PER SPIN (consuma un giro e restituisce il premio determinato)
+# ENDPOINT PER SPIN (consuma il giro e restituisce il premio)
 # ------------------------------------------------
 @app.post("/api/spin")
 async def api_spin(request: SpinRequest):
@@ -291,7 +291,7 @@ async def api_spin(request: SpinRequest):
         session.close()
 
 # ------------------------------------------------
-# ENDPOINT PER DISTRIBUIRE IL PREMIO
+# ENDPOINT PER DISTRIBUIRE IL PREMIO (trasferisce il premio dal wallet di distribuzione)
 # ------------------------------------------------
 @app.post("/api/distribute")
 async def api_distribute(request: DistributePrizeRequest):

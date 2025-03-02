@@ -77,7 +77,7 @@
             return;
           }
           try {
-            // Chiama /api/spin per consumare il giro e ottenere il premio (solo per registrare il consumo)
+            // Chiama l'endpoint /api/spin per consumare il giro e ottenere il premio
             const spinRes = await fetch("/api/spin", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -86,7 +86,7 @@
             if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
             const spinData = await spinRes.json();
             console.log("Risultato spin:", spinData);
-            // Se il premio è diverso da "NO PRIZE", chiama /api/distribute per trasferire il premio
+            // Se il premio è diverso da "NO PRIZE", chiama /api/distribute per trasferirlo
             if (spinData.prize !== "NO PRIZE") {
               const distRes = await fetch("/api/distribute", {
                 method: "POST",
