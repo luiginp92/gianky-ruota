@@ -67,11 +67,11 @@ w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
-# Variabile per tracciare tx duplicate
+# Variabile per tracciare gli hash già usati
 USED_TX = set()
 
 # ------------------------------------------------
-# CONFIGURAZIONE FASTAPI
+# CONFIGURAZIONE FASTAPI E MOUNT DEL FRONTEND STATICO
 # ------------------------------------------------
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -94,8 +94,6 @@ class ConfirmBuyRequest(BaseModel):
 class DistributePrizeRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     prize: str
-
-# (Endpoint di autenticazione omessi per semplicità)
 
 # ------------------------------------------------
 # FUNZIONI UTILI PER UTENTE E BLOCKCHAIN
@@ -247,7 +245,7 @@ def get_prize():
             return "NO PRIZE"
 
 # ------------------------------------------------
-# ENDPOINT PER GIOCARE (SPIN)
+# ENDPOINT PER SPIN (consuma un giro e restituisce il premio determinato)
 # ------------------------------------------------
 @app.post("/api/spin")
 async def api_spin(request: SpinRequest):
