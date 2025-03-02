@@ -28,8 +28,25 @@
   <br>
   <button id="spinButton">Gira la ruota</button>
   
-  <!-- Includi TweenMax (GSAP 2.1.3) dal CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
+  <!-- Includi GSAP 3 dal CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+  <!-- Definisci uno shim per TweenMax se non esiste -->
+  <script>
+    if (typeof TweenMax === "undefined") {
+      window.TweenMax = {
+        to: function(target, duration, vars) {
+          return gsap.to(target, {duration: duration, ...vars});
+        },
+        from: function(target, duration, vars) {
+          return gsap.from(target, {duration: duration, ...vars});
+        },
+        set: function(target, vars) {
+          return gsap.set(target, vars);
+        }
+      };
+      console.log("TweenMax shim creato con GSAP 3");
+    }
+  </script>
   <!-- Includi Winwheel.js dal CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
@@ -64,8 +81,8 @@
       segments: segmentsForWheel,
       animation: {
         type: 'spinToStop',
-        duration: 5,    // Durata in secondi
-        spins: 8,       // Numero di giri completi
+        duration: 5,
+        spins: 8,
         callbackFinished: function(indicatedSegment) {
           console.log("Animazione terminata. Segmento indicato:", indicatedSegment);
           alert("Hai vinto: " + indicatedSegment.text);
@@ -76,13 +93,12 @@
           theWheel.stopAnimation(false); 
           theWheel.rotationAngle = 0;
           theWheel.draw();
-          // Riabilita il pulsante di spin (se usato da index.html)
           document.getElementById("spinButton").disabled = false;
         }
       }
     });
 
-    // Funzione per scegliere il segmento vincente
+    // Funzione per scegliere il segmento vincente in base alle probabilità
     function pickPrize() {
       const rnd = Math.random();
       let sum = 0;
@@ -95,8 +111,8 @@
       return prizeData.length - 1;
     }
 
+    // Gestione del pulsante di spin
     document.getElementById("spinButton").addEventListener("click", () => {
-      // Disabilita il pulsante durante lo spin
       document.getElementById("spinButton").disabled = true;
       const chosenIndex = pickPrize();
       console.log("Indice scelto:", chosenIndex);
