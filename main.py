@@ -25,7 +25,7 @@ import uvicorn
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
-# Importa il modulo del database aggiornato (assicurati di avere la versione corretta)
+# Importa il modulo del database aggiornato
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 # ------------------------------------------------
@@ -75,7 +75,6 @@ USED_TX = set()
 # ------------------------------------------------
 # "AUTENTICAZIONE" BASATA SUL WALLET PASSATO NEL BODY
 # ------------------------------------------------
-# In questo metodo il wallet viene passato esplicitamente nel body.
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -154,7 +153,6 @@ def invia_token(destinatario, quantita):
 
 def verifica_transazione_gky(wallet_address, tx_hash, cost):
     try:
-        # Sanifica il tx_hash: se contiene spazi, estrae la parte che inizia con "0x"
         tx_hash = tx_hash.strip()
         if " " in tx_hash:
             parts = tx_hash.split()
@@ -163,6 +161,7 @@ def verifica_transazione_gky(wallet_address, tx_hash, cost):
             logging.error("TX hash non valido: non inizia con '0x'")
             return False
         tx = w3_no_mw.eth.get_transaction(tx_hash)
+        logging.info(f"Verifica TX: wallet_address {wallet_address.lower()} vs tx['from'] {tx['from'].lower()}")
         if tx["from"].lower() != wallet_address.lower():
             logging.error("TX non inviata dal wallet specificato.")
             return False
@@ -276,8 +275,7 @@ async def api_buyspins(request: BuySpinsRequest):
         else:
             cost = 300
         message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
-                   f"{WALLET_DISTRIBUZIONE}\n"
-                   f"Quindi usa l'endpoint /api/confirmbuy con i dati della transazione.")
+                   f"{WALLET_DISTRIBUZIONE}")
         return {"message": message}
     except Exception as e:
         logging.error(f"Errore in buyspins: {e}")
@@ -322,7 +320,7 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
     finally:
         session.close()
 
-# Altri endpoint (es. /api/referral, ecc.) rimangono invariati.
+# Altri endpoint rimangono invariati (es. /api/referral)
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"

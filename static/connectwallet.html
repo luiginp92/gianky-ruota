@@ -22,7 +22,6 @@
   
   <script>
     document.addEventListener("DOMContentLoaded", function(){
-      // Collega il wallet salvando l'indirizzo in localStorage
       document.getElementById("connectWallet").addEventListener("click", function() {
         const walletAddress = document.getElementById("walletAddressInput").value.trim();
         if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
@@ -33,7 +32,6 @@
         window.location.href = "/static/index.html";
       });
       
-      // Disconnette il wallet cancellando localStorage e ricaricando la pagina
       document.getElementById("disconnectWallet").addEventListener("click", function() {
         localStorage.removeItem("walletAddress");
         window.location.href = "/static/connectwallet.html";
