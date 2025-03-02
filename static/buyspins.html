@@ -48,7 +48,7 @@
         return localStorage.getItem("walletAddress");
       }
     
-      // Quando viene premuto "Richiedi Acquisto", invia l'indirizzo nel header X-Wallet-Address
+      // Quando viene premuto "Richiedi Acquisto", invia wallet_address e num_spins nel body della richiesta
       document.getElementById("requestPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
@@ -59,11 +59,8 @@
         try {
           const res = await fetch("/api/buyspins", {
             method: "POST",
-            headers: { 
-              "Content-Type": "application/json",
-              "X-Wallet-Address": walletAddress
-            },
-            body: JSON.stringify({ num_spins: parseInt(numSpins) })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet_address: walletAddress, num_spins: parseInt(numSpins) })
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
@@ -75,7 +72,7 @@
         }
       });
     
-      // Quando viene premuto "Conferma Acquisto", invia l'indirizzo nel header X-Wallet-Address
+      // Quando viene premuto "Conferma Acquisto", invia wallet_address, num_spins e tx_hash nel body della richiesta
       document.getElementById("confirmPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
@@ -91,11 +88,8 @@
         try {
           const res = await fetch("/api/confirmbuy", {
             method: "POST",
-            headers: { 
-              "Content-Type": "application/json",
-              "X-Wallet-Address": walletAddress
-            },
-            body: JSON.stringify({ tx_hash: txHash, num_spins: parseInt(numSpins) })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet_address: walletAddress, tx_hash: txHash, num_spins: parseInt(numSpins) })
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
