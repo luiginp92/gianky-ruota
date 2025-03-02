@@ -75,7 +75,7 @@ USED_TX = set()
 # ------------------------------------------------
 # "AUTENTICAZIONE" MINIMA BASATA SU HEADER
 # ------------------------------------------------
-# Invece di usare JWT, ci affidiamo al semplice invio dell'indirizzo wallet tramite l'header "X-Wallet-Address"
+# Usiamo il semplice invio dell'indirizzo wallet tramite l'header "X-Wallet-Address"
 def get_current_user(x_wallet_address: Optional[str] = Header(None)):
     if not x_wallet_address:
         raise HTTPException(status_code=401, detail="Non autenticato: manca l'indirizzo del wallet nell'header X-Wallet-Address")
@@ -85,7 +85,7 @@ def get_current_user(x_wallet_address: Optional[str] = Header(None)):
     finally:
         session.close()
     if user is None:
-        # Se l'utente non esiste, lo creiamo automaticamente (o si può scegliere di restituire errore)
+        # Se l'utente non esiste, lo creiamo automaticamente
         session = Session()
         try:
             user = User(wallet_address=x_wallet_address, extra_spins=0)
@@ -217,11 +217,11 @@ def get_prize():
 # MODELLI DI INPUT CON Pydantic
 # ------------------------------------------------
 class BuySpinsRequest(BaseModel):
-    num_spins: int = Field(..., description="Numero di extra spin (1 o 3)", gt=0)
+    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
 
 class ConfirmBuyRequest(BaseModel):
     tx_hash: str
-    num_spins: int = Field(1, description="Solo 1 o 3 tiri extra", gt=0)
+    num_spins: int = Field(..., description="Numero di tiri extra (1, 3 o 10)", gt=0)
 
 class DistributePrizeRequest(BaseModel):
     prize: str
@@ -252,9 +252,14 @@ def on_startup():
 async def api_buyspins(request: BuySpinsRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
-        if request.num_spins not in [1, 3]:
-            raise HTTPException(status_code=400, detail="❌ Puoi acquistare solo 1 o 3 tiri extra.")
-        cost = 50 if request.num_spins == 1 else 125
+        if request.num_spins not in [1, 3, 10]:
+            raise HTTPException(status_code=400, detail="❌ Puoi acquistare solo 1, 3 o 10 tiri extra.")
+        if request.num_spins == 1:
+            cost = 50
+        elif request.num_spins == 3:
+            cost = 125
+        else:  # request.num_spins == 10
+            cost = 300
         message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
                    f"{WALLET_DISTRIBUZIONE}\n"
                    f"Quindi usa l'endpoint /api/confirmbuy con i dati della transazione.")
@@ -271,9 +276,14 @@ async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depend
     try:
         if request.tx_hash in USED_TX:
             raise HTTPException(status_code=400, detail="❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
-        if request.num_spins not in [1, 3]:
-            raise HTTPException(status_code=400, detail="❌ Solo 1 o 3 tiri extra sono ammessi.")
-        cost = 50 if request.num_spins == 1 else 125
+        if request.num_spins not in [1, 3, 10]:
+            raise HTTPException(status_code=400, detail="❌ Solo 1, 3 o 10 tiri extra sono ammessi.")
+        if request.num_spins == 1:
+            cost = 50
+        elif request.num_spins == 3:
+            cost = 125
+        else:
+            cost = 300
         if verifica_transazione_gky(current_user.wallet_address, request.tx_hash, cost):
             current_user.extra_spins = (current_user.extra_spins or 0) + request.num_spins
             session.commit()
@@ -310,7 +320,6 @@ async def api_distribute(request: DistributePrizeRequest, current_user: User = D
             else:
                 raise HTTPException(status_code=500, detail="Errore nell'invio dei token.")
         else:
-            # Per premi diversi, registriamo il premio
             premio_record = PremioVinto(
                 telegram_id=current_user.telegram_id or "N/A",
                 wallet=current_user.wallet_address,
