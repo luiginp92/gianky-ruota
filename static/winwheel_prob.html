@@ -71,13 +71,13 @@
           // Legge il wallet da localStorage e verifica il formato
           const wallet = localStorage.getItem("walletAddress");
           console.log("Wallet letto:", wallet);
-          if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+          if (!wallet || !/^0x[a-fA-F0-9]{42}$/.test(wallet)) {
             alert("Wallet non valido o non connesso.");
             resetWheel();
             return;
           }
           try {
-            // Chiama l'endpoint /api/spin per consumare il giro e ottenere il premio
+            // Chiama /api/spin per registrare lo spin (questo consuma il giro e determina il premio)
             const spinRes = await fetch("/api/spin", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -86,7 +86,7 @@
             if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
             const spinData = await spinRes.json();
             console.log("Risultato spin:", spinData);
-            // Se il premio è diverso da "NO PRIZE", chiama /api/distribute per trasferirlo
+            // Se il premio è diverso da "NO PRIZE", chiama /api/distribute per trasferire il premio
             if (spinData.prize !== "NO PRIZE") {
               const distRes = await fetch("/api/distribute", {
                 method: "POST",

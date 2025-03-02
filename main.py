@@ -77,22 +77,22 @@ app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ------------------------------------------------
-# MODELLI DI INPUT (rimosso il pattern per wallet_address)
+# MODELLI DI INPUT (con validazione sul formato del wallet)
 # ------------------------------------------------
 class SpinRequest(BaseModel):
-    wallet_address: str
+    wallet_address: str = Field(..., min_length=42, max_length=42)
 
 class BuySpinsRequest(BaseModel):
-    wallet_address: str
+    wallet_address: str = Field(..., min_length=42, max_length=42)
     num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
 
 class ConfirmBuyRequest(BaseModel):
-    wallet_address: str
+    wallet_address: str = Field(..., min_length=42, max_length=42)
     tx_hash: str
     num_spins: int = Field(..., description="Numero di tiri extra (1, 3 o 10)", gt=0)
 
 class DistributePrizeRequest(BaseModel):
-    wallet_address: str
+    wallet_address: str = Field(..., min_length=42, max_length=42)
     prize: str
 
 # ------------------------------------------------
