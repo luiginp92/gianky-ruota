@@ -71,11 +71,14 @@
           if (indicatedSegment.text !== "NO PRIZE") {
             distributePrize(indicatedSegment);
           }
+          // Reset della ruota per consentire nuovi spin:
+          theWheel.stopAnimation(false); 
+          theWheel.draw();
         }
       }
     });
 
-    // La funzione pickPrize() viene usata solo per calcolare l'angolo finale
+    // La funzione pickPrize() viene usata per determinare il segmento vincente
     function pickPrize() {
       const rnd = Math.random();
       let sum = 0;
@@ -91,14 +94,11 @@
     document.getElementById("spinButton").addEventListener("click", () => {
       const chosenIndex = pickPrize();
       const anglePerSegment = 360 / prizeData.length;
-      // Calcola l'angolo al centro del segmento scelto
       const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
       const extraSpins = 360 * 5;
       const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
-      // Imposta l'angolo finale per l'animazione
       theWheel.animation.stopAngle = finalAngle;
       console.log("Premio scelto (indice):", chosenIndex, "Stop Angle:", finalAngle);
-      // Avvia l'animazione della ruota
       theWheel.startAnimation();
     });
 
@@ -118,10 +118,11 @@
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            // Se usi JWT (se non serve, rimuovi questa linea)
             "Authorization": `Bearer ${localStorage.getItem("access_token") || ""}`
           },
-          body: JSON.stringify({ prize: segment.text })
+          body: JSON.stringify({
+            prize: segment.text
+          })
         });
         if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
         const data = await response.json();
