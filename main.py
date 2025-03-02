@@ -3,10 +3,9 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questa applicazione espone tramite API REST la logica del gioco con:
- • Consumo dello spin e selezione del premio (endpoint /api/spin)
+ • Consumo dello spin e determinazione del premio (endpoint /api/spin)
  • Distribuzione del premio (endpoint /api/distribute)
- • Endpoints per acquisti, referral, ecc.
- • Un frontend minimale per interagire con il sistema
+ • Altri endpoint per acquisti, referral, ecc.
 """
 
 import logging
@@ -28,16 +27,16 @@ from eth_account.messages import encode_defunct
 # Importa il modulo del database aggiornato
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
-# ---------------------------
-# CONFIGURAZIONI DI BASE
-# ---------------------------
+# ------------------------------------------------
+# CONFIGURAZIONI BASE E LOGGING
+# ------------------------------------------------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# ---------------------------
-# CONFIGURAZIONI BLOCKCHAIN
-# ---------------------------
+# ------------------------------------------------
+# CONFIGURAZIONI BLOCKCHAIN E COSTANTI
+# ------------------------------------------------
 POLYGON_RPC = "https://polygon-rpc.com"
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
@@ -68,18 +67,18 @@ w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
-# Variabile per tenere traccia degli hash usati
+# Variabile per tracciare tx duplicate
 USED_TX = set()
 
-# ---------------------------
+# ------------------------------------------------
 # CONFIGURAZIONE FASTAPI
-# ---------------------------
+# ------------------------------------------------
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ---------------------------
+# ------------------------------------------------
 # MODELLI DI INPUT
-# ---------------------------
+# ------------------------------------------------
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
 
@@ -96,11 +95,11 @@ class DistributePrizeRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     prize: str
 
-# (Gli endpoint di autenticazione non sono usati in questo esempio)
+# (Endpoint di autenticazione omessi per semplicità)
 
-# ---------------------------
-# FUNZIONI UTILI
-# ---------------------------
+# ------------------------------------------------
+# FUNZIONI UTILI PER UTENTE E BLOCKCHAIN
+# ------------------------------------------------
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -247,9 +246,9 @@ def get_prize():
         else:
             return "NO PRIZE"
 
-# ---------------------------
+# ------------------------------------------------
 # ENDPOINT PER GIOCARE (SPIN)
-# ---------------------------
+# ------------------------------------------------
 @app.post("/api/spin")
 async def api_spin(request: SpinRequest):
     user = get_user(request.wallet_address)
@@ -269,7 +268,6 @@ async def api_spin(request: SpinRequest):
                 available -= 1
             else:
                 raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
-        # Seleziona il premio (senza distribuire token)
         prize = get_prize()
         if prize == "NO PRIZE":
             result_text = "😔 Nessun premio vinto. Riprova!"
@@ -294,31 +292,27 @@ async def api_spin(request: SpinRequest):
     finally:
         session.close()
 
-# ---------------------------
+# ------------------------------------------------
 # ENDPOINT PER DISTRIBUIRE IL PREMIO
-# ---------------------------
+# ------------------------------------------------
 @app.post("/api/distribute")
 async def api_distribute(request: DistributePrizeRequest):
-    # Recupera l'utente (anche se non serve qui, lo usiamo per verificare)
-    user = get_user(request.wallet_address) if hasattr(request, "wallet_address") else None
-    # Per questo esempio, se il premio contiene "GKY", trasferiamo token
+    user = get_user(request.wallet_address)
     if "GKY" in request.prize:
         try:
-            # Estrae l'importo dal premio (es. "10 GKY" -> 10)
             amount = int(request.prize.split(" ")[0])
         except Exception:
             raise HTTPException(status_code=400, detail="Formato premio non valido.")
-        if invia_token(user.wallet_address if user else "", amount):
+        if invia_token(user.wallet_address, amount):
             return {"message": f"Premio '{request.prize}' trasferito correttamente al wallet {user.wallet_address}."}
         else:
             raise HTTPException(status_code=500, detail="Errore nel trasferimento del premio.")
     else:
-        # Se il premio è NFT o simile, registra il premio (oppure implementa altra logica)
         return {"message": f"Premio '{request.prize}' registrato per il wallet {user.wallet_address}."}
 
-# ---------------------------
+# ------------------------------------------------
 # ALTRI ENDPOINT (buyspins, confirmbuy, referral, ecc.)
-# ---------------------------
+# ------------------------------------------------
 @app.post("/api/buyspins")
 async def api_buyspins(request: BuySpinsRequest):
     user = get_user(request.wallet_address)

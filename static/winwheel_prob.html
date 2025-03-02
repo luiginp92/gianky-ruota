@@ -69,43 +69,49 @@
           console.log("Spin terminato. Segmento:", indicatedSegment);
           alert("Hai vinto: " + indicatedSegment.text);
           const wallet = localStorage.getItem("walletAddress");
-          if (!wallet) {
-            alert("Wallet non connesso.");
-          } else {
-            try {
-              // Chiama l'endpoint per lo spin che consuma un giro e determina il premio
-              const spinRes = await fetch("/api/spin", {
+          console.log("Wallet letto:", wallet);
+          if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+            alert("Wallet non valido o non connesso.");
+            resetWheel();
+            return;
+          }
+          try {
+            // Chiama l'endpoint /api/spin per consumare lo spin e ottenere il premio
+            const spinRes = await fetch("/api/spin", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ wallet_address: wallet })
+            });
+            if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
+            const spinData = await spinRes.json();
+            console.log("Risultato spin:", spinData);
+            // Se il premio è diverso da "NO PRIZE", chiama /api/distribute per trasferirlo
+            if (spinData.prize !== "NO PRIZE") {
+              const distRes = await fetch("/api/distribute", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ wallet_address: wallet })
+                body: JSON.stringify({ wallet_address: wallet, prize: spinData.prize })
               });
-              if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
-              const spinData = await spinRes.json();
-              console.log("Risultato spin:", spinData);
-              // Se il premio è diverso da "NO PRIZE", chiama l'endpoint per distribuire il premio
-              if (spinData.prize !== "NO PRIZE") {
-                const distRes = await fetch("/api/distribute", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ wallet_address: wallet, prize: spinData.prize })
-                });
-                if (!distRes.ok) throw new Error("Distribuzione fallita: " + distRes.status);
-                const distData = await distRes.json();
-                alert(distData.message);
-              }
-            } catch (e) {
-              console.error("Errore durante lo spin/distribuzione:", e);
-              alert("Errore durante lo spin/distribuzione.");
+              if (!distRes.ok) throw new Error("Distribuzione fallita: " + distRes.status);
+              const distData = await distRes.json();
+              console.log("Premio distribuito:", distData);
+              alert(distData.message);
             }
+          } catch (error) {
+            console.error("Errore durante spin/distribuzione:", error);
+            alert("Errore durante spin/distribuzione. Contatta l'assistenza.");
           }
-          // Reset della ruota per nuovi spin
-          theWheel.stopAnimation(false);
-          theWheel.rotationAngle = 0;
-          theWheel.draw();
-          document.getElementById("spinButton").disabled = false;
+          resetWheel();
         }
       }
     });
+
+    function resetWheel() {
+      theWheel.stopAnimation(false);
+      theWheel.rotationAngle = 0;
+      theWheel.draw();
+      document.getElementById("spinButton").disabled = false;
+    }
 
     function pickPrize() {
       const rnd = Math.random();
