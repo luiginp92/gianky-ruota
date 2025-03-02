@@ -15,6 +15,8 @@
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
+  <!-- Carica TweenMax 2.1.3 (necessario per Winwheel.js) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
 </head>
 <body>
   <header class="header">
@@ -28,7 +30,7 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Il canvas per la ruota ha id "wheelCanvas" -->
+        <!-- Nota: il canvas qui ha id "wheelCanvas" -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -66,7 +68,7 @@
   <!-- Dipendenze JS -->
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <!-- Carica Winwheel.js -->
+  <!-- Carica Winwheel.js dopo TweenMax -->
   <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
   <script defer>
@@ -108,7 +110,7 @@
     }
     window.addEventListener("load", updateBalances);
     
-    // Ottiene i giri disponibili: 1 free spin + extra acquistati (memorizzati in "purchasedExtraSpins")
+    // Funzione per ottenere i giri disponibili: 1 free spin + extra acquistati (memorizzati in "purchasedExtraSpins")
     function getFreeSpins() {
       let purchasedExtraSpins = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let totalSpins = 1 + purchasedExtraSpins;
@@ -117,7 +119,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Decrementa i giri disponibili senza andare sotto zero
+    // Decrementa i giri disponibili correttamente (senza andare sotto zero)
     function decrementFreeSpins() {
       let purchasedExtraSpins = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let totalSpins = 1 + purchasedExtraSpins;
@@ -142,7 +144,6 @@
       }
     });
     
-    // Inizializza la ruota usando il canvas "wheelCanvas"
     window.addEventListener("load", function() {
       if (typeof Winwheel === "undefined") {
         console.error("Winwheel non è definito");
@@ -179,24 +180,15 @@
             alert("Hai vinto: " + indicatedSegment.text);
             if (indicatedSegment.text !== "NO PRIZE") {
               try {
-                // Chiamata all'endpoint /api/distribute per assegnare il premio
-                const res = await fetch("/api/distribute", { 
-                  method: "POST", 
-                  headers: { "Content-Type": "application/json" } ,
-                  body: JSON.stringify({ prize: indicatedSegment.text })
-                });
+                const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
                 const data = await res.json();
                 document.getElementById("result").style.display = "block";
                 document.getElementById("result").innerText = data.message;
                 updateBalances();
               } catch (error) {
-                console.error("Errore nella distribuzione dello spin:", error);
+                console.error("Errore nello spin:", error);
               }
             }
-            // Reset della ruota per nuovi spin
-            theWheel.stopAnimation(false);
-            theWheel.rotationAngle = 0;
-            theWheel.draw();
           }
         }
       });

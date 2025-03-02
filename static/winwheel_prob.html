@@ -20,7 +20,7 @@
       cursor: pointer; 
     }
   </style>
-  <!-- Carica TweenMax 2.1.3 (necessario per Winwheel.js) -->
+  <!-- Carica TweenMax 2.1.3 da CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
 </head>
 <body>
@@ -34,7 +34,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
-    // Dati dei premi e probabilità (la somma delle prob è 1)
+    // Dati dei premi e probabilità
     const prizeData = [
       { text: '10 GKY',   color: '#F1C40F', prob: 0.10 },
       { text: '20 GKY',   color: '#E67E22', prob: 0.05 },
@@ -50,7 +50,6 @@
       { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.10 }
     ];
 
-    // Crea i segmenti per la ruota
     const segmentsForWheel = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
@@ -64,32 +63,32 @@
       segments: segmentsForWheel,
       animation: {
         type: 'spinToStop',
-        duration: 5,     // Durata in secondi
-        spins: 8,        // Numero di giri completi
+        duration: 5,
+        spins: 8,
         callbackFinished: async function(indicatedSegment) {
-          console.log("Animazione terminata. Segmento indicato:", indicatedSegment);
+          console.log("Spin terminato. Segmento:", indicatedSegment);
           alert("Hai vinto: " + indicatedSegment.text);
-          if (indicatedSegment.text !== "NO PRIZE") {
-            try {
-              // Chiamata all'endpoint /api/distribute per trasferire il premio
-              const response = await fetch("/api/distribute", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${localStorage.getItem("access_token") || ""}`
-                },
-                body: JSON.stringify({ prize: indicatedSegment.text })
-              });
-              if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
-              const data = await response.json();
-              console.log("Premio distribuito:", data);
-              alert(data.message);
-            } catch (error) {
-              console.error("Errore nella distribuzione del premio:", error);
-              alert("Errore nella distribuzione del premio. Contatta l'assistenza.");
-            }
+          // Chiama l'endpoint /api/spin passando il wallet (da localStorage)
+          const wallet = localStorage.getItem("walletAddress");
+          if (!wallet) {
+            console.error("Wallet non connesso.");
+            return;
           }
-          // Reset della ruota per consentire nuovi spin
+          try {
+            const response = await fetch("/api/spin", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ wallet_address: wallet })
+            });
+            if (!response.ok) throw new Error("Spin fallito: " + response.status);
+            const data = await response.json();
+            console.log("Risultato spin:", data);
+            alert(data.message);
+          } catch (error) {
+            console.error("Errore durante lo spin:", error);
+            alert("Errore durante lo spin. Contatta l'assistenza.");
+          }
+          // Reset della ruota per nuovi spin
           theWheel.stopAnimation(false);
           theWheel.rotationAngle = 0;
           theWheel.draw();
@@ -98,7 +97,6 @@
       }
     });
 
-    // Funzione per scegliere il segmento vincente basato sulle probabilità
     function pickPrize() {
       const rnd = Math.random();
       let sum = 0;
@@ -109,7 +107,6 @@
       return prizeData.length - 1;
     }
 
-    // Gestione del pulsante di spin
     document.getElementById("spinButton").addEventListener("click", () => {
       document.getElementById("spinButton").disabled = true;
       const chosenIndex = pickPrize();
