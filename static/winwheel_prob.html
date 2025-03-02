@@ -28,8 +28,9 @@
   <br>
   <button id="spinButton">Gira la ruota</button>
   
-  <!-- Includi GSAP e Winwheel dal CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+  <!-- Includi TweenMax (GSAP 2.1.3) dal CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
+  <!-- Includi Winwheel.js dal CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
@@ -75,13 +76,13 @@
           theWheel.stopAnimation(false); 
           theWheel.rotationAngle = 0;
           theWheel.draw();
-          // Riabilita il pulsante di spin
+          // Riabilita il pulsante di spin (se usato da index.html)
           document.getElementById("spinButton").disabled = false;
         }
       }
     });
 
-    // Funzione per scegliere il segmento vincente in base alle probabilità
+    // Funzione per scegliere il segmento vincente
     function pickPrize() {
       const rnd = Math.random();
       let sum = 0;
@@ -94,7 +95,6 @@
       return prizeData.length - 1;
     }
 
-    // Gestione del pulsante di spin
     document.getElementById("spinButton").addEventListener("click", () => {
       // Disabilita il pulsante durante lo spin
       document.getElementById("spinButton").disabled = true;
@@ -109,7 +109,6 @@
       theWheel.startAnimation();
     });
 
-    // Funzione per distribuire il premio (puoi adattarla se necessario)
     async function distributePrize(segment) {
       if (segment.text === "NO PRIZE") {
         console.log("Nessun premio da distribuire.");
