@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gianky Coin App – main.py
+Gianky Coin Web App – main.py
 -----------------------------
 Questa applicazione espone tramite API REST la logica del gioco con:
  • Verifica della transazione blockchain (importo, destinatario, mittente)
