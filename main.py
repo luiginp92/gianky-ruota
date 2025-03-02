@@ -3,7 +3,7 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questa applicazione espone tramite API REST la logica del gioco con:
- • Verifica della transazione blockchain (importo, destinatario e mittente)
+ • Verifica della transazione blockchain (importo, destinatario, mittente)
  • Controllo per non utilizzare lo stesso tx più volte
  • Endpoints per gioco, acquisti, referral, ecc.
  • Un frontend minimale per interagire con il sistema
@@ -25,7 +25,7 @@ import uvicorn
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
-# Importa il modulo del database
+# Importa il modulo del database aggiornato
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 # ------------------------------------------------
@@ -75,7 +75,7 @@ USED_TX = set()
 # ------------------------------------------------
 # "AUTENTICAZIONE" BASATA SUL WALLET PASSATO NEL BODY
 # ------------------------------------------------
-# Il wallet viene passato esplicitamente nel body delle richieste.
+# In questo metodo, il wallet viene passato esplicitamente nel body delle richieste.
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -155,7 +155,7 @@ def invia_token(destinatario, quantita):
 def verifica_transazione_gky(wallet_address, tx_hash, cost):
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
-        # Verifica che il mittente della transazione sia il wallet indicato
+        # Controlla che il mittente della transazione sia il wallet indicato
         if tx["from"].lower() != wallet_address.lower():
             logging.error("TX non inviata dal wallet specificato.")
             return False
@@ -315,7 +315,7 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
     finally:
         session.close()
 
-# Altri endpoint rimangono invariati...
+# Altri endpoint rimangono invariati (es. /api/referral, /api/sharetask, ecc.)
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
