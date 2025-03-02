@@ -25,7 +25,7 @@ import uvicorn
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
-# Importa il modulo del database aggiornato
+# Importa il modulo del database aggiornato (assicurati di avere la versione corretta)
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 # ------------------------------------------------
@@ -75,7 +75,7 @@ USED_TX = set()
 # ------------------------------------------------
 # "AUTENTICAZIONE" BASATA SUL WALLET PASSATO NEL BODY
 # ------------------------------------------------
-# Il wallet viene passato esplicitamente nel body delle richieste.
+# In questo metodo il wallet viene passato esplicitamente nel body.
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -154,17 +154,15 @@ def invia_token(destinatario, quantita):
 
 def verifica_transazione_gky(wallet_address, tx_hash, cost):
     try:
-        # Sanitize il tx_hash: rimuove eventuali prefissi indesiderati e assicura che inizi con "0x"
+        # Sanifica il tx_hash: se contiene spazi, estrae la parte che inizia con "0x"
         tx_hash = tx_hash.strip()
+        if " " in tx_hash:
+            parts = tx_hash.split()
+            tx_hash = next((p for p in parts if p.startswith("0x")), tx_hash)
         if not tx_hash.startswith("0x"):
-            idx = tx_hash.find("0x")
-            if idx != -1:
-                tx_hash = tx_hash[idx:]
-            else:
-                logging.error("TX hash non valido: non contiene '0x'")
-                return False
+            logging.error("TX hash non valido: non inizia con '0x'")
+            return False
         tx = w3_no_mw.eth.get_transaction(tx_hash)
-        # Verifica che il mittente della tx sia il wallet indicato
         if tx["from"].lower() != wallet_address.lower():
             logging.error("TX non inviata dal wallet specificato.")
             return False
@@ -324,7 +322,7 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
     finally:
         session.close()
 
-# Altri endpoint (es. /api/referral) rimangono invariati
+# Altri endpoint (es. /api/referral, ecc.) rimangono invariati.
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"

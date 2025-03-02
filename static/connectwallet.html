@@ -2,129 +2,43 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>Gira la Ruota - GiankyBot (Probabilità)</title>
+  <title>Connetti Wallet - GiankyBot</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    body { 
-      text-align: center; 
-      font-family: sans-serif; 
-      padding: 20px; 
-    }
-    canvas { 
-      border: 1px solid #000; 
-      margin: 20px auto; 
-      display: block; 
-    }
-    button { 
-      padding: 10px 20px; 
-      font-size: 1rem; 
-      cursor: pointer; 
-    }
+    body { padding: 20px; text-align: center; }
+    .container { max-width: 600px; margin: auto; }
   </style>
 </head>
 <body>
-  <h1>Gira la Ruota</h1>
-  <!-- Canvas su cui verrà disegnata la ruota -->
-  <canvas id="canvas" width="500" height="500"></canvas>
-  <br>
-  <button id="spinButton">Gira la ruota</button>
-  
-  <!-- Includi GSAP dal CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-  <!-- Includi Winwheel.js dal CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
+  <div class="container">
+    <h1>Connetti il tuo Wallet</h1>
+    <p>Inserisci il tuo indirizzo Polygon (0x...):</p>
+    <input type="text" id="walletAddressInput" class="form-control" placeholder="0x..." />
+    <br>
+    <button id="connectWallet" class="btn btn-primary">Connetti Wallet</button>
+    <br><br>
+    <button id="disconnectWallet" class="btn btn-danger">Disconnetti Wallet</button>
+  </div>
   
   <script>
-    // Dati dei premi e probabilità (la somma delle prob è 1)
-    const prizeData = [
-      { text: '10 GKY',   color: '#F1C40F', prob: 0.10 },
-      { text: '20 GKY',   color: '#E67E22', prob: 0.05 },
-      { text: '50 GKY',   color: '#E74C3C', prob: 0.10 },
-      { text: '100 GKY',  color: '#9B59B6', prob: 0.10 },
-      { text: '250 GKY',  color: '#3498DB', prob: 0.10 },
-      { text: '500 GKY',  color: '#1ABC9C', prob: 0.05 },
-      { text: '1000 GKY', color: '#2ECC71', prob: 0.05 },
-      { text: 'NFT BASIC', color: '#F39C12', prob: 0.05 },
-      { text: 'NFT STARTER', color: '#C0392B', prob: 0.05 },
-      { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.15 },
-      { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.10 },
-      { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.10 }
-    ];
-
-    // Crea l'array di segmenti per la ruota
-    const segmentsForWheel = prizeData.map(item => ({
-      fillStyle: item.color,
-      text: item.text
-    }));
-
-    // Crea la ruota con Winwheel.js
-    const theWheel = new Winwheel({
-      canvasId: 'canvas',
-      numSegments: prizeData.length,
-      outerRadius: 200,
-      segments: segmentsForWheel,
-      animation: {
-        type: 'spinToStop',
-        duration: 5,
-        spins: 8,
-        callbackFinished: function(indicatedSegment) {
-          alert("Hai vinto: " + indicatedSegment.text);
-          distributePrize(indicatedSegment);
+    document.addEventListener("DOMContentLoaded", function(){
+      // Collega il wallet salvando l'indirizzo in localStorage
+      document.getElementById("connectWallet").addEventListener("click", function() {
+        const walletAddress = document.getElementById("walletAddressInput").value.trim();
+        if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+          alert("Inserisci un indirizzo valido.");
+          return;
         }
-      }
+        localStorage.setItem("walletAddress", walletAddress);
+        window.location.href = "/static/index.html";
+      });
+      
+      // Disconnette il wallet cancellando localStorage e ricaricando la pagina
+      document.getElementById("disconnectWallet").addEventListener("click", function() {
+        localStorage.removeItem("walletAddress");
+        window.location.href = "/static/connectwallet.html";
+      });
     });
-
-    // Seleziona il premio basato sulle probabilità
-    function pickPrize() {
-      const rnd = Math.random();
-      let sum = 0;
-      for (let i = 0; i < prizeData.length; i++) {
-        sum += prizeData[i].prob;
-        if (rnd <= sum) {
-          return i;
-        }
-      }
-      return prizeData.length - 1;
-    }
-
-    document.getElementById("spinButton").addEventListener("click", () => {
-      const chosenIndex = pickPrize();
-      const anglePerSegment = 360 / prizeData.length;
-      const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
-      const extraSpins = 360 * 5;
-      const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
-      theWheel.animation.stopAngle = finalAngle;
-      console.log("Premio scelto (indice):", chosenIndex, "Stop Angle:", finalAngle);
-      theWheel.startAnimation();
-    });
-
-    async function distributePrize(segment) {
-      if (segment.text === "NO PRIZE") {
-        console.log("Nessun premio da distribuire.");
-        return;
-      }
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) {
-        console.error("Wallet non connesso, impossibile distribuire il premio.");
-        return;
-      }
-      try {
-        const response = await fetch("/api/distribute", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Wallet-Address": wallet
-          },
-          body: JSON.stringify({ prize: segment.text })
-        });
-        if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
-        const data = await response.json();
-        console.log("Premio distribuito:", data);
-        alert(data.message);
-      } catch (error) {
-        console.error("Errore nella distribuzione del premio:", error);
-        alert("Errore nella distribuzione del premio. Contatta l'assistenza.");
-      }
-    }
   </script>
 </body>
 </html>

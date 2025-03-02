@@ -58,7 +58,7 @@
         return safeGetItem("walletAddress");
       }
     
-      // Gestione della richiesta di acquisto
+      // Richiede le istruzioni di acquisto
       document.getElementById("requestPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
@@ -82,7 +82,7 @@
         }
       });
     
-      // Gestione della conferma di acquisto
+      // Conferma l'acquisto inviando il tx_hash
       document.getElementById("confirmPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
