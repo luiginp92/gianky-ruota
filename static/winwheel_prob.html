@@ -59,7 +59,7 @@
     // Crea la ruota con Winwheel.js
     const theWheel = new Winwheel({
       canvasId: 'canvas',
-      numSegments: prizeData.length,
+      numSegments: segmentsForWheel.length,
       outerRadius: 200,
       segments: segmentsForWheel,
       animation: {
@@ -68,13 +68,14 @@
         spins: 8,     // Numero di giri completi
         callbackFinished: function(indicatedSegment) {
           alert("Hai vinto: " + indicatedSegment.text);
-          // Se il premio non è "NO PRIZE", distribuiscilo tramite il backend
-          distributePrize(indicatedSegment);
+          if (indicatedSegment.text !== "NO PRIZE") {
+            distributePrize(indicatedSegment);
+          }
         }
       }
     });
 
-    // Funzione per selezionare il premio basato sulle probabilità
+    // La funzione pickPrize() viene usata solo per calcolare l'angolo finale
     function pickPrize() {
       const rnd = Math.random();
       let sum = 0;
@@ -90,11 +91,14 @@
     document.getElementById("spinButton").addEventListener("click", () => {
       const chosenIndex = pickPrize();
       const anglePerSegment = 360 / prizeData.length;
+      // Calcola l'angolo al centro del segmento scelto
       const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
       const extraSpins = 360 * 5;
       const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
+      // Imposta l'angolo finale per l'animazione
       theWheel.animation.stopAngle = finalAngle;
       console.log("Premio scelto (indice):", chosenIndex, "Stop Angle:", finalAngle);
+      // Avvia l'animazione della ruota
       theWheel.startAnimation();
     });
 
@@ -108,21 +112,16 @@
         console.error("Wallet non connesso, impossibile distribuire il premio.");
         return;
       }
-      const token = localStorage.getItem("access_token");
-      if (!token) {
-        alert("Token di accesso mancante. Effettua l'autenticazione.");
-        return;
-      }
+      // Se necessario, qui si potrebbe effettuare una chiamata al backend per distribuire il premio.
       try {
         const response = await fetch("/api/distribute", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
+            // Se usi JWT (se non serve, rimuovi questa linea)
+            "Authorization": `Bearer ${localStorage.getItem("access_token") || ""}`
           },
-          body: JSON.stringify({
-            prize: segment.text
-          })
+          body: JSON.stringify({ prize: segment.text })
         });
         if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
         const data = await response.json();
