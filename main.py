@@ -16,7 +16,7 @@ import os
 import pytz
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -73,9 +73,9 @@ w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 USED_TX = set()
 
 # ------------------------------------------------
-# METODO DI "AUTENTICAZIONE" BASATO SUL WALLET PASSATO NEL BODY
+# "AUTENTICAZIONE" BASATA SUL WALLET PASSATO NEL BODY
 # ------------------------------------------------
-# Invece di usare JWT o header, il wallet viene passato esplicitamente nel body.
+# Il wallet viene passato esplicitamente nel body delle richieste.
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -155,7 +155,7 @@ def invia_token(destinatario, quantita):
 def verifica_transazione_gky(wallet_address, tx_hash, cost):
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
-        # Verifica che il mittente della tx sia il wallet indicato
+        # Verifica che il mittente della transazione sia il wallet indicato
         if tx["from"].lower() != wallet_address.lower():
             logging.error("TX non inviata dal wallet specificato.")
             return False
@@ -266,7 +266,7 @@ async def api_buyspins(request: BuySpinsRequest):
             cost = 50
         elif request.num_spins == 3:
             cost = 125
-        else:  # 10 tiri
+        else:
             cost = 300
         message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
                    f"{WALLET_DISTRIBUZIONE}\n"
@@ -315,13 +315,11 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
     finally:
         session.close()
 
-# Gli altri endpoint rimangono invariati...
+# Altri endpoint rimangono invariati...
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
 
-# (Altri endpoint non modificati per brevità)
-
 if __name__ == '__main__':
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PO
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

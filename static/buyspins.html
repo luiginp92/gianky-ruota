@@ -42,17 +42,27 @@
   </div>
   
   <script>
+    // Funzione di accesso sicuro a localStorage per evitare errori (es. quota)
+    function safeGetItem(key) {
+      try {
+        return localStorage.getItem(key);
+      } catch(e) {
+        console.error("Errore in localStorage.getItem:", e);
+        return null;
+      }
+    }
+    
     document.addEventListener("DOMContentLoaded", function(){
-      // Recupera l'indirizzo wallet dal localStorage
+      // Recupera l'indirizzo wallet in modo sicuro
       function getWalletAddress() {
-        return localStorage.getItem("walletAddress");
+        return safeGetItem("walletAddress");
       }
     
       // Quando viene premuto "Richiedi Acquisto", invia wallet_address e num_spins nel body della richiesta
       document.getElementById("requestPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
-          alert("Wallet non collegato. Collega il wallet prima di procedere.");
+          alert("Wallet non collegato o non disponibile.");
           return;
         }
         const numSpins = document.getElementById("numSpins").value;
@@ -76,7 +86,7 @@
       document.getElementById("confirmPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
-          alert("Wallet non collegato. Collega il wallet prima di procedere.");
+          alert("Wallet non collegato o non disponibile.");
           return;
         }
         const numSpins = document.getElementById("numSpins").value;
