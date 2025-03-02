@@ -28,9 +28,8 @@
   <br>
   <button id="spinButton">Gira la ruota</button>
   
-  <!-- Includi GSAP dal CDN -->
+  <!-- Includi GSAP e Winwheel dal CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
-  <!-- Includi Winwheel.js dal CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
@@ -50,13 +49,13 @@
       { text: 'NO PRIZE', color: '#BDC3C7', prob: 0.10 }
     ];
 
-    // Crea l'array di segmenti per la ruota
+    // Crea i segmenti per la ruota
     const segmentsForWheel = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
     }));
 
-    // Crea la ruota con Winwheel.js
+    // Inizializza la ruota
     const theWheel = new Winwheel({
       canvasId: 'canvas',
       numSegments: segmentsForWheel.length,
@@ -64,21 +63,25 @@
       segments: segmentsForWheel,
       animation: {
         type: 'spinToStop',
-        duration: 5,  // Durata in secondi
-        spins: 8,     // Numero di giri completi
+        duration: 5,    // Durata in secondi
+        spins: 8,       // Numero di giri completi
         callbackFinished: function(indicatedSegment) {
+          console.log("Animazione terminata. Segmento indicato:", indicatedSegment);
           alert("Hai vinto: " + indicatedSegment.text);
           if (indicatedSegment.text !== "NO PRIZE") {
             distributePrize(indicatedSegment);
           }
-          // Reset della ruota per consentire nuovi spin:
+          // Reset della ruota per consentire nuovi spin
           theWheel.stopAnimation(false); 
+          theWheel.rotationAngle = 0;
           theWheel.draw();
+          // Riabilita il pulsante di spin
+          document.getElementById("spinButton").disabled = false;
         }
       }
     });
 
-    // La funzione pickPrize() viene usata per determinare il segmento vincente
+    // Funzione per scegliere il segmento vincente in base alle probabilità
     function pickPrize() {
       const rnd = Math.random();
       let sum = 0;
@@ -91,17 +94,22 @@
       return prizeData.length - 1;
     }
 
+    // Gestione del pulsante di spin
     document.getElementById("spinButton").addEventListener("click", () => {
+      // Disabilita il pulsante durante lo spin
+      document.getElementById("spinButton").disabled = true;
       const chosenIndex = pickPrize();
+      console.log("Indice scelto:", chosenIndex);
       const anglePerSegment = 360 / prizeData.length;
       const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
       const extraSpins = 360 * 5;
       const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
+      console.log("Angolo finale:", finalAngle);
       theWheel.animation.stopAngle = finalAngle;
-      console.log("Premio scelto (indice):", chosenIndex, "Stop Angle:", finalAngle);
       theWheel.startAnimation();
     });
 
+    // Funzione per distribuire il premio (puoi adattarla se necessario)
     async function distributePrize(segment) {
       if (segment.text === "NO PRIZE") {
         console.log("Nessun premio da distribuire.");
@@ -112,7 +120,6 @@
         console.error("Wallet non connesso, impossibile distribuire il premio.");
         return;
       }
-      // Se necessario, qui si potrebbe effettuare una chiamata al backend per distribuire il premio.
       try {
         const response = await fetch("/api/distribute", {
           method: "POST",
@@ -120,9 +127,7 @@
             "Content-Type": "application/json",
             "Authorization": `Bearer ${localStorage.getItem("access_token") || ""}`
           },
-          body: JSON.stringify({
-            prize: segment.text
-          })
+          body: JSON.stringify({ prize: segment.text })
         });
         if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
         const data = await response.json();
