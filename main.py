@@ -16,7 +16,7 @@ import os
 import pytz
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Header, Depends, status
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -75,17 +75,19 @@ USED_TX = set()
 # ------------------------------------------------
 # "AUTENTICAZIONE" MINIMA BASATA SU HEADER
 # ------------------------------------------------
-# Usiamo il semplice invio dell'indirizzo wallet tramite l'header "X-Wallet-Address"
+# L'indirizzo del wallet viene inviato tramite l'header "X-Wallet-Address"
 def get_current_user(x_wallet_address: Optional[str] = Header(None)):
     if not x_wallet_address:
         raise HTTPException(status_code=401, detail="Non autenticato: manca l'indirizzo del wallet nell'header X-Wallet-Address")
     session = Session()
     try:
         user = session.query(User).filter(User.wallet_address.ilike(x_wallet_address)).first()
+    except Exception as e:
+        logging.error(f"Errore durante la ricerca dell'utente: {e}")
+        raise HTTPException(status_code=500, detail="Errore interno")
     finally:
         session.close()
     if user is None:
-        # Se l'utente non esiste, lo creiamo automaticamente
         session = Session()
         try:
             user = User(wallet_address=x_wallet_address, extra_spins=0)
@@ -93,6 +95,7 @@ def get_current_user(x_wallet_address: Optional[str] = Header(None)):
             session.commit()
         except Exception as e:
             session.rollback()
+            logging.error(f"Errore nella creazione dell'utente: {e}")
             raise HTTPException(status_code=500, detail="Errore nella creazione dell'utente")
         finally:
             session.close()
@@ -258,7 +261,7 @@ async def api_buyspins(request: BuySpinsRequest, current_user: User = Depends(ge
             cost = 50
         elif request.num_spins == 3:
             cost = 125
-        else:  # request.num_spins == 10
+        else:  # 10 tiri
             cost = 300
         message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
                    f"{WALLET_DISTRIBUZIONE}\n"
