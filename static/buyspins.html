@@ -81,7 +81,7 @@
         }
       });
     
-      // Conferma l'acquisto inviando il tx_hash
+      // Conferma l'acquisto inviando wallet_address, tx_hash e num_spins
       document.getElementById("confirmPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
@@ -102,6 +102,8 @@
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
+          // Aggiorna in localStorage il numero di extra tiri acquistati
+          localStorage.setItem("purchasedExtraSpins", data.extra_spins);
           alert(data.message);
           window.location.href = "/static/index.html";
         } catch (error) {

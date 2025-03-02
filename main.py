@@ -309,7 +309,8 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
                 counter = GlobalCounter(total_in=cost, total_out=0.0)
                 session.add(counter)
             session.commit()
-            return {"message": f"✅ Acquisto confermato! Extra tiri disponibili: {user.extra_spins}"}
+            # Restituisce anche il valore aggiornato dei giri extra
+            return {"message": f"✅ Acquisto confermato! Extra tiri disponibili: {user.extra_spins}", "extra_spins": user.extra_spins}
         else:
             raise HTTPException(status_code=400, detail="❌ Transazione non valida o importo insufficiente.")
     except HTTPException as he:
@@ -320,7 +321,7 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
     finally:
         session.close()
 
-# Altri endpoint rimangono invariati (es. /api/referral)
+# Altri endpoint rimangono invariati
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"

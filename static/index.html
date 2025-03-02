@@ -18,7 +18,7 @@
 </head>
 <body>
   <header class="header">
-    <h1>GiankyCoin Web App</h1>
+    <h1>GiankyCoin App</h1>
     <div class="balance-info">
       <div>MATIC: <span id="maticBalance">0</span></div>
       <div>GiankyCoin: <span id="tokenBalance">0</span></div>
@@ -107,27 +107,24 @@
     window.addEventListener("load", updateBalances);
     
     function getFreeSpins() {
-      let freeSpins = parseInt(localStorage.getItem("freeSpins") || "0", 10);
-      const lastReset = localStorage.getItem("lastReset");
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      if (!lastReset || new Date(lastReset) < today) {
-        freeSpins = 1;
-        localStorage.setItem("freeSpins", freeSpins);
-        localStorage.setItem("lastReset", new Date().toISOString());
-      }
+      // Il free spin di default è 1 e i giri extra acquistati sono memorizzati in "purchasedExtraSpins"
+      let purchasedExtraSpins = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
+      let freeSpins = 1 + purchasedExtraSpins;
       document.getElementById("freeSpinsCount").innerText = freeSpins;
       return freeSpins;
     }
+    window.addEventListener("load", getFreeSpins);
+    
     function decrementFreeSpins() {
-      let freeSpins = getFreeSpins();
+      let purchasedExtraSpins = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
+      let freeSpins = 1 + purchasedExtraSpins;
       if (freeSpins > 0) {
         freeSpins--;
-        localStorage.setItem("freeSpins", freeSpins);
+        // I giri extra acquistati sono freeSpins - 1
+        localStorage.setItem("purchasedExtraSpins", freeSpins - 1);
         document.getElementById("freeSpinsCount").innerText = freeSpins;
       }
     }
-    window.addEventListener("load", getFreeSpins);
     
     document.getElementById("btnSpin").addEventListener("click", function() {
       if (getFreeSpins() <= 0) {
