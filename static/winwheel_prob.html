@@ -71,9 +71,13 @@
           alert("Hai vinto: " + indicatedSegment.text);
           if (indicatedSegment.text !== "NO PRIZE") {
             try {
+              // Chiamata all'endpoint /api/distribute per trasferire il premio
               const response = await fetch("/api/distribute", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${localStorage.getItem("access_token") || ""}`
+                },
                 body: JSON.stringify({ prize: indicatedSegment.text })
               });
               if (!response.ok) throw new Error("Distribuzione fallita: " + response.status);
@@ -86,7 +90,7 @@
             }
           }
           // Reset della ruota per consentire nuovi spin
-          theWheel.stopAnimation(false); 
+          theWheel.stopAnimation(false);
           theWheel.rotationAngle = 0;
           theWheel.draw();
           document.getElementById("spinButton").disabled = false;
@@ -94,15 +98,13 @@
       }
     });
 
-    // Funzione per scegliere il segmento vincente in base alle probabilità
+    // Funzione per scegliere il segmento vincente basato sulle probabilità
     function pickPrize() {
       const rnd = Math.random();
       let sum = 0;
       for (let i = 0; i < prizeData.length; i++) {
         sum += prizeData[i].prob;
-        if (rnd <= sum) {
-          return i;
-        }
+        if (rnd <= sum) return i;
       }
       return prizeData.length - 1;
     }
