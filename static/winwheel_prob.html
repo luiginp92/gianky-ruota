@@ -55,7 +55,7 @@
       text: item.text
     }));
 
-    // Funzione per creare (o reimpostare) la ruota
+    // Funzione per creare la ruota con parametri fissi
     function createWheel() {
       return new Winwheel({
         canvasId: 'canvas',
@@ -64,13 +64,16 @@
         segments: segmentsForWheel,
         animation: {
           type: 'spinToStop',
-          duration: 5,  // Durata fissa in secondi
-          spins: 8,     // Numero fisso di giri completi
+          duration: 5,     // Durata costante in secondi
+          spins: 8,        // Numero costante di giri
           callbackFinished: async function(indicatedSegment) {
             console.log("Spin terminato. Segmento:", indicatedSegment);
             alert("Hai vinto: " + indicatedSegment.text);
-            // Legge il wallet da localStorage e controlla la lunghezza
-            const wallet = localStorage.getItem("walletAddress");
+            // Legge il wallet da localStorage e lo pulisce
+            let wallet = localStorage.getItem("walletAddress");
+            if (wallet) {
+              wallet = wallet.trim();
+            }
             console.log("Wallet letto:", wallet);
             if (!wallet || wallet.length !== 42) {
               alert("Wallet non valido o non connesso.");
@@ -113,29 +116,29 @@
     let theWheel = createWheel();
 
     function resetWheel() {
-      // Reimposta la ruota per il prossimo spin
       theWheel.stopAnimation(false);
       theWheel.rotationAngle = 0;
       theWheel.draw();
       document.getElementById("spinButton").disabled = false;
     }
 
-    // Gestione del pulsante di spin: ogni volta reimposta i parametri e ricrea la ruota
+    function pickPrize() {
+      const rnd = Math.random();
+      let sum = 0;
+      for (let i = 0; i < prizeData.length; i++) {
+        sum += prizeData[i].prob;
+        if (rnd <= sum) return i;
+      }
+      return prizeData.length - 1;
+    }
+
     document.getElementById("spinButton").addEventListener("click", () => {
       document.getElementById("spinButton").disabled = true;
-      // Ricrea la ruota per garantire parametri costanti ad ogni spin
+      // Ricrea la ruota per avere animazione costante
       theWheel = createWheel();
-      const anglePerSegment = 360 / prizeData.length;
-      const chosenIndex = (function pickPrize() {
-        const rnd = Math.random();
-        let sum = 0;
-        for (let i = 0; i < prizeData.length; i++) {
-          sum += prizeData[i].prob;
-          if (rnd <= sum) return i;
-        }
-        return prizeData.length - 1;
-      })();
+      const chosenIndex = pickPrize();
       console.log("Indice scelto:", chosenIndex);
+      const anglePerSegment = 360 / prizeData.length;
       const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
       const extraSpins = 360 * 5;
       const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;

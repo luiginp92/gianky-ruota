@@ -2,10 +2,13 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Questa applicazione espone tramite API REST la logica del gioco con:
- • /api/spin: Registra lo spin e determina il premio (senza trasferimento)
- • /api/distribute: Effettua il trasferimento del premio (se contiene "GKY")
- • Altri endpoint per acquisti, referral, ecc.
+Questa applicazione espone tramite API REST la logica del gioco:
+  • /api/spin: registra lo spin e determina il premio (senza trasferimento)
+  • /api/distribute: trasferisce il premio dal wallet di distribuzione al wallet dell’utente (se premio "GKY")
+  • /api/buyspins e /api/confirmbuy: per l’acquisto di extra tiri
+  • /api/referral: per ottenere il referral link
+  • /wheel: restituisce l’immagine della ruota
+  • "/" reindirizza all’index statico
 """
 
 import logging
@@ -23,18 +26,19 @@ import uvicorn
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
+# Importa il modulo del database (assicurati che sia aggiornato)
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
-# ---------------------------
+# ------------------------------------------------
 # CONFIGURAZIONI BASE E LOGGING
-# ---------------------------
+# ------------------------------------------------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# ---------------------------
+# ------------------------------------------------
 # CONFIGURAZIONI BLOCKCHAIN E COSTANTI
-# ---------------------------
+# ------------------------------------------------
 POLYGON_RPC = "https://polygon-rpc.com"
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
@@ -65,27 +69,37 @@ w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
+# Variabile per tracciare gli hash già usati
 USED_TX = set()
 
-# ---------------------------
+# ------------------------------------------------
 # CONFIGURAZIONE FASTAPI E FRONTEND STATICO
-# ---------------------------
+# ------------------------------------------------
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ---------------------------
-# MODELLI DI INPUT (wallet_address senza restrizioni stringenti)
-# ---------------------------
+# ------------------------------------------------
+# MODELLI DI INPUT
+# ------------------------------------------------
 class SpinRequest(BaseModel):
     wallet_address: str
+
+class BuySpinsRequest(BaseModel):
+    wallet_address: str
+    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
+
+class ConfirmBuyRequest(BaseModel):
+    wallet_address: str
+    tx_hash: str
+    num_spins: int = Field(..., description="Numero di tiri extra (1, 3 o 10)", gt=0)
 
 class DistributePrizeRequest(BaseModel):
     wallet_address: str
     prize: str
 
-# ---------------------------
-# FUNZIONI UTILI
-# ---------------------------
+# ------------------------------------------------
+# FUNZIONI UTILI PER UTENTE E BLOCKCHAIN
+# ------------------------------------------------
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -187,9 +201,9 @@ def get_prize():
         else:
             return "NO PRIZE"
 
-# ---------------------------
+# ------------------------------------------------
 # ENDPOINT /api/spin: Registra lo spin e determina il premio
-# ---------------------------
+# ------------------------------------------------
 @app.post("/api/spin")
 async def api_spin(request: SpinRequest):
     user = get_user(request.wallet_address)
@@ -234,9 +248,9 @@ async def api_spin(request: SpinRequest):
     finally:
         session.close()
 
-# ---------------------------
+# ------------------------------------------------
 # ENDPOINT /api/distribute: Trasferisce il premio dal wallet di distribuzione
-# ---------------------------
+# ------------------------------------------------
 @app.post("/api/distribute")
 async def api_distribute(request: DistributePrizeRequest):
     user = get_user(request.wallet_address)
@@ -251,6 +265,63 @@ async def api_distribute(request: DistributePrizeRequest):
             raise HTTPException(status_code=500, detail="Errore nel trasferimento del premio.")
     else:
         return {"message": f"Premio '{request.prize}' registrato per il wallet {user.wallet_address}."}
+
+# ------------------------------------------------
+# ENDPOINT PER ACQUISTI EXTRA (buyspins e confirmbuy)
+# ------------------------------------------------
+@app.post("/api/buyspins")
+async def api_buyspins(request: BuySpinsRequest):
+    user = get_user(request.wallet_address)
+    session = Session()
+    try:
+        if request.num_spins not in [1, 3, 10]:
+            raise HTTPException(status_code=400, detail="❌ Puoi acquistare solo 1, 3 o 10 tiri extra.")
+        cost = 50 if request.num_spins == 1 else (125 if request.num_spins == 3 else 300)
+        message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
+                   f"{WALLET_DISTRIBUZIONE}")
+        return {"message": message}
+    except Exception as e:
+        logging.error(f"Errore in buyspins: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante la richiesta di acquisto degli extra spin.")
+    finally:
+        session.close()
+
+@app.post("/api/confirmbuy")
+async def api_confirmbuy(request: ConfirmBuyRequest):
+    user = get_user(request.wallet_address)
+    session = Session()
+    try:
+        if request.tx_hash in USED_TX:
+            raise HTTPException(status_code=400, detail="❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
+        if request.num_spins not in [1, 3, 10]:
+            raise HTTPException(status_code=400, detail="❌ Solo 1, 3 o 10 tiri extra sono ammessi.")
+        cost = 50 if request.num_spins == 1 else (125 if request.num_spins == 3 else 300)
+        if verifica_transazione_gky(request.wallet_address, request.tx_hash, cost):
+            user.extra_spins = (user.extra_spins or 0) + request.num_spins
+            session.commit()
+            USED_TX.add(request.tx_hash)
+            counter = session.query(GlobalCounter).first()
+            if counter is not None:
+                counter.total_in += cost
+            else:
+                counter = GlobalCounter(total_in=cost, total_out=0.0)
+                session.add(counter)
+            session.commit()
+            return {"message": f"✅ Acquisto confermato! Extra tiri disponibili: {user.extra_spins}", "extra_spins": user.extra_spins}
+        else:
+            raise HTTPException(status_code=400, detail="❌ Transazione non valida o importo insufficiente.")
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"Errore in confirmbuy: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante la conferma degli extra spin.")
+    finally:
+        session.close()
+
+@app.get("/api/referral")
+async def api_referral(wallet_address: str):
+    referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
+    return {"referral_link": referral_link}
 
 @app.get("/wheel")
 async def get_wheel():
