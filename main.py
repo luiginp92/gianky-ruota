@@ -26,19 +26,12 @@ import uvicorn
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
-# Importa il modulo del database
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
-# ---------------------------
-# CONFIGURAZIONI BASE E LOGGING
-# ---------------------------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# ---------------------------
-# CONFIGURAZIONI BLOCKCHAIN E COSTANTI
-# ---------------------------
 POLYGON_RPC = "https://polygon-rpc.com"
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
@@ -69,18 +62,11 @@ w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
-# Variabile per tracciare gli hash già usati (per evitare doppi usi)
 USED_TX = set()
 
-# ---------------------------
-# CONFIGURAZIONE FASTAPI E FRONTEND STATICO
-# ---------------------------
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ---------------------------
-# MODELLI DI INPUT
-# ---------------------------
 class SpinRequest(BaseModel):
     wallet_address: str
 
@@ -97,9 +83,6 @@ class DistributePrizeRequest(BaseModel):
     wallet_address: str
     prize: str
 
-# ---------------------------
-# FUNZIONI UTILI PER UTENTE E BLOCKCHAIN
-# ---------------------------
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -201,9 +184,6 @@ def get_prize():
         else:
             return "NO PRIZE"
 
-# ---------------------------
-# ENDPOINT /api/spin: Registra lo spin e determina il premio
-# ---------------------------
 @app.post("/api/spin")
 async def api_spin(request: SpinRequest):
     user = get_user(request.wallet_address)
@@ -211,7 +191,6 @@ async def api_spin(request: SpinRequest):
     try:
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
-        # Se l'utente non ha giocato oggi, ha 1 free spin + extra
         if (not user.last_play_date) or (user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
             available = 1 + (user.extra_spins or 0)
             user.last_play_date = now_italy
@@ -249,9 +228,6 @@ async def api_spin(request: SpinRequest):
     finally:
         session.close()
 
-# ---------------------------
-# ENDPOINT /api/distribute: Trasferisce il premio dal wallet di distribuzione
-# ---------------------------
 @app.post("/api/distribute")
 async def api_distribute(request: DistributePrizeRequest):
     user = get_user(request.wallet_address)
@@ -267,9 +243,6 @@ async def api_distribute(request: DistributePrizeRequest):
     else:
         return {"message": f"Premio '{request.prize}' registrato per il wallet {user.wallet_address}."}
 
-# ---------------------------
-# ENDPOINT PER ACQUISTI EXTRA: /api/buyspins e /api/confirmbuy
-# ---------------------------
 @app.post("/api/buyspins")
 async def api_buyspins(request: BuySpinsRequest):
     user = get_user(request.wallet_address)
