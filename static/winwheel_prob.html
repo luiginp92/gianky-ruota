@@ -53,7 +53,6 @@
       text: item.text
     }));
 
-    // Funzione per creare la ruota con parametri costanti
     function createWheel() {
       return new Winwheel({
         canvasId: 'canvas',
@@ -62,8 +61,8 @@
         segments: segmentsForWheel,
         animation: {
           type: 'spinToStop',
-          duration: 5,    // Durata fissa in secondi
-          spins: 8,       // Numero fisso di giri
+          duration: 5,
+          spins: 8,
           callbackFinished: async function(indicatedSegment) {
             console.log("Spin terminato. Segmento:", indicatedSegment);
             alert("Hai vinto: " + indicatedSegment.text);
@@ -76,7 +75,6 @@
               return;
             }
             try {
-              // Registra lo spin
               const spinRes = await fetch("/api/spin", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -85,7 +83,6 @@
               if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
               const spinData = await spinRes.json();
               console.log("Risultato spin:", spinData);
-              // Se premio valido, distribuisce il premio
               if (spinData.prize !== "NO PRIZE") {
                 const distRes = await fetch("/api/distribute", {
                   method: "POST",
@@ -128,7 +125,6 @@
 
     document.getElementById("spinButton").addEventListener("click", () => {
       document.getElementById("spinButton").disabled = true;
-      // Ricrea la ruota per garantire parametri costanti
       theWheel = createWheel();
       const chosenIndex = pickPrize();
       console.log("Indice scelto:", chosenIndex);

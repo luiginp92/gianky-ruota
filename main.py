@@ -26,6 +26,7 @@ import uvicorn
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
+# Importa il modulo del database
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 logging.basicConfig(
@@ -62,11 +63,13 @@ w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
+# Variabile per tracciare gli hash già usati
 USED_TX = set()
 
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# MODELLI DI INPUT
 class SpinRequest(BaseModel):
     wallet_address: str
 
@@ -83,6 +86,7 @@ class DistributePrizeRequest(BaseModel):
     wallet_address: str
     prize: str
 
+# FUNZIONI UTILI
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -156,6 +160,53 @@ def invia_token(destinatario, quantita):
     finally:
         session.close()
     return True
+
+# Funzione aggiunta per verificare la transazione
+def verifica_transazione_gky(wallet_address, tx_hash, cost):
+    try:
+        tx_hash = tx_hash.strip()
+        if " " in tx_hash:
+            parts = tx_hash.split()
+            tx_hash = next((p for p in parts if p.startswith("0x")), tx_hash)
+        if not tx_hash.startswith("0x"):
+            logging.error("TX hash non valido: non inizia con '0x'")
+            return False
+        tx = w3_no_mw.eth.get_transaction(tx_hash)
+        logging.info(f"Verifica TX: wallet_address {wallet_address.lower()} vs tx['from'] {tx['from'].lower()}")
+        if tx["from"].lower() != wallet_address.lower():
+            logging.error("TX non inviata dal wallet specificato.")
+            return False
+        if tx["to"].lower() != CONTRATTO_GKY.lower():
+            logging.error("TX non destinata al contratto GKY.")
+            return False
+        contract = w3_no_mw.eth.contract(address=CONTRATTO_GKY, abi=[{
+            "constant": False,
+            "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
+            "name": "transfer",
+            "outputs": [{"name": "", "type": "bool"}],
+            "payable": False,
+            "stateMutability": "nonpayable",
+            "type": "function",
+        }])
+        try:
+            func_obj, params = contract.decode_function_input(tx.input)
+        except Exception as decode_error:
+            logging.error(f"Decodifica TX fallita: {decode_error}")
+            return False
+        if func_obj.fn_name != "transfer":
+            logging.error("TX non chiama transfer.")
+            return False
+        if params.get("_to", "").lower() != WALLET_DISTRIBUZIONE.lower():
+            logging.error("TX non invia al portafoglio di distribuzione.")
+            return False
+        token_amount = params.get("_value", 0)
+        if token_amount < cost * 10**18:
+            logging.error(f"Importo insufficiente: {w3_no_mw.from_wei(token_amount, 'ether')} vs {cost}")
+            return False
+        return True
+    except Exception as e:
+        logging.error(f"Errore verifica TX: {e}")
+        return False
 
 def get_prize():
     r = random.random() * 100
