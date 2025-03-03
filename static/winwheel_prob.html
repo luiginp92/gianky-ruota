@@ -55,7 +55,7 @@
       text: item.text
     }));
 
-    // Funzione per creare la ruota con parametri fissi
+    // Funzione per creare la ruota con parametri costanti
     function createWheel() {
       return new Winwheel({
         canvasId: 'canvas',
@@ -69,11 +69,9 @@
           callbackFinished: async function(indicatedSegment) {
             console.log("Spin terminato. Segmento:", indicatedSegment);
             alert("Hai vinto: " + indicatedSegment.text);
-            // Legge il wallet da localStorage e lo pulisce
+            // Legge il wallet da localStorage, effettua un trim e controlla la lunghezza
             let wallet = localStorage.getItem("walletAddress");
-            if (wallet) {
-              wallet = wallet.trim();
-            }
+            if (wallet) wallet = wallet.trim();
             console.log("Wallet letto:", wallet);
             if (!wallet || wallet.length !== 42) {
               alert("Wallet non valido o non connesso.");
@@ -81,7 +79,7 @@
               return;
             }
             try {
-              // Chiama /api/spin per registrare lo spin
+              // Registra lo spin tramite /api/spin
               const spinRes = await fetch("/api/spin", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -134,7 +132,7 @@
 
     document.getElementById("spinButton").addEventListener("click", () => {
       document.getElementById("spinButton").disabled = true;
-      // Ricrea la ruota per avere animazione costante
+      // Ricrea la ruota per avere animazione costante ad ogni spin
       theWheel = createWheel();
       const chosenIndex = pickPrize();
       console.log("Indice scelto:", chosenIndex);
