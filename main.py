@@ -3,8 +3,8 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questa applicazione espone tramite API REST la logica del gioco con:
- • Endpoint /api/spin: Consuma uno spin e determina il premio (senza trasferimento)
- • Endpoint /api/distribute: Effettua il trasferimento del premio (se contiene "GKY")
+ • /api/spin: Registra lo spin e determina il premio (senza trasferimento)
+ • /api/distribute: Effettua il trasferimento del premio (se contiene "GKY")
  • Altri endpoint per acquisti, referral, ecc.
 """
 
@@ -23,7 +23,6 @@ import uvicorn
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
-# Importa il modulo del database (assicurati che sia aggiornato)
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 # ---------------------------
@@ -66,7 +65,6 @@ w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
-# Variabile per tracciare gli hash già usati
 USED_TX = set()
 
 # ---------------------------
@@ -76,7 +74,7 @@ app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ---------------------------
-# MODELLI DI INPUT (senza vincoli stringa troppo rigidi)
+# MODELLI DI INPUT (wallet_address senza restrizioni stringenti)
 # ---------------------------
 class SpinRequest(BaseModel):
     wallet_address: str
@@ -84,8 +82,6 @@ class SpinRequest(BaseModel):
 class DistributePrizeRequest(BaseModel):
     wallet_address: str
     prize: str
-
-# (Altri modelli per acquisti sono omessi per questo flusso)
 
 # ---------------------------
 # FUNZIONI UTILI
@@ -111,7 +107,7 @@ def get_user(wallet_address: str):
             raise HTTPException(status_code=500, detail="Errore nella creazione dell'utente")
         finally:
             session.close()
-    logging.info(f"Utente trovato/creato: {user.wallet_address}, extra_spins: {user.extra_spins}")
+    logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}")
     return user
 
 def get_dynamic_gas_price():
@@ -148,7 +144,6 @@ def invia_token(destinatario, quantita):
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
     
-    # Aggiornamento contatori (es. per report)
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
@@ -193,7 +188,7 @@ def get_prize():
             return "NO PRIZE"
 
 # ---------------------------
-# ENDPOINT /api/spin (Solo registra lo spin e restituisce il premio)
+# ENDPOINT /api/spin: Registra lo spin e determina il premio
 # ---------------------------
 @app.post("/api/spin")
 async def api_spin(request: SpinRequest):
@@ -202,7 +197,6 @@ async def api_spin(request: SpinRequest):
     try:
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
-        # Se l'utente non ha già giocato oggi, dispone di 1 free spin + extra
         if (not user.last_play_date) or (user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
             available = 1 + (user.extra_spins or 0)
             user.last_play_date = now_italy
@@ -230,7 +224,7 @@ async def api_spin(request: SpinRequest):
             )
             session.add(premio_record)
             session.commit()
-        logging.info(f"Spin registrato per {user.wallet_address}: premio {prize}, giri residui {available}")
+        logging.info(f"Spin per {user.wallet_address}: premio {prize}, giri residui {available}")
         return {"message": result_text, "prize": prize, "available_spins": available}
     except HTTPException as he:
         raise he
@@ -241,7 +235,7 @@ async def api_spin(request: SpinRequest):
         session.close()
 
 # ---------------------------
-# ENDPOINT /api/distribute (Effettua il trasferimento del premio)
+# ENDPOINT /api/distribute: Trasferisce il premio dal wallet di distribuzione
 # ---------------------------
 @app.post("/api/distribute")
 async def api_distribute(request: DistributePrizeRequest):
@@ -256,13 +250,7 @@ async def api_distribute(request: DistributePrizeRequest):
         else:
             raise HTTPException(status_code=500, detail="Errore nel trasferimento del premio.")
     else:
-        # Per NFT o altri premi, registra o gestisci diversamente
         return {"message": f"Premio '{request.prize}' registrato per il wallet {user.wallet_address}."}
-
-# ---------------------------
-# ALTRI ENDPOINT (buyspins, confirmbuy, referral, ecc.)
-# ---------------------------
-# (Questi endpoint restano invariati rispetto alle versioni precedenti)
 
 @app.get("/wheel")
 async def get_wheel():

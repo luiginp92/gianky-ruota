@@ -55,80 +55,87 @@
       text: item.text
     }));
 
-    // Inizializza la ruota
-    const theWheel = new Winwheel({
-      canvasId: 'canvas',
-      numSegments: segmentsForWheel.length,
-      outerRadius: 200,
-      segments: segmentsForWheel,
-      animation: {
-        type: 'spinToStop',
-        duration: 5,
-        spins: 8,
-        callbackFinished: async function(indicatedSegment) {
-          console.log("Spin terminato. Segmento:", indicatedSegment);
-          alert("Hai vinto: " + indicatedSegment.text);
-          // Legge il wallet da localStorage e controlla che abbia 42 caratteri
-          const wallet = localStorage.getItem("walletAddress");
-          console.log("Wallet letto:", wallet);
-          if (!wallet || wallet.length !== 42) {
-            alert("Wallet non valido o non connesso.");
-            resetWheel();
-            return;
-          }
-          try {
-            // Registra lo spin tramite /api/spin
-            const spinRes = await fetch("/api/spin", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ wallet_address: wallet })
-            });
-            if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
-            const spinData = await spinRes.json();
-            console.log("Risultato spin:", spinData);
-            // Se il premio è diverso da "NO PRIZE", chiama /api/distribute per trasferirlo
-            if (spinData.prize !== "NO PRIZE") {
-              const distRes = await fetch("/api/distribute", {
+    // Funzione per creare (o reimpostare) la ruota
+    function createWheel() {
+      return new Winwheel({
+        canvasId: 'canvas',
+        numSegments: segmentsForWheel.length,
+        outerRadius: 200,
+        segments: segmentsForWheel,
+        animation: {
+          type: 'spinToStop',
+          duration: 5,  // Durata fissa in secondi
+          spins: 8,     // Numero fisso di giri completi
+          callbackFinished: async function(indicatedSegment) {
+            console.log("Spin terminato. Segmento:", indicatedSegment);
+            alert("Hai vinto: " + indicatedSegment.text);
+            // Legge il wallet da localStorage e controlla la lunghezza
+            const wallet = localStorage.getItem("walletAddress");
+            console.log("Wallet letto:", wallet);
+            if (!wallet || wallet.length !== 42) {
+              alert("Wallet non valido o non connesso.");
+              resetWheel();
+              return;
+            }
+            try {
+              // Chiama /api/spin per registrare lo spin
+              const spinRes = await fetch("/api/spin", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ wallet_address: wallet, prize: spinData.prize })
+                body: JSON.stringify({ wallet_address: wallet })
               });
-              if (!distRes.ok) throw new Error("Distribuzione fallita: " + distRes.status);
-              const distData = await distRes.json();
-              console.log("Premio distribuito:", distData);
-              alert(distData.message);
+              if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
+              const spinData = await spinRes.json();
+              console.log("Risultato spin:", spinData);
+              // Se il premio non è "NO PRIZE", chiama /api/distribute per trasferirlo
+              if (spinData.prize !== "NO PRIZE") {
+                const distRes = await fetch("/api/distribute", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ wallet_address: wallet, prize: spinData.prize })
+                });
+                if (!distRes.ok) throw new Error("Distribuzione fallita: " + distRes.status);
+                const distData = await distRes.json();
+                console.log("Premio distribuito:", distData);
+                alert(distData.message);
+              }
+            } catch (error) {
+              console.error("Errore durante spin/distribuzione:", error);
+              alert("Errore durante spin/distribuzione. Contatta l'assistenza.");
             }
-          } catch (error) {
-            console.error("Errore durante spin/distribuzione:", error);
-            alert("Errore durante spin/distribuzione. Contatta l'assistenza.");
+            resetWheel();
           }
-          resetWheel();
         }
-      }
-    });
+      });
+    }
+
+    // Crea l'istanza iniziale della ruota
+    let theWheel = createWheel();
 
     function resetWheel() {
+      // Reimposta la ruota per il prossimo spin
       theWheel.stopAnimation(false);
       theWheel.rotationAngle = 0;
       theWheel.draw();
       document.getElementById("spinButton").disabled = false;
     }
 
-    function pickPrize() {
-      const rnd = Math.random();
-      let sum = 0;
-      for (let i = 0; i < prizeData.length; i++) {
-        sum += prizeData[i].prob;
-        if (rnd <= sum) return i;
-      }
-      return prizeData.length - 1;
-    }
-
+    // Gestione del pulsante di spin: ogni volta reimposta i parametri e ricrea la ruota
     document.getElementById("spinButton").addEventListener("click", () => {
       document.getElementById("spinButton").disabled = true;
-      const chosenIndex = pickPrize();
-      console.log("Indice scelto:", chosenIndex);
+      // Ricrea la ruota per garantire parametri costanti ad ogni spin
+      theWheel = createWheel();
       const anglePerSegment = 360 / prizeData.length;
+      const chosenIndex = (function pickPrize() {
+        const rnd = Math.random();
+        let sum = 0;
+        for (let i = 0; i < prizeData.length; i++) {
+          sum += prizeData[i].prob;
+          if (rnd <= sum) return i;
+        }
+        return prizeData.length - 1;
+      })();
+      console.log("Indice scelto:", chosenIndex);
       const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
       const extraSpins = 360 * 5;
       const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
