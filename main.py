@@ -20,7 +20,6 @@ import pytz
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -69,15 +68,6 @@ USED_TX = set()
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Gestore globale per errori di validazione
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logging.error(f"Validation error for {request.url}: {exc.errors()} - Body: {exc.body}")
-    return JSONResponse(
-        status_code=422,
-        content={"detail": exc.errors(), "body": exc.body},
-    )
-
 # MODELLI DI INPUT – vincolati per wallet_address di 42 caratteri
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., min_length=42, max_length=42)
@@ -95,6 +85,7 @@ class DistributePrizeRequest(BaseModel):
     wallet_address: str = Field(..., min_length=42, max_length=42)
     prize: str
 
+# FUNZIONI UTILI
 def get_user(wallet_address: str):
     logging.info(f"Recupero utente per wallet: {wallet_address}")
     session = Session()
@@ -250,9 +241,11 @@ def get_prize():
             return "NO PRIZE"
 
 @app.post("/api/spin")
-async def api_spin(request: SpinRequest):
-    logging.info(f"Ricevuta richiesta /api/spin con wallet_address: {request.wallet_address}")
-    user = get_user(request.wallet_address)
+async def api_spin(request: Request, spin_req: SpinRequest):
+    raw_body = await request.body()
+    logging.info(f"Raw request body in /api/spin: {raw_body}")
+    logging.info(f"Ricevuta richiesta /api/spin con wallet_address: {spin_req.wallet_address}")
+    user = get_user(spin_req.wallet_address)
     session = Session()
     try:
         italy_tz = pytz.timezone("Europe/Rome")
