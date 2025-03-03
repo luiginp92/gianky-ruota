@@ -26,13 +26,13 @@ import uvicorn
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
-# Importa il modulo del database
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
+# Costanti di configurazione
 POLYGON_RPC = "https://polygon-rpc.com"
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
@@ -63,31 +63,31 @@ w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
-# Variabile per tracciare gli hash già usati
 USED_TX = set()
 
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# MODELLI DI INPUT
+# MODELLI DI INPUT – vincolati per wallet_address di 42 caratteri
 class SpinRequest(BaseModel):
-    wallet_address: str
+    wallet_address: str = Field(..., min_length=42, max_length=42)
 
 class BuySpinsRequest(BaseModel):
-    wallet_address: str
+    wallet_address: str = Field(..., min_length=42, max_length=42)
     num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
 
 class ConfirmBuyRequest(BaseModel):
-    wallet_address: str
+    wallet_address: str = Field(..., min_length=42, max_length=42)
     tx_hash: str
     num_spins: int = Field(..., description="Numero di tiri extra (1, 3 o 10)", gt=0)
 
 class DistributePrizeRequest(BaseModel):
-    wallet_address: str
+    wallet_address: str = Field(..., min_length=42, max_length=42)
     prize: str
 
 # FUNZIONI UTILI
 def get_user(wallet_address: str):
+    logging.info(f"Recupero utente per wallet: {wallet_address}")
     session = Session()
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
@@ -97,6 +97,7 @@ def get_user(wallet_address: str):
     finally:
         session.close()
     if user is None:
+        logging.info("Utente non trovato, lo creo...")
         session = Session()
         try:
             user = User(wallet_address=wallet_address, extra_spins=0)
@@ -115,13 +116,14 @@ def get_dynamic_gas_price():
     try:
         base = w3.eth.gas_price
         safe = int(base * 1.2)
-        logging.info(f"⛽ Gas Price: {w3.from_wei(base, 'gwei')} -> {w3.from_wei(safe, 'gwei')}")
+        logging.info(f"Gas Price: {w3.from_wei(base, 'gwei')} -> {w3.from_wei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
         return w3.to_wei('50', 'gwei')
 
 def invia_token(destinatario, quantita):
+    logging.info(f"Inizio trasferimento di {quantita} GKY a {destinatario}")
     if not w3.is_connected():
         logging.error("Blockchain non connessa.")
         return False
@@ -143,7 +145,7 @@ def invia_token(destinatario, quantita):
     })
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-    logging.info(f"Token inviati: {quantita} GKY, TX: {tx_hash.hex()}")
+    logging.info(f"Transazione inviata, TX hash: {tx_hash.hex()}")
     
     session = Session()
     try:
@@ -154,15 +156,16 @@ def invia_token(destinatario, quantita):
             counter = GlobalCounter(total_in=0.0, total_out=quantita)
             session.add(counter)
         session.commit()
+        logging.info("Contatore aggiornato correttamente.")
     except Exception as e:
-        logging.error(f"Errore aggiornamento total_out: {e}")
+        logging.error(f"Errore nell'aggiornamento del contatore: {e}")
         session.rollback()
     finally:
         session.close()
     return True
 
-# Funzione aggiunta per verificare la transazione
 def verifica_transazione_gky(wallet_address, tx_hash, cost):
+    logging.info(f"Inizio verifica TX per wallet {wallet_address} e costo {cost}")
     try:
         tx_hash = tx_hash.strip()
         if " " in tx_hash:
@@ -172,7 +175,7 @@ def verifica_transazione_gky(wallet_address, tx_hash, cost):
             logging.error("TX hash non valido: non inizia con '0x'")
             return False
         tx = w3_no_mw.eth.get_transaction(tx_hash)
-        logging.info(f"Verifica TX: wallet_address {wallet_address.lower()} vs tx['from'] {tx['from'].lower()}")
+        logging.info(f"TX recuperata, mittente: {tx['from']}")
         if tx["from"].lower() != wallet_address.lower():
             logging.error("TX non inviata dal wallet specificato.")
             return False
@@ -203,13 +206,15 @@ def verifica_transazione_gky(wallet_address, tx_hash, cost):
         if token_amount < cost * 10**18:
             logging.error(f"Importo insufficiente: {w3_no_mw.from_wei(token_amount, 'ether')} vs {cost}")
             return False
+        logging.info("Verifica TX completata correttamente.")
         return True
     except Exception as e:
-        logging.error(f"Errore verifica TX: {e}")
+        logging.error(f"Errore nella verifica TX: {e}")
         return False
 
 def get_prize():
     r = random.random() * 100
+    logging.info(f"Random per premio: {r}")
     if r < 0.02:
         return "NFT BASISC"
     elif r < 0.06:
@@ -237,6 +242,7 @@ def get_prize():
 
 @app.post("/api/spin")
 async def api_spin(request: SpinRequest):
+    logging.info(f"Ricevuta richiesta /api/spin con wallet_address: {request.wallet_address}")
     user = get_user(request.wallet_address)
     session = Session()
     try:
@@ -246,15 +252,19 @@ async def api_spin(request: SpinRequest):
             available = 1 + (user.extra_spins or 0)
             user.last_play_date = now_italy
             session.commit()
+            logging.info("Primo spin del giorno: impostati i giri disponibili.")
         else:
             available = user.extra_spins or 0
             if available > 0:
                 user.extra_spins -= 1
                 session.commit()
                 available -= 1
+                logging.info("Consumato un giro extra.")
             else:
+                logging.error("Tiri esauriti per oggi.")
                 raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
         prize = get_prize()
+        logging.info(f"Premio determinato: {prize}")
         if prize == "NO PRIZE":
             result_text = "😔 Nessun premio vinto. Riprova!"
         elif "GKY" in prize:
@@ -269,33 +279,41 @@ async def api_spin(request: SpinRequest):
             )
             session.add(premio_record)
             session.commit()
-        logging.info(f"Spin per {user.wallet_address}: premio {prize}, giri residui {available}")
+        logging.info(f"Spin completato per {user.wallet_address}. Giri residui: {available}")
         return {"message": result_text, "prize": prize, "available_spins": available}
     except HTTPException as he:
+        logging.error(f"HTTPException in /api/spin: {he.detail}")
         raise he
     except Exception as e:
-        logging.error(f"Errore nello spin: {e}")
+        logging.error(f"Errore in /api/spin: {e}")
         raise HTTPException(status_code=500, detail="Errore durante il giro della ruota.")
     finally:
         session.close()
 
 @app.post("/api/distribute")
 async def api_distribute(request: DistributePrizeRequest):
+    logging.info(f"Ricevuta richiesta /api/distribute per wallet: {request.wallet_address} con premio: {request.prize}")
     user = get_user(request.wallet_address)
     if "GKY" in request.prize:
         try:
             amount = int(request.prize.split(" ")[0])
+            logging.info(f"Importo da trasferire: {amount} GKY")
         except Exception:
+            logging.error("Formato premio non valido in /api/distribute.")
             raise HTTPException(status_code=400, detail="Formato premio non valido.")
         if invia_token(user.wallet_address, amount):
+            logging.info("Trasferimento completato con successo.")
             return {"message": f"Premio '{request.prize}' trasferito correttamente al wallet {user.wallet_address}."}
         else:
+            logging.error("Errore nel trasferimento in /api/distribute.")
             raise HTTPException(status_code=500, detail="Errore nel trasferimento del premio.")
     else:
+        logging.info("Premio non trasferibile, registrato in database.")
         return {"message": f"Premio '{request.prize}' registrato per il wallet {user.wallet_address}."}
 
 @app.post("/api/buyspins")
 async def api_buyspins(request: BuySpinsRequest):
+    logging.info(f"Ricevuta richiesta /api/buyspins per wallet: {request.wallet_address} con num_spins: {request.num_spins}")
     user = get_user(request.wallet_address)
     session = Session()
     try:
@@ -304,15 +322,17 @@ async def api_buyspins(request: BuySpinsRequest):
         cost = 50 if request.num_spins == 1 else (125 if request.num_spins == 3 else 300)
         message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
                    f"{WALLET_DISTRIBUZIONE}")
+        logging.info("Messaggio buyspins generato correttamente.")
         return {"message": message}
     except Exception as e:
-        logging.error(f"Errore in buyspins: {e}")
+        logging.error(f"Errore in /api/buyspins: {e}")
         raise HTTPException(status_code=500, detail="Errore durante la richiesta di acquisto degli extra spin.")
     finally:
         session.close()
 
 @app.post("/api/confirmbuy")
 async def api_confirmbuy(request: ConfirmBuyRequest):
+    logging.info(f"Ricevuta richiesta /api/confirmbuy per wallet: {request.wallet_address} con tx_hash: {request.tx_hash}")
     user = get_user(request.wallet_address)
     session = Session()
     try:
@@ -321,6 +341,7 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
         if request.num_spins not in [1, 3, 10]:
             raise HTTPException(status_code=400, detail="❌ Solo 1, 3 o 10 tiri extra sono ammessi.")
         cost = 50 if request.num_spins == 1 else (125 if request.num_spins == 3 else 300)
+        logging.info(f"Verifica transazione per costo: {cost}")
         if verifica_transazione_gky(request.wallet_address, request.tx_hash, cost):
             user.extra_spins = (user.extra_spins or 0) + request.num_spins
             session.commit()
@@ -332,13 +353,16 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
                 counter = GlobalCounter(total_in=cost, total_out=0.0)
                 session.add(counter)
             session.commit()
+            logging.info("Acquisto confermato correttamente.")
             return {"message": f"✅ Acquisto confermato! Extra tiri disponibili: {user.extra_spins}", "extra_spins": user.extra_spins}
         else:
+            logging.error("Verifica transazione fallita in /api/confirmbuy.")
             raise HTTPException(status_code=400, detail="❌ Transazione non valida o importo insufficiente.")
     except HTTPException as he:
+        logging.error(f"HTTPException in /api/confirmbuy: {he.detail}")
         raise he
     except Exception as e:
-        logging.error(f"Errore in confirmbuy: {e}")
+        logging.error(f"Errore in /api/confirmbuy: {e}")
         raise HTTPException(status_code=500, detail="Errore durante la conferma degli extra spin.")
     finally:
         session.close()
@@ -346,6 +370,7 @@ async def api_confirmbuy(request: ConfirmBuyRequest):
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
+    logging.info(f"Referral link generato per wallet: {wallet_address}")
     return {"referral_link": referral_link}
 
 @app.get("/wheel")
@@ -368,7 +393,9 @@ async def home_redirect():
 
 @app.on_event("startup")
 def on_startup_event():
+    logging.info("Avvio applicazione e inizializzazione database...")
     init_db()
+    logging.info("Database inizializzato.")
 
 if __name__ == '__main__':
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

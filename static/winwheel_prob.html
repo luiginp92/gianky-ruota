@@ -54,6 +54,7 @@
     }));
 
     function createWheel() {
+      console.log("Creazione della ruota...");
       return new Winwheel({
         canvasId: 'canvas',
         numSegments: segmentsForWheel.length,
@@ -61,8 +62,8 @@
         segments: segmentsForWheel,
         animation: {
           type: 'spinToStop',
-          duration: 5,
-          spins: 8,
+          duration: 5, // Durata fissa in secondi
+          spins: 8,    // Numero fisso di giri
           callbackFinished: async function(indicatedSegment) {
             console.log("Spin terminato. Segmento:", indicatedSegment);
             alert("Hai vinto: " + indicatedSegment.text);
@@ -75,6 +76,7 @@
               return;
             }
             try {
+              console.log("Invio richiesta a /api/spin");
               const spinRes = await fetch("/api/spin", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -84,6 +86,7 @@
               const spinData = await spinRes.json();
               console.log("Risultato spin:", spinData);
               if (spinData.prize !== "NO PRIZE") {
+                console.log("Invio richiesta a /api/distribute per premio:", spinData.prize);
                 const distRes = await fetch("/api/distribute", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
@@ -107,6 +110,7 @@
     let theWheel = createWheel();
 
     function resetWheel() {
+      console.log("Reset della ruota...");
       theWheel.stopAnimation(false);
       theWheel.rotationAngle = 0;
       theWheel.draw();
@@ -125,6 +129,7 @@
 
     document.getElementById("spinButton").addEventListener("click", () => {
       document.getElementById("spinButton").disabled = true;
+      console.log("Inizio spin...");
       theWheel = createWheel();
       const chosenIndex = pickPrize();
       console.log("Indice scelto:", chosenIndex);
@@ -132,7 +137,7 @@
       const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
       const extraSpins = 360 * 5;
       const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
-      console.log("Angolo finale:", finalAngle);
+      console.log("Angolo finale calcolato:", finalAngle);
       theWheel.animation.stopAngle = finalAngle;
       theWheel.startAnimation();
     });
