@@ -17,9 +17,10 @@ import datetime
 import os
 import pytz
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -32,7 +33,7 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# Costanti di configurazione
+# CONFIGURAZIONI BLOCKCHAIN E COSTANTI
 POLYGON_RPC = "https://polygon-rpc.com"
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
@@ -68,6 +69,15 @@ USED_TX = set()
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Gestore globale per errori di validazione
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logging.error(f"Validation error for {request.url}: {exc.errors()} - Body: {exc.body}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": exc.body},
+    )
+
 # MODELLI DI INPUT – vincolati per wallet_address di 42 caratteri
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., min_length=42, max_length=42)
@@ -85,7 +95,6 @@ class DistributePrizeRequest(BaseModel):
     wallet_address: str = Field(..., min_length=42, max_length=42)
     prize: str
 
-# FUNZIONI UTILI
 def get_user(wallet_address: str):
     logging.info(f"Recupero utente per wallet: {wallet_address}")
     session = Session()

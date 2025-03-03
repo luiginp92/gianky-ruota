@@ -62,8 +62,8 @@
         segments: segmentsForWheel,
         animation: {
           type: 'spinToStop',
-          duration: 5, // Durata fissa in secondi
-          spins: 8,    // Numero fisso di giri
+          duration: 5,  // Durata fissa in secondi
+          spins: 8,     // Numero fisso di giri
           callbackFinished: async function(indicatedSegment) {
             console.log("Spin terminato. Segmento:", indicatedSegment);
             alert("Hai vinto: " + indicatedSegment.text);
