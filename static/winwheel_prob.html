@@ -33,7 +33,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
-    // L'array prizeData deve essere coerente con il backend (non contiene "20 GKY" ma contiene "50 GKY")
+    // Array dei premi (deve corrispondere a quelli restituiti dal backend)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '50 GKY', color: '#E67E22' },
@@ -53,6 +53,7 @@
       text: item.text
     }));
     
+    // Funzione per creare la ruota con lo stopAngle calcolato
     function createWheel(finalAngle) {
       console.log("Creazione della ruota con finalAngle:", finalAngle);
       return new Winwheel({
@@ -97,6 +98,7 @@
       });
     }
     
+    // Trova l'indice del premio nell'array prizeData
     function findPrizeIndex(prizeText) {
       for (let i = 0; i < prizeData.length; i++) {
         if (prizeData[i].text.trim() === prizeText.trim()) {

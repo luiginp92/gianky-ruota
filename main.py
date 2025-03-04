@@ -36,7 +36,7 @@ logging.basicConfig(
 # CONFIGURAZIONI BLOCKCHAIN E COSTANTI
 POLYGON_RPC = "https://polygon-rpc.com"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
-# Imposta la chiave privata del wallet di distribuzione (non modificarla se non sai cosa stai facendo)
+# Chiave privata del wallet di distribuzione (utilizza la chiave fornita)
 PRIVATE_KEY = "909327718ec1fa6fe2bbad7802b630380c45c31a4e2e9e69ed7cf81a88bd10f8"
 
 # Calcola l'indirizzo del wallet di distribuzione a partire dalla chiave privata
@@ -80,7 +80,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": exc.body},
     )
 
-# MODELLI DI INPUT
+# MODELLI DI INPUT – wallet_address vincolato a 42 caratteri
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., min_length=42, max_length=42)
 
@@ -176,7 +176,7 @@ def invia_token(destinatario, quantita):
     return True
 
 def get_prize():
-    # Distribuzione cumulativa per premi coerenti con il client
+    # Distribuzione cumulativa – l'array deve corrispondere ai premi visualizzati nel client
     prizes = [
        ("10 GKY", 0.10),
        ("50 GKY", 0.10),
