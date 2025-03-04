@@ -438,6 +438,8 @@ async def api_buyspins(request: BuySpinsRequest, current_user: User = Depends(ge
 async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
+        # Ricarica l'utente dalla nuova sessione
+        user = session.query(User).filter(User.id == current_user.id).first()
         if request.tx_hash in USED_TX:
             raise HTTPException(status_code=400, detail="❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
         if request.num_spins not in [1, 3, 10]:
@@ -448,10 +450,10 @@ async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depend
             cost = 125
         elif request.num_spins == 10:
             cost = 300
-        if not current_user.wallet_address:
+        if not user.wallet_address:
             raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di confermare l'acquisto.")
-        if verifica_transazione_gky(current_user.wallet_address, request.tx_hash, cost):
-            current_user.extra_spins = (current_user.extra_spins or 0) + request.num_spins
+        if verifica_transazione_gky(user.wallet_address, request.tx_hash, cost):
+            user.extra_spins = (user.extra_spins or 0) + request.num_spins
             session.commit()
             USED_TX.add(request.tx_hash)
             counter = session.query(GlobalCounter).first()
@@ -461,12 +463,14 @@ async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depend
                 counter = GlobalCounter(total_in=cost, total_out=0.0)
                 session.add(counter)
             session.commit()
-            return {"message": f"✅ Acquisto confermato! Extra tiri disponibili: {current_user.extra_spins}"}
+            return {"message": f"✅ Acquisto confermato! Extra tiri disponibili: {user.extra_spins}"}
         else:
             raise HTTPException(status_code=400, detail="❌ Transazione non valida o importo insufficiente.")
     except HTTPException as he:
+        session.rollback()
         raise he
     except Exception as e:
+        session.rollback()
         logging.error(f"Errore in confirmbuy: {e}")
         raise HTTPException(status_code=500, detail="Errore durante la conferma degli extra spin.")
     finally:
