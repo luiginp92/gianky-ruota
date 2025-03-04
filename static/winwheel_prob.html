@@ -33,18 +33,17 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
-    // Definiamo i segmenti della ruota (devono corrispondere all'ordine previsto)
+    // Array dei premi aggiornato per essere coerente con il backend (senza "20 GKY")
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
-      { text: '20 GKY', color: '#E67E22' },
-      { text: '50 GKY', color: '#E74C3C' },
-      { text: '100 GKY', color: '#9B59B6' },
-      { text: '250 GKY', color: '#3498DB' },
-      { text: '500 GKY', color: '#1ABC9C' },
-      { text: '1000 GKY', color: '#2ECC71' },
-      { text: 'NFT BASIC', color: '#F39C12' },
-      { text: 'NFT STARTER', color: '#C0392B' },
-      { text: 'NO PRIZE', color: '#BDC3C7' },
+      { text: '50 GKY', color: '#E67E22' },
+      { text: '100 GKY', color: '#E74C3C' },
+      { text: '250 GKY', color: '#9B59B6' },
+      { text: '500 GKY', color: '#3498DB' },
+      { text: '1000 GKY', color: '#1ABC9C' },
+      { text: 'NFT BASISC', color: '#2ECC71' },
+      { text: 'NFT STARTER', color: '#F39C12' },
+      { text: 'NO PRIZE', color: '#C0392B' },
       { text: 'NO PRIZE', color: '#BDC3C7' },
       { text: 'NO PRIZE', color: '#BDC3C7' }
     ];
@@ -54,7 +53,7 @@
       text: item.text
     }));
     
-    // Funzione per creare la ruota usando l'angolo finale calcolato
+    // Funzione per creare la ruota con lo stopAngle calcolato
     function createWheel(finalAngle) {
       console.log("Creazione della ruota con finalAngle:", finalAngle);
       return new Winwheel({
@@ -64,8 +63,8 @@
         segments: segmentsForWheel,
         animation: {
           type: 'spinToStop',
-          duration: 5, // Durata fissa in secondi
-          spins: 8,    // Numero fisso di giri
+          duration: 5,
+          spins: 8,
           stopAngle: finalAngle,
           callbackFinished: async function(indicatedSegment) {
             console.log("Spin terminato. Segmento:", indicatedSegment);
@@ -99,14 +98,6 @@
       });
     }
     
-    function resetWheel() {
-      console.log("Reset della ruota...");
-      theWheel.stopAnimation(false);
-      theWheel.rotationAngle = 0;
-      theWheel.draw();
-      document.getElementById("spinButton").disabled = false;
-    }
-    
     // Funzione per trovare l'indice del premio nell'array prizeData
     function findPrizeIndex(prizeText) {
       for (let i = 0; i < prizeData.length; i++) {
@@ -116,6 +107,16 @@
       }
       return -1;
     }
+    
+    function resetWheel() {
+      console.log("Reset della ruota...");
+      theWheel.stopAnimation(false);
+      theWheel.rotationAngle = 0;
+      theWheel.draw();
+      document.getElementById("spinButton").disabled = false;
+    }
+    
+    let theWheel;
     
     document.getElementById("spinButton").addEventListener("click", async () => {
       document.getElementById("spinButton").disabled = true;

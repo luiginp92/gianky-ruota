@@ -172,31 +172,30 @@ def invia_token(destinatario, quantita):
         session.close()
     return True
 
-# Funzione aggiornata con distribuzione cumulativa (rispetta l'array client)
+# Distribuzione premio – Usa una distribuzione cumulativa coerente con il client
 def get_prize():
-    prizes = [
-       ("10 GKY", 0.10),
-       ("20 GKY", 0.05),
-       ("50 GKY", 0.10),
-       ("100 GKY", 0.10),
-       ("250 GKY", 0.10),
-       ("500 GKY", 0.05),
-       ("1000 GKY", 0.05),
-       ("NFT BASIC", 0.05),
-       ("NFT STARTER", 0.05),
-       ("NO PRIZE", 0.15),
-       ("NO PRIZE", 0.10),
-       ("NO PRIZE", 0.10)
-    ]
-    r = random.random()
+    r = random.random() * 100
     logging.info(f"Random per premio: {r}")
-    cumulative = 0.0
-    for prize, prob in prizes:
-        cumulative += prob
-        if r < cumulative:
-            logging.info(f"Premio scelto: {prize}")
-            return prize
-    return "NO PRIZE"
+    if r < 0.02:
+        return "NFT BASISC"
+    elif r < 0.06:
+        return "NFT STARTER"
+    elif r < 40:
+        return "NO PRIZE"
+    elif r < 70:
+        return "10 GKY"
+    elif r < 80:
+        return "50 GKY"
+    elif r < 85:
+        return "100 GKY"
+    elif r < 90:
+        return "250 GKY"
+    elif r < 95:
+        return "500 GKY"
+    elif r < 100:
+        return "1000 GKY"
+    else:
+        return "NO PRIZE"
 
 @app.post("/api/spin")
 async def api_spin(request: Request, spin_req: SpinRequest):
