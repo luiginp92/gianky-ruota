@@ -42,16 +42,15 @@
   </div>
   
   <script>
-    // Funzione per recuperare il token di accesso da localStorage
     function getAccessToken() {
       return localStorage.getItem("access_token");
     }
 
-    // Quando viene premuto "Richiedi Acquisto", chiamiamo l'endpoint /api/buyspins
+    // 1) Richiesta di acquisto
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const token = getAccessToken();
       if (!token) {
-        alert("Token di accesso mancante. Effettua l'autenticazione.");
+        alert("Token di accesso mancante. Effettua l'autenticazione (connectwallet).");
         return;
       }
       const numSpins = document.getElementById("numSpins").value;
@@ -74,11 +73,11 @@
       }
     });
   
-    // Quando viene premuto "Conferma Acquisto", chiamiamo l'endpoint /api/confirmbuy
+    // 2) Conferma acquisto
     document.getElementById("confirmPurchase").addEventListener("click", async () => {
       const token = getAccessToken();
       if (!token) {
-        alert("Token di accesso mancante. Effettua l'autenticazione.");
+        alert("Token di accesso mancante. Effettua l'autenticazione (connectwallet).");
         return;
       }
       const numSpins = document.getElementById("numSpins").value;

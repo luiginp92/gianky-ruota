@@ -3,7 +3,7 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questa applicazione espone tramite API REST la logica del gioco con:
- • Autenticazione basata sulla firma del wallet (JWT)
+ • Autenticazione basata sulla firma del wallet (JWT) o "dummy"
  • Validazioni robuste con Pydantic
  • Endpoints per gioco, acquisti, referral, ecc.
  • Un frontend minimale per interagire con il sistema
@@ -339,12 +339,8 @@ async def api_ruota(current_user: User = Depends(get_current_user)):
             session.commit()
         else:
             available = user.extra_spins or 0
-            if available > 0:
-                user.extra_spins -= 1
-                session.commit()
-                available -= 1
-            else:
-                raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
+            # Non decrementare qui: /api/ruota adesso serve solo per mostrare i giri.
+            # Il decremento avverrà in /api/spin.
         ruota_url = "/wheel" if STATIC_IMAGE_BYTES else None
         return {
             "message": f"🎰 Ruota pronta! Tiri disponibili: {available}",
@@ -374,18 +370,22 @@ async def api_spin(current_user: User = Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di giocare.")
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
+        
+        # Se non ha giocato oggi, free spin + extra
         if (not user.last_play_date) or (user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
             available = 1 + (user.extra_spins or 0)
             user.last_play_date = now_italy
             session.commit()
         else:
             available = user.extra_spins or 0
-            if available > 0:
-                user.extra_spins -= 1
-                session.commit()
-                available -= 1
-            else:
-                raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
+        
+        if available > 0:
+            user.extra_spins = available - 1
+            session.commit()
+            available -= 1
+        else:
+            raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
+        
         premio = get_prize()
         if premio["type"] == "NONE":
             result_text = "😔 Nessun premio vinto. Riprova!"
@@ -442,7 +442,7 @@ async def api_buyspins(request: BuySpinsRequest, current_user: User = Depends(ge
 async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
-        # Ricarica l'utente dalla sessione corrente
+        # Ricarica l'utente dalla nuova sessione
         user = session.query(User).filter(User.id == current_user.id).first()
         if request.tx_hash in USED_TX:
             raise HTTPException(status_code=400, detail="❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")

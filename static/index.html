@@ -23,7 +23,7 @@
       <div>MATIC: <span id="maticBalance">0</span></div>
       <div>GiankyCoin: <span id="tokenBalance">0</span></div>
     </div>
-    <div id="freeSpins">Giri gratuiti disponibili: <span id="freeSpinsCount">0</span></div>
+    <div id="freeSpins">Giri disponibili: <span id="freeSpinsCount">0</span></div>
   </header>
   <div class="container content">
     <div class="row mb-4">
@@ -68,7 +68,7 @@
   <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
   <script defer>
-    // Navigazione
+    // Pulsanti di navigazione
     document.getElementById("btnConnect").addEventListener("click", function() {
       window.location.href = "/static/connectwallet.html";
     });
@@ -82,6 +82,7 @@
       window.location.href = "/static/task.html";
     });
     
+    // Aggiorna i saldi MATIC e GiankyCoin (opzionale)
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -104,56 +105,73 @@
         console.error("Errore nel recuperare il saldo GiankyCoin:", error);
       }
     }
-    window.addEventListener("load", updateBalances);
-    
-    function getFreeSpins() {
-      let freeSpins = parseInt(localStorage.getItem("freeSpins") || "0", 10);
-      const lastReset = localStorage.getItem("lastReset");
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      if (!lastReset || new Date(lastReset) < today) {
-        freeSpins = 1;
-        localStorage.setItem("freeSpins", freeSpins);
-        localStorage.setItem("lastReset", new Date().toISOString());
-      }
-      document.getElementById("freeSpinsCount").innerText = freeSpins;
-      return freeSpins;
-    }
-    function decrementFreeSpins() {
-      let freeSpins = getFreeSpins();
-      if (freeSpins > 0) {
-        freeSpins--;
-        localStorage.setItem("freeSpins", freeSpins);
-        document.getElementById("freeSpinsCount").innerText = freeSpins;
-      }
-    }
-    window.addEventListener("load", getFreeSpins);
-    
-    document.getElementById("btnSpin").addEventListener("click", function() {
-      if (getFreeSpins() <= 0) {
-        alert("Non hai giri gratuiti disponibili. Acquista extra tiri.");
+
+    // Quando la pagina si carica
+    window.addEventListener("load", async function() {
+      updateBalances();
+      
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        console.log("Nessun token, l'utente non è autenticato");
         return;
       }
-      decrementFreeSpins();
-      if (window.theWheel) {
-        window.theWheel.startAnimation();
-      } else {
-        console.error("La ruota non è inizializzata");
+      try {
+        // Ottengo i giri disponibili dal server
+        const res = await fetch("/api/ruota", {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          console.error("Errore nel recuperare i giri disponibili:", res.statusText);
+          return;
+        }
+        const data = await res.json();
+        // Aggiorno l'interfaccia con i giri disponibili
+        document.getElementById("freeSpinsCount").innerText = data.available_spins;
+      } catch (error) {
+        console.error("Errore nel recuperare i giri disponibili:", error);
+      }
+    });
+
+    // Gira la ruota (chiama /api/spin)
+    document.getElementById("btnSpin").addEventListener("click", async function() {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("Devi prima collegare il wallet e autenticarti.");
+        return;
+      }
+      try {
+        const res = await fetch("/api/spin", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          alert(errData.detail || "Errore nello spin");
+          return;
+        }
+        const data = await res.json();
+        // data.message = risultato (premio, errore, ecc.)
+        // data.available_spins = giri rimasti dopo lo spin
+        alert(data.message);
+        document.getElementById("freeSpinsCount").innerText = data.available_spins;
+      } catch (error) {
+        console.error("Errore nello spin:", error);
       }
     });
     
+    // Inizializzo la ruota (grafica)
     window.addEventListener("load", function() {
       if (typeof Winwheel === "undefined") {
         console.error("Winwheel non è definito");
         return;
       }
       const prizeData = [
-        { text: '10 GKY', color: '#F1C40F' },
-        { text: '20 GKY', color: '#E67E22' },
-        { text: '50 GKY', color: '#E74C3C' },
-        { text: '100 GKY', color: '#9B59B6' },
-        { text: '250 GKY', color: '#3498DB' },
-        { text: '500 GKY', color: '#1ABC9C' },
+        { text: '10 GKY',   color: '#F1C40F' },
+        { text: '20 GKY',   color: '#E67E22' },
+        { text: '50 GKY',   color: '#E74C3C' },
+        { text: '100 GKY',  color: '#9B59B6' },
+        { text: '250 GKY',  color: '#3498DB' },
+        { text: '500 GKY',  color: '#1ABC9C' },
         { text: '1000 GKY', color: '#2ECC71' },
         { text: 'NFT BASIC', color: '#F39C12' },
         { text: 'NFT STARTER', color: '#C0392B' },
@@ -174,26 +192,10 @@
           type: 'spinToStop',
           duration: 3,
           spins: 5,
-          callbackFinished: async function(indicatedSegment) {
-            alert("Hai vinto: " + indicatedSegment.text);
-            if (indicatedSegment.text !== "NO PRIZE") {
-              try {
-                const token = localStorage.getItem("access_token");
-                const res = await fetch("/api/spin", { 
-                  method: "POST", 
-                  headers: { 
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
-                  } 
-                });
-                const data = await res.json();
-                document.getElementById("result").style.display = "block";
-                document.getElementById("result").innerText = data.message;
-                updateBalances();
-              } catch (error) {
-                console.error("Errore nello spin:", error);
-              }
-            }
+          callbackFinished: function(indicatedSegment) {
+            // La logica reale dello spin avviene su /api/spin
+            // Questo alert è solo per feedback grafico
+            alert("Grafica: Hai vinto " + indicatedSegment.text);
           }
         }
       });
