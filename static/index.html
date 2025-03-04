@@ -30,7 +30,7 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Nota: il canvas qui ha id "wheelCanvas" -->
+        <!-- Il canvas ha id "wheelCanvas" -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -110,7 +110,7 @@
     }
     window.addEventListener("load", updateBalances);
     
-    // Funzione per ottenere i giri disponibili: 1 free spin + extra acquistati (memorizzati in "purchasedExtraSpins")
+    // Funzione per ottenere i giri disponibili (1 free spin + extra acquistati)
     function getFreeSpins() {
       let purchasedExtraSpins = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let totalSpins = 1 + purchasedExtraSpins;
@@ -119,7 +119,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Decrementa i giri disponibili correttamente (senza andare sotto zero)
+    // Decrementa i giri disponibili correttamente
     function decrementFreeSpins() {
       let purchasedExtraSpins = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let totalSpins = 1 + purchasedExtraSpins;
@@ -178,16 +178,25 @@
           spins: 5,
           callbackFinished: async function(indicatedSegment) {
             alert("Hai vinto: " + indicatedSegment.text);
-            if (indicatedSegment.text !== "NO PRIZE") {
-              try {
-                const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
-                const data = await res.json();
-                document.getElementById("result").style.display = "block";
-                document.getElementById("result").innerText = data.message;
-                updateBalances();
-              } catch (error) {
-                console.error("Errore nello spin:", error);
-              }
+            // Qui inviamo il wallet_address insieme alla richiesta POST
+            const wallet = localStorage.getItem("walletAddress");
+            if (!wallet) {
+              alert("Wallet non collegato.");
+              return;
+            }
+            try {
+              const res = await fetch("/api/spin", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ wallet_address: wallet })
+              });
+              if (!res.ok) throw new Error("Errore nello spin: " + res.status);
+              const data = await res.json();
+              document.getElementById("result").style.display = "block";
+              document.getElementById("result").innerText = data.message;
+              updateBalances();
+            } catch (error) {
+              console.error("Errore nello spin:", error);
             }
           }
         }
