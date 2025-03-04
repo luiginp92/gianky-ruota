@@ -31,7 +31,7 @@
         <br>
         <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
         <br>
-        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo qui per confermare l'acquisto.
+        Dopo il trasferimento, copia l'hash della transazione (txHash) e incollalo qui per confermare l'acquisto.
       </p>
       <div class="mb-3">
         <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
@@ -42,7 +42,6 @@
   </div>
   
   <script>
-    // Funzione di accesso sicuro a localStorage
     function safeGetItem(key) {
       try {
         return localStorage.getItem(key);
@@ -57,7 +56,6 @@
         return safeGetItem("walletAddress");
       }
     
-      // Richiede le istruzioni di acquisto
       document.getElementById("requestPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
@@ -69,7 +67,7 @@
           const res = await fetch("/api/buyspins", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet_address: walletAddress, num_spins: parseInt(numSpins) })
+            body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
@@ -81,7 +79,6 @@
         }
       });
     
-      // Conferma l'acquisto inviando wallet_address, tx_hash e num_spins
       document.getElementById("confirmPurchase").addEventListener("click", async () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
@@ -98,11 +95,10 @@
           const res = await fetch("/api/confirmbuy", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet_address: walletAddress, tx_hash: txHash, num_spins: parseInt(numSpins) })
+            body: JSON.stringify({ walletAddress, txHash, numSpins: parseInt(numSpins) })
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
-          // Aggiorna in localStorage il numero di extra tiri acquistati
           localStorage.setItem("purchasedExtraSpins", data.extra_spins);
           alert(data.message);
           window.location.href = "/static/index.html";

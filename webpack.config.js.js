@@ -1,12 +1,12 @@
 const path = require('path');
 
 module.exports = {
-  entry: './src/main.js',  // Il file di ingresso deve essere src/main.js
+  entry: './src/main.js',
   output: {
-    filename: 'bundle.js', // Il bundle finale verrà generato in dist/
+    filename: 'bundle.js',
     path: path.resolve(__dirname, 'dist')
   },
-  mode: 'development', // Usa "production" per build ottimizzate
+  mode: 'development',
   devServer: {
     static: {
       directory: path.join(__dirname, "static")
