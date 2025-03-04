@@ -178,7 +178,14 @@
             alert("Hai vinto: " + indicatedSegment.text);
             if (indicatedSegment.text !== "NO PRIZE") {
               try {
-                const res = await fetch("/api/spin", { method: "POST", headers: { "Content-Type": "application/json" } });
+                const token = localStorage.getItem("access_token");
+                const res = await fetch("/api/spin", { 
+                  method: "POST", 
+                  headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                  } 
+                });
                 const data = await res.json();
                 document.getElementById("result").style.display = "block";
                 document.getElementById("result").innerText = data.message;

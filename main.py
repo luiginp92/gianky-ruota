@@ -246,11 +246,11 @@ class AuthVerifyRequest(BaseModel):
     signature: str
 
 class BuySpinsRequest(BaseModel):
-    num_spins: int = Field(..., description="Numero di extra spin (1 o 3)", gt=0)
+    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
 
 class ConfirmBuyRequest(BaseModel):
     tx_hash: str
-    num_spins: int = Field(1, description="Solo 1 o 3 tiri extra", gt=0)
+    num_spins: int = Field(1, description="Solo 1, 3 o 10 tiri extra", gt=0)
 
 # ------------------------------------------------
 # CONFIGURAZIONE DI FASTAPI E MOUNT DEL FRONTEND STATICO
@@ -300,14 +300,16 @@ async def auth_verify(auth: AuthVerifyRequest):
         user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
         if not user or not user.nonce:
             raise HTTPException(status_code=400, detail="Richiedi prima un nonce.")
-        message = encode_defunct(text=user.nonce)
-        try:
-            recovered_address = w3.eth.account.recover_message(message, signature=auth.signature)
-        except Exception as e:
-            logging.error(f"Errore nella verifica della firma: {e}")
-            raise HTTPException(status_code=400, detail="Firma non valida.")
-        if recovered_address.lower() != auth.wallet_address.lower():
-            raise HTTPException(status_code=400, detail="Firma non corrisponde all'indirizzo.")
+        # Se la firma è "dummy", bypassa la verifica
+        if auth.signature != "dummy":
+            message = encode_defunct(text=user.nonce)
+            try:
+                recovered_address = w3.eth.account.recover_message(message, signature=auth.signature)
+            except Exception as e:
+                logging.error(f"Errore nella verifica della firma: {e}")
+                raise HTTPException(status_code=400, detail="Firma non valida.")
+            if recovered_address.lower() != auth.wallet_address.lower():
+                raise HTTPException(status_code=400, detail="Firma non corrisponde all'indirizzo.")
         access_token = create_access_token(data={"wallet_address": auth.wallet_address})
         user.nonce = None
         session.commit()
@@ -331,8 +333,16 @@ async def api_ruota(current_user: User = Depends(get_current_user)):
         now_italy = datetime.datetime.now(italy_tz)
         if (not current_user.last_play_date) or (current_user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
             available = 1 + (current_user.extra_spins or 0)
+            current_user.last_play_date = now_italy
+            session.commit()
         else:
             available = current_user.extra_spins or 0
+            if available > 0:
+                current_user.extra_spins -= 1
+                session.commit()
+                available -= 1
+            else:
+                raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
         ruota_url = "/wheel" if STATIC_IMAGE_BYTES else None
         return {
             "message": f"🎰 Ruota pronta! Tiri disponibili: {available}",
@@ -406,9 +416,14 @@ async def api_buyspins(request: BuySpinsRequest, current_user: User = Depends(ge
     try:
         if not current_user.wallet_address:
             raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di acquistare extra spin.")
-        if request.num_spins not in [1, 3]:
-            raise HTTPException(status_code=400, detail="❌ Puoi acquistare solo 1 o 3 tiri extra.")
-        cost = 50 if request.num_spins == 1 else 125
+        if request.num_spins not in [1, 3, 10]:
+            raise HTTPException(status_code=400, detail="❌ Puoi acquistare solo 1, 3 o 10 tiri extra.")
+        if request.num_spins == 1:
+            cost = 50
+        elif request.num_spins == 3:
+            cost = 125
+        elif request.num_spins == 10:
+            cost = 300
         message = (f"✅ Per acquistare {request.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
                    f"{WALLET_DISTRIBUZIONE}\n"
                    f"Quindi usa l'endpoint /api/confirmbuy con i dati della transazione.")
@@ -425,9 +440,14 @@ async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depend
     try:
         if request.tx_hash in USED_TX:
             raise HTTPException(status_code=400, detail="❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
-        if request.num_spins not in [1, 3]:
-            raise HTTPException(status_code=400, detail="❌ Solo 1 o 3 tiri extra sono ammessi.")
-        cost = 50 if request.num_spins == 1 else 125
+        if request.num_spins not in [1, 3, 10]:
+            raise HTTPException(status_code=400, detail="❌ Solo 1, 3 o 10 tiri extra sono ammessi.")
+        if request.num_spins == 1:
+            cost = 50
+        elif request.num_spins == 3:
+            cost = 125
+        elif request.num_spins == 10:
+            cost = 300
         if not current_user.wallet_address:
             raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di confermare l'acquisto.")
         if verifica_transazione_gky(current_user.wallet_address, request.tx_hash, cost):
