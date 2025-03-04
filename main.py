@@ -135,6 +135,8 @@ def invia_token(destinatario, quantita):
         logging.error("Blockchain non connessa.")
         return False
     gas_price = get_dynamic_gas_price()
+    # Conversione corretta del premio in unità con 18 decimali
+    token_amount = w3.toWei(quantita, 'ether')
     contratto = w3.eth.contract(address=CONTRATTO_GKY, abi=[{
         "constant": False,
         "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
@@ -144,7 +146,7 @@ def invia_token(destinatario, quantita):
         "stateMutability": "nonpayable",
         "type": "function",
     }])
-    tx = contratto.functions.transfer(destinatario, quantita * 10**18).build_transaction({
+    tx = contratto.functions.transfer(destinatario, token_amount).build_transaction({
         'from': WALLET_DISTRIBUZIONE,
         'nonce': w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE),
         'gas': 100000,
@@ -208,29 +210,29 @@ def verifica_transazione_gky(user_address, tx_hash, cost):
 def get_prize():
     r = random.random() * 100
     if r < 0.02:
-        return "NFT BASISC"
+        return {"type": "NFT", "name": "NFT BASIC"}
     elif r < 0.06:
-        return "NFT STARTER"
+        return {"type": "NFT", "name": "NFT STARTER"}
     else:
         r2 = r - 0.06
         if r2 < 40.575:
-            return "NO PRIZE"
+            return {"type": "NONE", "value": 0}
         elif r2 < 40.575 + 30.2875:
-            return "10 GKY"
+            return {"type": "GKY", "value": 10}
         elif r2 < 40.575 + 30.2875 + 25.2875:
-            return "20 GKY"
+            return {"type": "GKY", "value": 20}
         elif r2 < 96.15 + 2:
-            return "50 GKY"
+            return {"type": "GKY", "value": 50}
         elif r2 < 98.15 + 1:
-            return "100 GKY"
+            return {"type": "GKY", "value": 100}
         elif r2 < 99.15 + 0.5:
-            return "250 GKY"
+            return {"type": "GKY", "value": 250}
         elif r2 < 99.65 + 0.25:
-            return "500 GKY"
+            return {"type": "GKY", "value": 500}
         elif r2 < 99.90 + 0.1:
-            return "1000 GKY"
+            return {"type": "GKY", "value": 1000}
         else:
-            return "NO PRIZE"
+            return {"type": "NONE", "value": 0}
 
 # ------------------------------------------------
 # MODELLI DI INPUT CON Pydantic
@@ -370,29 +372,26 @@ async def api_spin(current_user: User = Depends(get_current_user)):
                 available -= 1
             else:
                 raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
-        prize = get_prize()
-        if prize == "NO PRIZE":
+        premio = get_prize()
+        if premio["type"] == "NONE":
             result_text = "😔 Nessun premio vinto. Riprova!"
-        elif "GKY" in prize:
-            amount = int(prize.split(" ")[0])
+        elif premio["type"] == "GKY":
+            amount = premio["value"]
             if invia_token(current_user.wallet_address, amount):
                 result_text = f"🎉 Hai vinto {amount} GKY!"
             else:
                 result_text = "❌ Errore nell'invio dei token."
-        else:
-            result_text = f"🎉 Hai vinto: {prize}!"
+        elif premio["type"] == "NFT":
+            result_text = f"🎉 Hai vinto: {premio['name']}!"
             premio_record = PremioVinto(
                 telegram_id=current_user.telegram_id or "N/A",
                 wallet=current_user.wallet_address,
-                premio=prize,
+                premio=premio["name"],
                 user_id=current_user.id
             )
             session.add(premio_record)
             session.commit()
-        return {
-            "message": result_text,
-            "available_spins": available
-        }
+        return {"message": result_text, "available_spins": available}
     except HTTPException as he:
         raise he
     except Exception as e:
