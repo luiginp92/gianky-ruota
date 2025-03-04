@@ -33,7 +33,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
-    // Definiamo i segmenti con testo e colori fissi
+    // Definiamo i segmenti della ruota (devono corrispondere all'ordine previsto)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#E67E22' },
@@ -54,7 +54,7 @@
       text: item.text
     }));
     
-    // Funzione per creare la ruota
+    // Funzione per creare la ruota usando l'angolo finale calcolato
     function createWheel(finalAngle) {
       console.log("Creazione della ruota con finalAngle:", finalAngle);
       return new Winwheel({
@@ -64,51 +64,39 @@
         segments: segmentsForWheel,
         animation: {
           type: 'spinToStop',
-          duration: 5,
-          spins: 8,
+          duration: 5, // Durata fissa in secondi
+          spins: 8,    // Numero fisso di giri
           stopAngle: finalAngle,
           callbackFinished: async function(indicatedSegment) {
             console.log("Spin terminato. Segmento:", indicatedSegment);
             alert("Hai vinto: " + indicatedSegment.text);
-            // Dopo l'animazione, se il premio contiene "GKY", chiama /api/distribute
-            if (indicatedSegment.text !== "NO PRIZE" && indicatedSegment.text.includes("GKY")) {
-              let wallet = localStorage.getItem("walletAddress");
-              if (wallet) wallet = wallet.trim();
-              console.log("Wallet letto:", wallet);
-              if (!wallet || wallet.length !== 42) {
-                alert("Wallet non valido o non connesso.");
-                return;
-              }
-              try {
-                console.log("Invio richiesta a /api/distribute per premio:", indicatedSegment.text);
-                const distRes = await fetch("/api/distribute", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ wallet_address: wallet, prize: indicatedSegment.text })
-                });
-                if (!distRes.ok) throw new Error("Distribuzione fallita: " + distRes.status);
-                const distData = await distRes.json();
-                console.log("Premio distribuito:", distData);
-                alert(distData.message);
-              } catch (error) {
-                console.error("Errore durante distribuzione:", error);
-                alert("Errore durante la distribuzione. Contatta l'assistenza.");
-              }
+            let wallet = localStorage.getItem("walletAddress");
+            if (wallet) wallet = wallet.trim();
+            console.log("Wallet letto:", wallet);
+            if (!wallet || wallet.length !== 42) {
+              alert("Wallet non valido o non connesso.");
+              resetWheel();
+              return;
+            }
+            try {
+              console.log("Invio richiesta a /api/distribute per premio:", indicatedSegment.text);
+              const distRes = await fetch("/api/distribute", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ wallet_address: wallet, prize: indicatedSegment.text })
+              });
+              if (!distRes.ok) throw new Error("Distribuzione fallita: " + distRes.status);
+              const distData = await distRes.json();
+              console.log("Premio distribuito:", distData);
+              alert(distData.message);
+            } catch (error) {
+              console.error("Errore durante distribuzione:", error);
+              alert("Errore durante la distribuzione. Contatta l'assistenza.");
             }
             resetWheel();
           }
         }
       });
-    }
-    
-    // Funzione per trovare l'indice del premio restituito dal backend
-    function findPrizeIndex(prizeText) {
-      for (let i = 0; i < prizeData.length; i++) {
-        if (prizeData[i].text.trim() === prizeText.trim()) {
-          return i;
-        }
-      }
-      return -1;
     }
     
     function resetWheel() {
@@ -119,7 +107,15 @@
       document.getElementById("spinButton").disabled = false;
     }
     
-    let theWheel;
+    // Funzione per trovare l'indice del premio nell'array prizeData
+    function findPrizeIndex(prizeText) {
+      for (let i = 0; i < prizeData.length; i++) {
+        if (prizeData[i].text.trim() === prizeText.trim()) {
+          return i;
+        }
+      }
+      return -1;
+    }
     
     document.getElementById("spinButton").addEventListener("click", async () => {
       document.getElementById("spinButton").disabled = true;
@@ -130,7 +126,6 @@
         return;
       }
       wallet = wallet.trim();
-      // Richiede il premio al backend
       try {
         console.log("Invio richiesta a /api/spin");
         const spinRes = await fetch("/api/spin", {
@@ -142,7 +137,6 @@
         const spinData = await spinRes.json();
         console.log("Risultato spin dal backend:", spinData);
         const prize = spinData.prize;
-        // Trova l'indice del premio nel nostro array
         const chosenIndex = findPrizeIndex(prize);
         if (chosenIndex === -1) {
           alert("Premio non riconosciuto: " + prize);
@@ -155,7 +149,6 @@
         const extraSpins = 360 * 5;
         const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
         console.log("Angolo finale calcolato:", finalAngle);
-        // Crea la ruota con il finalAngle calcolato
         theWheel = createWheel(finalAngle);
         theWheel.startAnimation();
       } catch (error) {

@@ -4,7 +4,7 @@ Gianky Coin Web App – main.py
 -----------------------------
 Questa applicazione espone tramite API REST la logica del gioco:
   • /api/spin: registra lo spin e determina il premio (senza trasferimento)
-  • /api/distribute: trasferisce il premio dal wallet di distribuzione al wallet dell’utente (se premio contiene "GKY")
+  • /api/distribute: trasferisce il premio dal wallet di distribuzione al wallet dell’utente (se il premio contiene "GKY")
   • /api/buyspins e /api/confirmbuy: per l’acquisto di extra tiri
   • /api/referral: per ottenere il referral link
   • /wheel: restituisce l’immagine della ruota
@@ -77,6 +77,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": exc.body},
     )
 
+# MODELLI DI INPUT – wallet_address vincolato a 42 caratteri
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., min_length=42, max_length=42)
 
@@ -171,81 +172,31 @@ def invia_token(destinatario, quantita):
         session.close()
     return True
 
-def verifica_transazione_gky(wallet_address, tx_hash, cost):
-    logging.info(f"Inizio verifica TX per wallet {wallet_address} e costo {cost}")
-    try:
-        tx_hash = tx_hash.strip()
-        if " " in tx_hash:
-            parts = tx_hash.split()
-            tx_hash = next((p for p in parts if p.startswith("0x")), tx_hash)
-        if not tx_hash.startswith("0x"):
-            logging.error("TX hash non valido: non inizia con '0x'")
-            return False
-        tx = w3_no_mw.eth.get_transaction(tx_hash)
-        logging.info(f"TX recuperata, mittente: {tx['from']}")
-        if tx["from"].lower() != wallet_address.lower():
-            logging.error("TX non inviata dal wallet specificato.")
-            return False
-        if tx["to"].lower() != CONTRATTO_GKY.lower():
-            logging.error("TX non destinata al contratto GKY.")
-            return False
-        contract = w3_no_mw.eth.contract(address=CONTRATTO_GKY, abi=[{
-            "constant": False,
-            "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
-            "name": "transfer",
-            "outputs": [{"name": "", "type": "bool"}],
-            "payable": False,
-            "stateMutability": "nonpayable",
-            "type": "function",
-        }])
-        try:
-            func_obj, params = contract.decode_function_input(tx.input)
-        except Exception as decode_error:
-            logging.error(f"Decodifica TX fallita: {decode_error}")
-            return False
-        if func_obj.fn_name != "transfer":
-            logging.error("TX non chiama transfer.")
-            return False
-        if params.get("_to", "").lower() != WALLET_DISTRIBUZIONE.lower():
-            logging.error("TX non invia al portafoglio di distribuzione.")
-            return False
-        token_amount = params.get("_value", 0)
-        if token_amount < cost * 10**18:
-            logging.error(f"Importo insufficiente: {w3_no_mw.from_wei(token_amount, 'ether')} vs {cost}")
-            return False
-        logging.info("Verifica TX completata correttamente.")
-        return True
-    except Exception as e:
-        logging.error(f"Errore nella verifica TX: {e}")
-        return False
-
+# Funzione aggiornata con distribuzione cumulativa (rispetta l'array client)
 def get_prize():
-    r = random.random() * 100
+    prizes = [
+       ("10 GKY", 0.10),
+       ("20 GKY", 0.05),
+       ("50 GKY", 0.10),
+       ("100 GKY", 0.10),
+       ("250 GKY", 0.10),
+       ("500 GKY", 0.05),
+       ("1000 GKY", 0.05),
+       ("NFT BASIC", 0.05),
+       ("NFT STARTER", 0.05),
+       ("NO PRIZE", 0.15),
+       ("NO PRIZE", 0.10),
+       ("NO PRIZE", 0.10)
+    ]
+    r = random.random()
     logging.info(f"Random per premio: {r}")
-    if r < 0.02:
-        return "NFT BASISC"
-    elif r < 0.06:
-        return "NFT STARTER"
-    else:
-        r2 = r - 0.06
-        if r2 < 40.575:
-            return "NO PRIZE"
-        elif r2 < 40.575 + 30.2875:
-            return "10 GKY"
-        elif r2 < 40.575 + 30.2875 + 25.2875:
-            return "20 GKY"
-        elif r2 < 96.15 + 2:
-            return "50 GKY"
-        elif r2 < 98.15 + 1:
-            return "100 GKY"
-        elif r2 < 99.15 + 0.5:
-            return "250 GKY"
-        elif r2 < 99.65 + 0.25:
-            return "500 GKY"
-        elif r2 < 99.90 + 0.1:
-            return "1000 GKY"
-        else:
-            return "NO PRIZE"
+    cumulative = 0.0
+    for prize, prob in prizes:
+        cumulative += prob
+        if r < cumulative:
+            logging.info(f"Premio scelto: {prize}")
+            return prize
+    return "NO PRIZE"
 
 @app.post("/api/spin")
 async def api_spin(request: Request, spin_req: SpinRequest):
