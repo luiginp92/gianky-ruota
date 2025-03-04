@@ -54,6 +54,7 @@
       text: item.text
     }));
     
+    // Funzione per creare la ruota con lo stopAngle calcolato
     function createWheel(finalAngle) {
       console.log("Creazione della ruota con finalAngle:", finalAngle);
       return new Winwheel({
@@ -98,6 +99,7 @@
       });
     }
     
+    // Trova l'indice del premio nell'array prizeData
     function findPrizeIndex(prizeText) {
       for (let i = 0; i < prizeData.length; i++) {
         if (prizeData[i].text.trim() === prizeText.trim()) {
