@@ -455,6 +455,9 @@ async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depend
         if verifica_transazione_gky(user.wallet_address, request.tx_hash, cost):
             user.extra_spins = (user.extra_spins or 0) + request.num_spins
             session.commit()
+            # Forzo il refresh dell'istanza per essere sicuro che l'aggiornamento sia visibile
+            session.refresh(user)
+            logging.info(f"Extra spins aggiornati: {user.extra_spins}")
             USED_TX.add(request.tx_hash)
             counter = session.query(GlobalCounter).first()
             if counter is not None:
