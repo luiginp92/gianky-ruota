@@ -35,11 +35,15 @@ logging.basicConfig(
 
 # CONFIGURAZIONI BLOCKCHAIN E COSTANTI
 POLYGON_RPC = "https://polygon-rpc.com"
-WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
 CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
-PRIVATE_KEY = os.getenv("PRIVATE_KEY_GKY")
-if not PRIVATE_KEY:
-    raise ValueError("❌ Errore: la chiave privata non è impostata.")
+# Imposta la chiave privata del wallet di distribuzione (non modificarla se non sai cosa stai facendo)
+PRIVATE_KEY = "909327718ec1fa6fe2bbad7802b630380c45c31a4e2e9e69ed7cf81a88bd10f8"
+
+# Calcola l'indirizzo del wallet di distribuzione a partire dalla chiave privata
+w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
+distribution_account = w3.eth.account.from_key(PRIVATE_KEY)
+WALLET_DISTRIBUZIONE = distribution_account.address
+logging.info(f"Wallet di distribuzione: {WALLET_DISTRIBUZIONE}")
 
 IMAGE_PATH = "ruota.png"
 if os.path.exists(IMAGE_PATH):
@@ -60,7 +64,6 @@ def custom_geth_poa_middleware(make_request, web3=None):
         return response
     return middleware
 
-w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
@@ -77,7 +80,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": exc.body},
     )
 
-# MODELLI DI INPUT – wallet_address vincolato a 42 caratteri
+# MODELLI DI INPUT
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., min_length=42, max_length=42)
 
@@ -172,30 +175,30 @@ def invia_token(destinatario, quantita):
         session.close()
     return True
 
-# Distribuzione premio – Usa una distribuzione cumulativa coerente con il client
 def get_prize():
-    r = random.random() * 100
+    # Distribuzione cumulativa per premi coerenti con il client
+    prizes = [
+       ("10 GKY", 0.10),
+       ("50 GKY", 0.10),
+       ("100 GKY", 0.10),
+       ("250 GKY", 0.10),
+       ("500 GKY", 0.05),
+       ("1000 GKY", 0.05),
+       ("NFT BASISC", 0.05),
+       ("NFT STARTER", 0.05),
+       ("NO PRIZE", 0.15),
+       ("NO PRIZE", 0.10),
+       ("NO PRIZE", 0.10)
+    ]
+    r = random.random()
     logging.info(f"Random per premio: {r}")
-    if r < 0.02:
-        return "NFT BASISC"
-    elif r < 0.06:
-        return "NFT STARTER"
-    elif r < 40:
-        return "NO PRIZE"
-    elif r < 70:
-        return "10 GKY"
-    elif r < 80:
-        return "50 GKY"
-    elif r < 85:
-        return "100 GKY"
-    elif r < 90:
-        return "250 GKY"
-    elif r < 95:
-        return "500 GKY"
-    elif r < 100:
-        return "1000 GKY"
-    else:
-        return "NO PRIZE"
+    cumulative = 0.0
+    for prize, prob in prizes:
+        cumulative += prob
+        if r < cumulative:
+            logging.info(f"Premio scelto: {prize}")
+            return prize
+    return "NO PRIZE"
 
 @app.post("/api/spin")
 async def api_spin(request: Request, spin_req: SpinRequest):
