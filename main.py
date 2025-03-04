@@ -327,18 +327,20 @@ async def auth_verify(auth: AuthVerifyRequest):
 async def api_ruota(current_user: User = Depends(get_current_user)):
     session = Session()
     try:
-        if not current_user.wallet_address:
+        # Ricarica l'utente dalla sessione corrente
+        user = session.query(User).filter(User.id == current_user.id).first()
+        if not user.wallet_address:
             raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di giocare.")
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
-        if (not current_user.last_play_date) or (current_user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
-            available = 1 + (current_user.extra_spins or 0)
-            current_user.last_play_date = now_italy
+        if (not user.last_play_date) or (user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
+            available = 1 + (user.extra_spins or 0)
+            user.last_play_date = now_italy
             session.commit()
         else:
-            available = current_user.extra_spins or 0
+            available = user.extra_spins or 0
             if available > 0:
-                current_user.extra_spins -= 1
+                user.extra_spins -= 1
                 session.commit()
                 available -= 1
             else:
@@ -366,18 +368,20 @@ async def get_wheel():
 async def api_spin(current_user: User = Depends(get_current_user)):
     session = Session()
     try:
-        if not current_user.wallet_address:
+        # Ricarica l'utente dalla sessione corrente
+        user = session.query(User).filter(User.id == current_user.id).first()
+        if not user.wallet_address:
             raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di giocare.")
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
-        if (not current_user.last_play_date) or (current_user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
-            available = 1 + (current_user.extra_spins or 0)
-            current_user.last_play_date = now_italy
+        if (not user.last_play_date) or (user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
+            available = 1 + (user.extra_spins or 0)
+            user.last_play_date = now_italy
             session.commit()
         else:
-            available = current_user.extra_spins or 0
+            available = user.extra_spins or 0
             if available > 0:
-                current_user.extra_spins -= 1
+                user.extra_spins -= 1
                 session.commit()
                 available -= 1
             else:
@@ -387,17 +391,17 @@ async def api_spin(current_user: User = Depends(get_current_user)):
             result_text = "😔 Nessun premio vinto. Riprova!"
         elif premio["type"] == "GKY":
             amount = premio["value"]
-            if invia_token(current_user.wallet_address, amount):
+            if invia_token(user.wallet_address, amount):
                 result_text = f"🎉 Hai vinto {amount} GKY!"
             else:
                 result_text = "❌ Errore nell'invio dei token."
         elif premio["type"] == "NFT":
             result_text = f"🎉 Hai vinto: {premio['name']}!"
             premio_record = PremioVinto(
-                telegram_id=current_user.telegram_id or "N/A",
-                wallet=current_user.wallet_address,
+                telegram_id=user.telegram_id or "N/A",
+                wallet=user.wallet_address,
                 premio=premio["name"],
-                user_id=current_user.id
+                user_id=user.id
             )
             session.add(premio_record)
             session.commit()
@@ -438,7 +442,7 @@ async def api_buyspins(request: BuySpinsRequest, current_user: User = Depends(ge
 async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
-        # Ricarica l'utente dalla nuova sessione
+        # Ricarica l'utente dalla sessione corrente
         user = session.query(User).filter(User.id == current_user.id).first()
         if request.tx_hash in USED_TX:
             raise HTTPException(status_code=400, detail="❌ Questa transazione è già stata usata per l'acquisto di extra tiri.")
@@ -455,7 +459,6 @@ async def api_confirmbuy(request: ConfirmBuyRequest, current_user: User = Depend
         if verifica_transazione_gky(user.wallet_address, request.tx_hash, cost):
             user.extra_spins = (user.extra_spins or 0) + request.num_spins
             session.commit()
-            # Forzo il refresh dell'istanza per essere sicuro che l'aggiornamento sia visibile
             session.refresh(user)
             logging.info(f"Extra spins aggiornati: {user.extra_spins}")
             USED_TX.add(request.tx_hash)
