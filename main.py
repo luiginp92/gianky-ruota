@@ -69,7 +69,6 @@ USED_TX = set()
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Gestore globale per errori di validazione
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logging.error(f"Validation error for {request.url}: {exc.errors()} - Body: {exc.body}")
@@ -78,7 +77,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": exc.body},
     )
 
-# MODELLI DI INPUT – wallet_address vincolato a 42 caratteri
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., min_length=42, max_length=42)
 
