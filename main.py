@@ -4,7 +4,7 @@ Gianky Coin Web App – main.py
 -----------------------------
 Gestisce l'autenticazione (JWT), la logica di gioco (spin e ruota),
 l'acquisto di extra giri e altri endpoint.
-Utilizza Web3.toWei e w3.eth.gasPrice senza custom POA middleware.
+Utilizza Web3.toWei e w3.eth.gasPrice (senza custom middleware).
 """
 
 import os
@@ -30,7 +30,7 @@ from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# Forza la creazione delle tabelle (utile per SQLite)
+# Crea le tabelle se non esistono (utile per SQLite)
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
@@ -44,7 +44,7 @@ PRIVATE_KEY = os.getenv("PRIVATE_KEY_GKY")
 if not PRIVATE_KEY:
     raise ValueError("❌ Errore: la chiave privata non è impostata.")
 
-# Se ruota.png non è presente, STATIC_IMAGE_BYTES diventa None (la ruota verrà disegnata interamente sul canvas)
+# Il file ruota.png non è necessario per disegnare la ruota via canvas
 IMAGE_PATH = "ruota.png"
 try:
     with open(IMAGE_PATH, "rb") as f:
@@ -284,7 +284,7 @@ async def api_ruota(current_user=Depends(get_current_user)):
         user = session.query(User).filter_by(id=current_user.id).first()
         if not user.wallet_address:
             raise HTTPException(status_code=400, detail="Collega il wallet prima di giocare.")
-        # Restituisce sempre 1 free spin + extra spins
+        # Qui restituiamo sempre 1 free spin + extra spin
         available = 1 + (user.extra_spins or 0)
         return {"available_spins": available, "message": f"Giri disponibili: {available}"}
     except Exception as e:
@@ -302,7 +302,7 @@ async def api_spin(current_user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="Collega il wallet prima di giocare.")
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se l'utente non ha giocato oggi, garantisce il free spin
+        # Se l'utente non ha ancora giocato oggi, garantisce il free spin
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + (user.extra_spins or 0)
             user.last_play_date = now
@@ -375,9 +375,8 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
             raise HTTPException(status_code=400, detail="Collega il wallet prima di confermare.")
         if not verifica_transazione_gky(user.wallet_address, req.tx_hash, cost):
             raise HTTPException(status_code=400, detail="TX non valida o importo insufficiente.")
-        # Aggiorna gli extra spin
+        # Aggiorna gli extra spin e resetta last_play_date per garantire il free spin
         user.extra_spins = (user.extra_spins or 0) + req.num_spins
-        # Reset last_play_date per garantire free spin al prossimo giro
         user.last_play_date = None
         session.commit()
         session.refresh(user)
@@ -390,7 +389,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
             counter = GlobalCounter(total_in=cost, total_out=0.0)
             session.add(counter)
         session.commit()
-        # Restituisce 1 free spin + extra spin
+        # Dopo l'acquisto, restituisci 1 free spin + extra spin
         available = 1 + (user.extra_spins or 0)
         return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
