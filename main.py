@@ -1,15 +1,32 @@
 #!/usr/bin/env python3
-import os, random, datetime, pytz, logging
+"""
+Gianky Coin Web App – main.py
+-----------------------------
+Gestisce l'autenticazione (con JWT), la logica di gioco (spin, ruota),
+l'acquisto di extra giri e altri endpoint. 
+Utilizza Web3.toWei e w3.eth.gasPrice senza custom middleware.
+"""
+
+import os
+import random
+import datetime
+import pytz
+import logging
 from typing import Optional
+
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
+
 from web3 import Web3
 from eth_account.messages import encode_defunct
+
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
+
+# Importa il modulo del database (assicurati che il file database.py sia presente)
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -26,10 +43,10 @@ if not PRIVATE_KEY:
     raise ValueError("❌ Errore: la chiave privata non è impostata.")
 
 IMAGE_PATH = "ruota.png"
-if os.path.exists(IMAGE_PATH):
+try:
     with open(IMAGE_PATH, "rb") as f:
         STATIC_IMAGE_BYTES = f.read()
-else:
+except Exception as e:
     STATIC_IMAGE_BYTES = None
     logging.error("File statico non trovato: ruota.png")
 
@@ -55,17 +72,17 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/verify")
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"}
+         status_code=status.HTTP_401_UNAUTHORIZED,
+         detail="Could not validate credentials",
+         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        wallet_address = payload.get("wallet_address")
-        if not wallet_address:
-            raise credentials_exception
+         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+         wallet_address = payload.get("wallet_address")
+         if not wallet_address:
+             raise credentials_exception
     except JWTError:
-        raise credentials_exception
+         raise credentials_exception
     session = Session()
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
@@ -114,6 +131,7 @@ def invia_token(destinatario, quantita):
     except Exception as e:
         logging.error(f"Errore nell'invio dei token: {e}")
         return False
+
     session_db = Session()
     try:
         counter = session_db.query(GlobalCounter).first()
@@ -191,21 +209,21 @@ def get_prize():
         else:
             return {"type": "NONE", "value": 0}
 
-# ----------------- MODELLI DI INPUT -----------------
+# ----------------- MODELLI DI INPUT (Pydantic) -----------------
 class AuthRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     telegram_id: Optional[str] = None
 
 class AuthVerifyRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     signature: str
 
 class BuySpinsRequest(BaseModel):
-    num_spins: int
+    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
 
 class ConfirmBuyRequest(BaseModel):
     tx_hash: str
-    num_spins: int
+    num_spins: int = Field(1, description="Solo 1, 3 o 10 tiri extra", gt=0)
 
 # ----------------- ENDPOINTS DI AUTENTICAZIONE -----------------
 @app.post("/api/auth/request_nonce")
@@ -222,7 +240,7 @@ async def request_nonce(auth: AuthRequest):
     except Exception as e:
         session.rollback()
         logging.error(f"Errore in request_nonce: {e}")
-        raise HTTPException(status_code=500, detail="Errore nella richiesta del nonce.")
+        raise HTTPException(status_code=500, detail="Errore durante la richiesta del nonce.")
     finally:
         session.close()
     return {"nonce": nonce}

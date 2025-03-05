@@ -97,15 +97,14 @@
     <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
   </footer>
 
-  <!-- Librerie JS: Bootstrap e Ethers.js (caricate dopo TweenMax e Winwheel) -->
+  <!-- Carica Bootstrap e Ethers.js dopo TweenMax e Winwheel -->
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 
   <script defer>
-    // Inizializza la ruota grafica con Winwheel
     let theWheel;
     window.addEventListener("load", async function() {
-      // Inizializza Winwheel
+      // Inizializza la ruota grafica con Winwheel
       const prizeData = [
         { text: '10 GKY',   color: '#F1C40F' },
         { text: '20 GKY',   color: '#E67E22' },
@@ -135,7 +134,6 @@
         }
       });
 
-      // Aggiorna saldi e giri disponibili
       updateBalances();
       await updateSpins();
     });
@@ -149,7 +147,7 @@
         const balanceMatic = ethers.utils.formatEther(balanceWei);
         document.getElementById("maticBalance").innerText = parseFloat(balanceMatic).toFixed(4);
       } catch (error) {
-        console.error("Errore saldo MATIC:", error);
+        console.error("Errore nel recuperare il saldo MATIC:", error);
       }
       try {
         const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
@@ -159,7 +157,7 @@
         const tokenBalance = ethers.utils.formatEther(tokenBalanceWei);
         document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
       } catch (error) {
-        console.error("Errore saldo GiankyCoin:", error);
+        console.error("Errore nel recuperare il saldo GiankyCoin:", error);
       }
     }
 
@@ -185,7 +183,6 @@
       }
     }
 
-    // Gestione del pulsante "Gira la ruota"
     document.getElementById("btnSpin").addEventListener("click", async function() {
       const token = localStorage.getItem("access_token");
       if (!token) {
@@ -205,7 +202,6 @@
         const data = await res.json();
         alert(data.message);
         document.getElementById("freeSpinsCount").innerText = data.available_spins;
-        // Avvia animazione grafica della ruota
         theWheel.startAnimation();
       } catch (error) {
         console.error("Errore nello spin:", error);
