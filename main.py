@@ -44,7 +44,7 @@ PRIVATE_KEY = os.getenv("PRIVATE_KEY_GKY")
 if not PRIVATE_KEY:
     raise ValueError("❌ Errore: la chiave privata non è impostata.")
 
-# Se ruota.png non è presente, STATIC_IMAGE_BYTES verrà impostato a None (la ruota verrà disegnata via canvas)
+# Se ruota.png non è presente, STATIC_IMAGE_BYTES diventa None (la ruota verrà disegnata interamente sul canvas)
 IMAGE_PATH = "ruota.png"
 try:
     with open(IMAGE_PATH, "rb") as f:
@@ -284,7 +284,7 @@ async def api_ruota(current_user=Depends(get_current_user)):
         user = session.query(User).filter_by(id=current_user.id).first()
         if not user.wallet_address:
             raise HTTPException(status_code=400, detail="Collega il wallet prima di giocare.")
-        # Per test, restituisco sempre 1 free spin + extra spin
+        # Restituisce sempre 1 free spin + extra spins
         available = 1 + (user.extra_spins or 0)
         return {"available_spins": available, "message": f"Giri disponibili: {available}"}
     except Exception as e:
@@ -302,7 +302,7 @@ async def api_spin(current_user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="Collega il wallet prima di giocare.")
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se l'utente non ha giocato oggi, gli viene garantito un free spin
+        # Se l'utente non ha giocato oggi, garantisce il free spin
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + (user.extra_spins or 0)
             user.last_play_date = now
@@ -375,8 +375,9 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
             raise HTTPException(status_code=400, detail="Collega il wallet prima di confermare.")
         if not verifica_transazione_gky(user.wallet_address, req.tx_hash, cost):
             raise HTTPException(status_code=400, detail="TX non valida o importo insufficiente.")
+        # Aggiorna gli extra spin
         user.extra_spins = (user.extra_spins or 0) + req.num_spins
-        # Reset last_play_date: Imposta last_play_date a None per forzare il free spin al prossimo giro
+        # Reset last_play_date per garantire free spin al prossimo giro
         user.last_play_date = None
         session.commit()
         session.refresh(user)
@@ -389,7 +390,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
             counter = GlobalCounter(total_in=cost, total_out=0.0)
             session.add(counter)
         session.commit()
-        # Dopo l'acquisto, restituisco 1 free spin + extra spin
+        # Restituisce 1 free spin + extra spin
         available = 1 + (user.extra_spins or 0)
         return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
