@@ -378,8 +378,9 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
         if not verifica_transazione_gky(user.wallet_address, req.tx_hash, cost):
             raise HTTPException(status_code=400, detail="TX non valida o importo insufficiente.")
         user.extra_spins = (user.extra_spins or 0) + req.num_spins
-        # Reset free spin: in modo che al prossimo /api/ruota venga assegnato il free spin
-        user.last_play_date = None
+        # Reset last_play_date: Impostiamo la data a ieri per forzare il free spin al prossimo giro
+        italy = pytz.timezone("Europe/Rome")
+        user.last_play_date = datetime.datetime.now(italy) - datetime.timedelta(days=1)
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati: {user.extra_spins}")
@@ -391,7 +392,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
             counter = GlobalCounter(total_in=cost, total_out=0.0)
             session.add(counter)
         session.commit()
-        return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}"}
+        return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": 1 + (user.extra_spins or 0)}
     except HTTPException as he:
         session.rollback()
         raise he
