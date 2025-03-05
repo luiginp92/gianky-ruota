@@ -1,22 +1,20 @@
-import os
-import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+# database.py
+
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import logging
 
-# Se non viene impostata DATABASE_URL, viene usato SQLite in locale
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
-)
-Session = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
+DATABASE_URL = "sqlite:///./gianky_bot.db"  # Oppure su Heroku potresti usare Postgres
+
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(String, nullable=True)
+    telegram_id = Column(String, unique=True, index=True, nullable=True)
     wallet_address = Column(String, unique=True, index=True, nullable=False)
     extra_spins = Column(Integer, default=0)
     referred_by = Column(String, nullable=True)
@@ -27,11 +25,11 @@ class User(Base):
 class PremioVinto(Base):
     __tablename__ = "premi_vinti"
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(String, nullable=True)
+    telegram_id = Column(String, index=True, nullable=False)
     wallet = Column(String, nullable=False)
     premio = Column(String, nullable=False)
     user_id = Column(Integer, nullable=False)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, server_default=func.now())
 
 class GlobalCounter(Base):
     __tablename__ = "global_counter"
@@ -40,4 +38,10 @@ class GlobalCounter(Base):
     total_out = Column(Float, default=0.0)
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logging.warning("init_db() warning: " + str(e))
+
+def Session():
+    return SessionLocal()
