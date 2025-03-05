@@ -30,6 +30,9 @@ from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
+# Forza la creazione delle tabelle al momento dell'avvio
+init_db()
+
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -349,7 +352,7 @@ async def api_buyspins(req: BuySpinsRequest, current_user=Depends(get_current_us
         user = session.query(User).filter_by(id=current_user.id).first()
         if not user.wallet_address:
             raise HTTPException(status_code=400, detail="Collega il wallet prima di acquistare.")
-        if req.num_spins not in [1,3,10]:
+        if req.num_spins not in [1, 3, 10]:
             raise HTTPException(status_code=400, detail="Puoi acquistare solo 1, 3 o 10 giri.")
         cost = 50 if req.num_spins == 1 else 125 if req.num_spins == 3 else 300
         msg = f"Trasferisci {cost} GKY a {WALLET_DISTRIBUZIONE} e poi chiama /api/confirmbuy con il TX hash."
@@ -367,7 +370,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
         user = session.query(User).filter_by(id=current_user.id).first()
         if req.tx_hash in USED_TX:
             raise HTTPException(status_code=400, detail="Transazione già usata.")
-        if req.num_spins not in [1,3,10]:
+        if req.num_spins not in [1, 3, 10]:
             raise HTTPException(status_code=400, detail="Puoi confermare solo 1, 3 o 10 giri.")
         cost = 50 if req.num_spins == 1 else 125 if req.num_spins == 3 else 300
         if not user.wallet_address:
@@ -459,6 +462,4 @@ async def root():
     """
 
 if __name__ == "__main__":
-    # Assicurati che, all'avvio, vengano create le tabelle nel database.
-    init_db()
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

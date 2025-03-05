@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Se non è impostata la variabile DATABASE_URL, usa SQLite in locale
+# Se non viene impostata DATABASE_URL, viene usato SQLite in locale
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
 engine = create_engine(
     DATABASE_URL,
@@ -40,5 +40,4 @@ class GlobalCounter(Base):
     total_out = Column(Float, default=0.0)
 
 def init_db():
-    # Crea le tabelle se non esistono
     Base.metadata.create_all(bind=engine)
