@@ -378,6 +378,8 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
         if not verifica_transazione_gky(user.wallet_address, req.tx_hash, cost):
             raise HTTPException(status_code=400, detail="TX non valida o importo insufficiente.")
         user.extra_spins = (user.extra_spins or 0) + req.num_spins
+        # Reset free spin: in modo che al prossimo /api/ruota venga assegnato il free spin
+        user.last_play_date = None
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati: {user.extra_spins}")
