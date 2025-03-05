@@ -2,9 +2,9 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Gestisce l'autenticazione (con JWT), la logica di gioco (spin, ruota),
-l'acquisto di extra giri e altri endpoint. 
-Utilizza Web3.toWei e w3.eth.gasPrice senza custom middleware.
+Gestisce l'autenticazione (JWT), la logica di gioco (spin e ruota),
+l'acquisto di extra giri e altri endpoint.
+Utilizza Web3.toWei e w3.eth.gasPrice senza custom POA middleware.
 """
 
 import os
@@ -26,7 +26,6 @@ from eth_account.messages import encode_defunct
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
 
-# Importa il modulo del database (assicurati che il file database.py sia presente)
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -85,11 +84,11 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
          raise credentials_exception
     session = Session()
     try:
-        user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
+         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
     finally:
-        session.close()
+         session.close()
     if not user:
-        raise credentials_exception
+         raise credentials_exception
     return user
 
 # ----------------- FUNZIONI UTILI -----------------
@@ -131,7 +130,6 @@ def invia_token(destinatario, quantita):
     except Exception as e:
         logging.error(f"Errore nell'invio dei token: {e}")
         return False
-
     session_db = Session()
     try:
         counter = session_db.query(GlobalCounter).first()
@@ -240,7 +238,7 @@ async def request_nonce(auth: AuthRequest):
     except Exception as e:
         session.rollback()
         logging.error(f"Errore in request_nonce: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la richiesta del nonce.")
+        raise HTTPException(status_code=500, detail="Errore nella richiesta del nonce.")
     finally:
         session.close()
     return {"nonce": nonce}
@@ -443,8 +441,7 @@ async def api_giankyadmin(current_user=Depends(get_current_user)):
         counter = session.query(GlobalCounter).first()
         if not counter:
             return {"report": "Nessun dato disponibile ancora."}
-        report_text = (f"Entrate: {counter.total_in} GKY, Uscite: {counter.total_out} GKY, "
-                       f"Bilancio: {counter.total_in - counter.total_out} GKY")
+        report_text = f"Entrate: {counter.total_in} GKY, Uscite: {counter.total_out} GKY, Bilancio: {counter.total_in - counter.total_out} GKY"
         return {"report": report_text}
     except Exception as e:
         logging.error(f"Errore in giankyadmin: {e}")
@@ -462,4 +459,6 @@ async def root():
     """
 
 if __name__ == "__main__":
+    # Assicurati che, all'avvio, vengano create le tabelle nel database.
+    init_db()
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
