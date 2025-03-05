@@ -62,10 +62,13 @@
     <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
   </footer>
   
+  <!-- Carichiamo GSAP (TweenMax) prima di Winwheel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.20.3/TweenMax.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
+
   <!-- Librerie JS -->
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
   <script defer>
     // Pulsanti di navigazione
@@ -81,7 +84,7 @@
     document.getElementById("btnTask").addEventListener("click", function() {
       window.location.href = "/static/task.html";
     });
-    
+
     // Funzione (opzionale) per aggiornare il saldo MATIC e GiankyCoin in alto
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
@@ -106,7 +109,7 @@
       }
     }
 
-    // Quando la pagina si carica, aggiorno i saldi e chiamo /api/ruota per vedere quanti giri sono disponibili
+    // Quando la pagina si carica, aggiorno i saldi e chiamo /api/ruota per sapere quanti giri ci sono
     window.addEventListener("load", async function() {
       updateBalances();
       const token = localStorage.getItem("access_token");
@@ -138,7 +141,7 @@
         return;
       }
       try {
-        // Chiedo al server di eseguire lo spin
+        // 1) Chiedo al server di eseguire lo spin (aggiorna i tiri e calcola il premio)
         const res = await fetch("/api/spin", {
           method: "POST",
           headers: { "Authorization": `Bearer ${token}` }
@@ -149,12 +152,12 @@
           return;
         }
         const data = await res.json();
-        // data.message descrive il premio
-        // data.available_spins è il numero di tiri rimasti dopo lo spin
+        // data.message = testo su premio o errore
+        // data.available_spins = giri rimasti
         alert(data.message);
         document.getElementById("freeSpinsCount").innerText = data.available_spins;
 
-        // Avvio animazione ruota Winwheel
+        // 2) Avvio l'animazione con Winwheel (grafica)
         if (window.theWheel) {
           theWheel.startAnimation();
         }
@@ -163,7 +166,7 @@
       }
     });
     
-    // Inizializzo la ruota Winwheel (grafica)
+    // Inizializzo la ruota Winwheel (grafica) con TweenMax
     window.addEventListener("load", function() {
       if (typeof Winwheel === "undefined") {
         console.error("Winwheel non è definito");
@@ -197,7 +200,7 @@
           duration: 3,  // Durata in secondi
           spins: 5,     // Numero di giri completi
           callbackFinished: function(indicatedSegment) {
-            // Questo alert è puramente grafico (la vittoria reale è gestita da /api/spin)
+            // È solo grafica: la vittoria vera è già decisa in /api/spin
             alert("Animazione Ruota: hai vinto " + indicatedSegment.text);
           }
         }

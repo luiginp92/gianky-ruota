@@ -2,10 +2,10 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-• Niente custom POA middleware
-• Niente w3.isConnected() => rimosso
-• Uso di Web3.toWei per la conversione
-• Uso di w3.eth.gasPrice
+• Rimosso check isConnected()
+• Usa Web3.toWei(...) per la conversione
+• Caricamento e uso di w3.eth.gasPrice per calcolare il gas
+• Logica di spin e buyspins come da discussioni precedenti
 """
 
 import logging
@@ -28,16 +28,16 @@ from eth_account.messages import encode_defunct
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
 
-# Importa il modulo del database
+# Database e modelli
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
     level=logging.INFO
 )
 
 # ------------------------------------------------
-# CONFIGURAZIONE BLOCKCHAIN
+# CONFIGURAZIONI
 # ------------------------------------------------
 POLYGON_RPC = "https://polygon-rpc.com"
 WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
@@ -57,8 +57,7 @@ else:
 w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
 w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
 
-# Evita transazioni duplicate
-USED_TX = set()
+USED_TX = set()  # evita duplicati
 
 # ------------------------------------------------
 # JWT & AUTENTICAZIONE
@@ -74,8 +73,7 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
     else:
         expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/verify")
 
@@ -87,29 +85,24 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        wallet_address: str = payload.get("wallet_address")
-        if wallet_address is None:
+        wallet_address = payload.get("wallet_address")
+        if not wallet_address:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-
     session = Session()
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
     finally:
         session.close()
-
-    if user is None:
+    if not user:
         raise credentials_exception
     return user
 
 # ------------------------------------------------
-# FUNZIONI UTILI
+# FUNZIONI
 # ------------------------------------------------
 def get_dynamic_gas_price():
-    """
-    Usa w3.eth.gasPrice. Se fallisce, fallback a 50 gwei.
-    """
     try:
         base = w3.eth.gasPrice
         safe = int(base * 1.2)
@@ -117,15 +110,11 @@ def get_dynamic_gas_price():
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return Web3.toWei('50', 'gwei')  # fallback
+        return Web3.toWei('50', 'gwei')
 
 def invia_token(destinatario, quantita):
-    """
-    Invia 'quantita' GKY (18 decimali) al destinatario.
-    Rimosso check isConnected().
-    """
     gas_price = get_dynamic_gas_price()
-    token_amount = Web3.toWei(quantita, 'ether')  # conversione corretta
+    token_amount = Web3.toWei(quantita, 'ether')
     try:
         contratto = w3.eth.contract(
             address=CONTRATTO_GKY,
@@ -169,9 +158,6 @@ def invia_token(destinatario, quantita):
     return True
 
 def verifica_transazione_gky(user_address, tx_hash, cost):
-    """
-    Verifica che tx_hash invii almeno cost GKY a WALLET_DISTRIBUZIONE.
-    """
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
         if tx["to"].lower() != CONTRATTO_GKY.lower():
@@ -207,9 +193,6 @@ def verifica_transazione_gky(user_address, tx_hash, cost):
         return False
 
 def get_prize():
-    """
-    Determina il premio con probabilità fissa.
-    """
     r = random.random() * 100
     if r < 0.02:
         return {"type": "NFT", "name": "NFT BASIC"}
@@ -255,7 +238,7 @@ class ConfirmBuyRequest(BaseModel):
     num_spins: int = Field(1, description="Solo 1, 3 o 10 tiri extra", gt=0)
 
 # ------------------------------------------------
-# CONFIGURAZIONE FASTAPI
+# CONFIGURAZIONE DI FASTAPI
 # ------------------------------------------------
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -264,7 +247,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def home():
     return """
     <html>
-      <head><meta http-equiv="refresh" content="0; url=/static/index.html" /></head>
+      <head>
+        <meta http-equiv="refresh" content="0; url=/static/index.html" />
+      </head>
       <body></body>
     </html>
     """
@@ -283,9 +268,7 @@ async def request_nonce(auth: AuthRequest):
     try:
         user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
         if not user:
-            user = User(wallet_address=auth.wallet_address,
-                        telegram_id=auth.telegram_id,
-                        extra_spins=0)
+            user = User(wallet_address=auth.wallet_address, telegram_id=auth.telegram_id, extra_spins=0)
             session.add(user)
         user.nonce = nonce
         session.commit()
@@ -304,7 +287,6 @@ async def auth_verify(auth: AuthVerifyRequest):
         user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
         if not user or not user.nonce:
             raise HTTPException(status_code=400, detail="Richiedi prima un nonce.")
-        # Se la firma è "dummy", bypassa la verifica
         if auth.signature != "dummy":
             message = encode_defunct(text=user.nonce)
             try:
@@ -314,8 +296,7 @@ async def auth_verify(auth: AuthVerifyRequest):
                 raise HTTPException(status_code=400, detail="Firma non valida.")
             if recovered_address.lower() != auth.wallet_address.lower():
                 raise HTTPException(status_code=400, detail="Firma non corrisponde all'indirizzo.")
-        # Crea token
-        access_token = create_access_token(data={"wallet_address": auth.wallet_address})
+        access_token = create_access_token({"wallet_address": auth.wallet_address})
         user.nonce = None
         session.commit()
         return {"access_token": access_token, "token_type": "bearer"}
@@ -329,7 +310,7 @@ async def auth_verify(auth: AuthVerifyRequest):
         session.close()
 
 # ------------------------------------------------
-# ENDPOINT DI GIOCO: /api/ruota, /api/spin
+# ENDPOINTS GIOCO
 # ------------------------------------------------
 @app.get("/api/ruota")
 async def api_ruota(current_user: User = Depends(get_current_user)):
@@ -340,7 +321,6 @@ async def api_ruota(current_user: User = Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di giocare.")
         italy_tz = pytz.timezone("Europe/Rome")
         now_italy = datetime.datetime.now(italy_tz)
-        # Se non ha giocato oggi, 1 free spin + extra
         if not user.last_play_date or (user.last_play_date.astimezone(italy_tz).date() != now_italy.date()):
             available = 1 + (user.extra_spins or 0)
         else:
@@ -383,12 +363,13 @@ async def api_spin(current_user: User = Depends(get_current_user)):
 
         if available <= 0:
             raise HTTPException(status_code=400, detail="⚠️ Hai esaurito i tiri disponibili per oggi.")
-        
+
+        # Decremento un tiro
         user.extra_spins = available - 1
         session.commit()
         available -= 1
 
-        # Determino il premio
+        # Genero il premio
         premio = get_prize()
         if premio["type"] == "NONE":
             result_text = "😔 Nessun premio vinto. Riprova!"
@@ -420,7 +401,7 @@ async def api_spin(current_user: User = Depends(get_current_user)):
         session.close()
 
 # ------------------------------------------------
-# ENDPOINT ACQUISTO GIRI
+# ENDPOINTS DI ACQUISTO GIRI
 # ------------------------------------------------
 @app.post("/api/buyspins")
 async def api_buyspins(req: BuySpinsRequest, current_user: User = Depends(get_current_user)):
@@ -439,7 +420,7 @@ async def api_buyspins(req: BuySpinsRequest, current_user: User = Depends(get_cu
             cost = 300
         msg = (f"✅ Per acquistare {req.num_spins} tiri extra, trasferisci {cost} GKY al portafoglio:\n"
                f"{WALLET_DISTRIBUZIONE}\n"
-               f"Quindi usa l'endpoint /api/confirmbuy con i dati della transazione.")
+               f"Poi usa l'endpoint /api/confirmbuy con i dati della transazione.")
         return {"message": msg}
     except Exception as e:
         logging.error(f"Errore in buyspins: {e}")
@@ -467,6 +448,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(ge
             raise HTTPException(status_code=400, detail="⚠️ Collega il wallet prima di confermare l'acquisto.")
         if not verifica_transazione_gky(user.wallet_address, req.tx_hash, cost):
             raise HTTPException(status_code=400, detail="❌ Transazione non valida o importo insufficiente.")
+
         user.extra_spins = (user.extra_spins or 0) + req.num_spins
         session.commit()
         session.refresh(user)
@@ -494,11 +476,13 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(ge
         session.close()
 
 # ------------------------------------------------
-# ALTRE FUNZIONI (referral, sharetask, admin)
+# ALTRI ENDPOINTS
 # ------------------------------------------------
 @app.get("/api/referral")
 async def api_referral(current_user: User = Depends(get_current_user)):
-    return {"referral_link": f"https://t.me/tuo_bot?start=ref_{current_user.wallet_address}"}
+    return {
+        "referral_link": f"https://t.me/tuo_bot?start=ref_{current_user.wallet_address}"
+    }
 
 @app.post("/api/sharetask")
 async def api_sharetask(current_user: User = Depends(get_current_user)):
@@ -514,7 +498,7 @@ async def api_claim_share_reward(current_user: User = Depends(get_current_user))
     session = Session()
     try:
         now = datetime.datetime.now(pytz.timezone("Europe/Rome"))
-        if current_user.last_share_task is not None:
+        if current_user.last_share_task:
             diff = now - current_user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
             if diff < datetime.timedelta(days=7):
                 remaining = datetime.timedelta(days=7) - diff
@@ -551,5 +535,4 @@ async def api_giankyadmin(current_user: User = Depends(get_current_user)):
         session.close()
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000))
-)
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
