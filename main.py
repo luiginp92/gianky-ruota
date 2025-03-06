@@ -3,13 +3,13 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questo modulo gestisce:
-  • L'autenticazione tramite JWT
-  • La logica del gioco (visualizzazione della ruota e spin)
-  • L'acquisto di extra giri con verifica della transazione
+  • Autenticazione tramite JWT
+  • Logica del gioco: visualizzazione della ruota e spin
+  • Acquisto di extra giri con conferma transazione automatica
   • Altri endpoint: referral, share task, report admin
 
-I parametri per le transazioni (chiave privata, provider, indirizzo token e wallet distribuzione)
-sono letti dalle variabili d’ambiente, che vengono caricate con python-dotenv dal file kd.env.
+I parametri per le transazioni (chiave privata, provider URL, indirizzo del token e wallet di distribuzione)
+sono letti dalle variabili d’ambiente tramite python-dotenv (kd.env).
 """
 
 import os
@@ -33,13 +33,13 @@ from fastapi.security import OAuth2PasswordBearer
 
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
-# Carica le variabili d'ambiente da kd.env
+# Carica le variabili d’ambiente dal file kd.env
 from dotenv import load_dotenv
 load_dotenv()
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# Inizializza il database (per sviluppo, se usi SQLite, elimina test.db se cambi schema)
+# Inizializza il database (per sviluppo/test; se usi SQLite, elimina test.db se cambi schema)
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
@@ -258,7 +258,7 @@ async def auth_verify(auth: AuthVerifyRequest):
         user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
         if not user or not user.nonce:
             raise HTTPException(status_code=400, detail="Richiedi prima un nonce.")
-        # Nel prototipo usiamo "dummy" come firma
+        # Per il prototipo usiamo "dummy" come firma
         if auth.signature != "dummy":
             message = encode_defunct(text=user.nonce)
             try:
@@ -307,7 +307,7 @@ async def api_spin(current_user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="Collega il wallet prima di giocare.")
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Garantisce il free spin se l'utente non ha giocato oggi
+        # Garantisce il free spin se l'utente non ha ancora giocato oggi
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + (user.extra_spins or 0)
             user.last_play_date = now
@@ -394,7 +394,6 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
             counter = GlobalCounter(total_in=cost, total_out=0.0)
             session.add(counter)
         session.commit()
-        # Restituisce 1 free spin + extra spin aggiornati
         available = 1 + (user.extra_spins or 0)
         return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
