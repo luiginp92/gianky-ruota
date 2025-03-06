@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Se DATABASE_URL non è impostata, usa SQLite per sviluppo/test.
+# Se DATABASE_URL non è impostata, usa SQLite (solo per sviluppo/test)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
 engine = create_engine(
     DATABASE_URL,

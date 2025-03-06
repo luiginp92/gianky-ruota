@@ -34,7 +34,7 @@
         });
         if (!res.ok) throw new Error("Errore nella richiesta del nonce");
         const nonceData = await res.json();
-        // Usa "dummy" come firma per la simulazione
+        // Usa "dummy" come firma per simulare la verifica
         res = await fetch("/api/auth/verify", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
@@ -42,7 +42,7 @@
         });
         if (!res.ok) throw new Error("Errore nell'autenticazione");
         const authData = await res.json();
-        // Salva il token in localStorage con la chiave "token"
+        // Salva il token e l'indirizzo wallet in localStorage
         localStorage.setItem("token", authData.access_token);
         localStorage.setItem("walletAddress", input);
         alert("Wallet connesso correttamente!");
