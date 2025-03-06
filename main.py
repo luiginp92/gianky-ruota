@@ -3,13 +3,16 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questo modulo gestisce:
-  • L'autenticazione tramite JWT
-  • La logica di gioco (ruota e spin)
-  • L'acquisto di extra giri (con conferma di transazione automatica)
-  • Altri endpoint: referral, task e report admin
+  • Autenticazione tramite JWT
+  • Logica del gioco: visualizzazione ruota e spin
+  • Acquisto di extra spin con conferma transazione automatica
+  • Altri endpoint: referral, share task e report admin
 
-NOTA: Questa implementazione è un prototipo. Per una versione "ready for the public"
-      occorrono ulteriori test, un front‑end moderno e un database persistente (es. PostgreSQL).
+Le configurazioni per le transazioni (chiave privata, provider, indirizzo token)
+sono lette dalle variabili d’ambiente (kd.env).
+
+NOTA: Questa è una soluzione prototipo. In produzione occorrerà usare un database persistente
+      (es. PostgreSQL) e un front‑end con grafica avanzata.
 """
 
 import os
@@ -35,31 +38,28 @@ from database import Session, User, PremioVinto, GlobalCounter, init_db
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# Crea le tabelle se non esistono (per sviluppo/test con SQLite)
+# Inizializza il database (se usi SQLite, elimina test.db se cambi schema)
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ----------------- CONFIGURAZIONE BLOCKCHAIN -----------------
-POLYGON_RPC = "https://polygon-rpc.com"
-WALLET_DISTRIBUZIONE = "0xBc0c054066966a7A6C875981a18376e2296e5815"
-CONTRATTO_GKY = "0x370806781689E670f85311700445449aC7C3Ff7a"
-PRIVATE_KEY = os.getenv("PRIVATE_KEY_GKY")
+# ----------------- CONFIGURAZIONE BLOCKCHAIN E PARAMETRI -----------------
+# Leggi i parametri dal file di ambiente (kd.env)
+PRIVATE_KEY = os.getenv("DISTRIBUTION_PRIVATE_KEY")
 if not PRIVATE_KEY:
-    raise ValueError("❌ Errore: la chiave privata non è impostata.")
+    raise ValueError("Errore: DISTRIBUTION_PRIVATE_KEY non impostata.")
 
-# Il file ruota.png non è fondamentale (la ruota viene disegnata via canvas)
-IMAGE_PATH = "ruota.png"
-try:
-    with open(IMAGE_PATH, "rb") as f:
-        STATIC_IMAGE_BYTES = f.read()
-except Exception as e:
-    STATIC_IMAGE_BYTES = None
-    logging.error("File statico non trovato: ruota.png")
+PROVIDER_URL = os.getenv("PROVIDER_URL", "https://polygon-rpc.com/")
+TOKEN_ADDRESS = os.getenv("TOKEN_ADDRESS")
+if not TOKEN_ADDRESS:
+    raise ValueError("Errore: TOKEN_ADDRESS non impostato.")
 
-w3 = Web3(Web3.HTTPProvider(POLYGON_RPC))
-w3_no_mw = Web3(Web3.HTTPProvider(POLYGON_RPC))
+# Se non è impostato un wallet di distribuzione via variabile, usa il valore di default
+WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
+
+w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
+w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
 # ----------------- JWT & AUTENTICAZIONE -----------------
@@ -81,7 +81,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/verify")
 def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
          status_code=status.HTTP_401_UNAUTHORIZED,
-         detail="Could not validate credentials",
+         detail="Autenticazione non valida",
          headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -105,7 +105,7 @@ def get_dynamic_gas_price():
     try:
         base = w3.eth.gasPrice
         safe = int(base * 1.2)
-        logging.info(f"⛽ Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
+        logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
@@ -113,10 +113,10 @@ def get_dynamic_gas_price():
 
 def invia_token(destinatario, quantita):
     gas_price = get_dynamic_gas_price()
-    token_amount = Web3.toWei(quantita, 'ether')
+    token_amount = Web3.toWei(quantita, 'ether')  # GiankyCoin ha 18 decimali
     try:
         contratto = w3.eth.contract(
-            address=CONTRATTO_GKY,
+            address=TOKEN_ADDRESS,
             abi=[{
                 "constant": False,
                 "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
@@ -158,11 +158,11 @@ def invia_token(destinatario, quantita):
 def verifica_transazione_gky(user_address, tx_hash, cost):
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
-        if tx["to"].lower() != CONTRATTO_GKY.lower():
-            logging.error("TX non destinata al contratto GKY.")
+        if tx["to"].lower() != TOKEN_ADDRESS.lower():
+            logging.error("La TX non è destinata al contratto token.");
             return False
         contract = w3_no_mw.eth.contract(
-            address=CONTRATTO_GKY,
+            address=TOKEN_ADDRESS,
             abi=[{
                 "constant": False,
                 "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
@@ -175,18 +175,18 @@ def verifica_transazione_gky(user_address, tx_hash, cost):
         )
         func_obj, params = contract.decode_function_input(tx.input)
         if func_obj.fn_name != "transfer":
-            logging.error("TX non chiama transfer.")
+            logging.error("La TX non chiama transfer.");
             return False
         if params.get("_to", "").lower() != WALLET_DISTRIBUZIONE.lower():
-            logging.error("TX non invia al portafoglio di distribuzione.")
+            logging.error("La TX non invia al wallet di distribuzione.");
             return False
         token_amount = params.get("_value", 0)
         if token_amount < cost * 10**18:
-            logging.error(f"Importo insufficiente: {w3_no_mw.fromWei(token_amount, 'ether')} vs {cost}")
+            logging.error(f"Importo insufficiente: {w3_no_mw.fromWei(token_amount, 'ether')} vs {cost}");
             return False
         return True
     except Exception as e:
-        logging.error(f"Errore verifica TX: {e}")
+        logging.error(f"Errore verifica TX: {e}");
         return False
 
 def get_prize():
@@ -259,6 +259,7 @@ async def auth_verify(auth: AuthVerifyRequest):
         user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
         if not user or not user.nonce:
             raise HTTPException(status_code=400, detail="Richiedi prima un nonce.")
+        # In questo prototipo usiamo "dummy" come firma
         if auth.signature != "dummy":
             message = encode_defunct(text=user.nonce)
             try:
@@ -307,7 +308,7 @@ async def api_spin(current_user=Depends(get_current_user)):
             raise HTTPException(status_code=400, detail="Collega il wallet prima di giocare.")
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Garantisce il free spin se l'utente non ha ancora giocato oggi
+        # Se l'utente non ha ancora giocato oggi, garantisce il free spin
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + (user.extra_spins or 0)
             user.last_play_date = now
@@ -394,7 +395,6 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user=Depends(get_curren
             counter = GlobalCounter(total_in=cost, total_out=0.0)
             session.add(counter)
         session.commit()
-        # Restituisce 1 free spin + extra spin
         available = 1 + (user.extra_spins or 0)
         return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
