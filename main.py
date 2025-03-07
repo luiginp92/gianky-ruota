@@ -3,11 +3,10 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questo modulo gestisce:
-  • La logica del gioco: spin della ruota, distribuzione automatica dei premi e acquisto extra giri.
+  • Logica del gioco: spin della ruota, distribuzione automatica dei premi e acquisto extra giri.
   • Altri endpoint: referral, share task, report admin.
   
-I parametri per le transazioni (chiave privata, provider URL, indirizzo token e wallet di distribuzione)
-sono letti dalle variabili d’ambiente.
+I parametri per le transazioni sono letti dalle variabili d’ambiente.
 """
 
 import os
@@ -67,7 +66,7 @@ w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# ----------------- MODELLI DI INPUT (Pydantic) -----------------
+# ----------------- MODELLI DI INPUT -----------------
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
 
@@ -92,7 +91,7 @@ class DistributePrizeRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     prize: str
 
-# ----------------- JWT & AUTENTICAZIONE (non usato per gli endpoint di gioco) -----------------
+# ----------------- JWT & AUTENTICAZIONE (opzionale) -----------------
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret_jwt_key_change_me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -132,6 +131,13 @@ def get_user(wallet_address: str):
     session = Session()
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
+        if user:
+            # Estrai i dati necessari prima di chiudere la sessione
+            wallet_log = user.wallet_address
+            spins_log = user.extra_spins
+            logging.info(f"Utente: {wallet_log}, extra_spins: {spins_log}")
+        else:
+            logging.info(f"Utente non trovato per wallet: {wallet_address}, creazione in corso...")
     except Exception as e:
         logging.error(f"Errore nella ricerca dell'utente: {e}")
         raise HTTPException(status_code=500, detail="Errore interno")
@@ -143,24 +149,24 @@ def get_user(wallet_address: str):
             user = User(wallet_address=wallet_address, extra_spins=0)
             session.add(user)
             session.commit()
+            logging.info(f"Creato utente: {user.wallet_address} con extra_spins: {user.extra_spins}")
         except Exception as e:
             session.rollback()
             logging.error(f"Errore nella creazione dell'utente: {e}")
             raise HTTPException(status_code=500, detail="Errore nella creazione dell'utente")
         finally:
             session.close()
-    logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}")
     return user
 
 def get_dynamic_gas_price():
     try:
-        base = w3.eth.gasPrice
+        base = w3.eth.gas_price
         safe = int(base * 1.2)
-        logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
+        logging.info(f"Gas Price: {w3.from_wei(base, 'gwei')} -> {w3.from_wei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return Web3.toWei('50', 'gwei')
+        return Web3.to_wei('50', 'gwei')  # Usa to_wei con underscore
 
 def invia_token(destinatario: str, quantita: int) -> bool:
     gas_price = get_dynamic_gas_price()
@@ -239,13 +245,12 @@ def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool
         return False
     token_amount = params.get("_value", 0)
     if token_amount < cost * 10**18:
-        logging.error(f"Importo insufficiente: {w3_no_mw.fromWei(token_amount, 'ether')} vs {cost}")
+        logging.error(f"Importo insufficiente: {w3_no_mw.from_wei(token_amount, 'ether')} vs {cost}")
         return False
     return True
 
 def get_prize() -> str:
     r = random.random() * 100
-    # Distribuzione basata su probabilità – i segmenti della ruota sono fissi
     if r < 10:
         return "10 GKY"
     elif r < 15:
@@ -269,7 +274,6 @@ def get_prize() -> str:
 
 # ----------------- ENDPOINTS -----------------
 
-# Endpoint per il giro della ruota (spin)
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
     user = get_user(req.wallet_address)
@@ -318,7 +322,6 @@ async def api_spin(req: SpinRequest):
     finally:
         session.close()
 
-# Endpoint per distribuire il premio (trasferisce i token)
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
     user = get_user(req.wallet_address)
@@ -334,12 +337,12 @@ async def api_distribute(req: DistributePrizeRequest):
     else:
         return {"message": f"Premio '{req.prize}' assegnato al wallet {user.wallet_address}."}
 
-# Endpoint per richiedere le istruzioni per acquistare extra giri
 @app.post("/api/buyspins")
-async def api_buyspins(req: BuySpinsRequest):
-    user = get_user(req.wallet_address)
+async def api_buyspins(req: BuySpinsRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
+        if not current_user.wallet_address:
+            raise HTTPException(status_code=400, detail="Collega il wallet prima di acquistare extra spin.")
         if req.num_spins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi acquistare solo 1, 3 o 10 giri extra.")
         cost = 50 if req.num_spins == 1 else 125 if req.num_spins == 3 else 300
@@ -351,10 +354,8 @@ async def api_buyspins(req: BuySpinsRequest):
     finally:
         session.close()
 
-# Endpoint per confermare l'acquisto degli extra giri
 @app.post("/api/confirmbuy")
-async def api_confirmbuy(req: ConfirmBuyRequest):
-    user = get_user(req.wallet_address)
+async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
         if req.txHash in USED_TX:
@@ -362,15 +363,15 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         if req.numSpins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi confermare solo 1, 3 o 10 giri extra.")
         cost = 50 if req.numSpins == 1 else 125 if req.numSpins == 3 else 300
-        if not user.wallet_address:
+        if not current_user.wallet_address:
             raise HTTPException(status_code=400, detail="Collega il wallet prima di confermare.")
-        if not verifica_transazione_gky(user.wallet_address, req.txHash, cost):
+        if not verifica_transazione_gky(current_user.wallet_address, req.txHash, cost):
             raise HTTPException(status_code=400, detail="Tx non valida o importo insufficiente.")
-        user.extra_spins = (user.extra_spins or 0) + req.numSpins
-        user.last_play_date = None  # Reset per consentire nuovi spin
+        current_user.extra_spins = (current_user.extra_spins or 0) + req.numSpins
+        current_user.last_play_date = None  # Reset per consentire nuovi spin
         session.commit()
-        session.refresh(user)
-        logging.info(f"Extra spins aggiornati: {user.extra_spins}")
+        session.refresh(current_user)
+        logging.info(f"Extra spins aggiornati: {current_user.extra_spins}")
         USED_TX.add(req.txHash)
         counter = session.query(GlobalCounter).first()
         if counter:
@@ -379,8 +380,8 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             counter = GlobalCounter(total_in=cost, total_out=0.0)
             session.add(counter)
         session.commit()
-        available = 1 + (user.extra_spins or 0)
-        return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
+        available = 1 + (current_user.extra_spins or 0)
+        return {"message": f"Acquisto confermato! Extra giri: {current_user.extra_spins}", "available_spins": available}
     except HTTPException as he:
         session.rollback()
         raise he
@@ -391,22 +392,58 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
     finally:
         session.close()
 
-# Endpoint referral
 @app.get("/api/referral")
-async def api_referral(wallet_address: str):
-    referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
+async def api_referral(current_user: User = Depends(get_current_user)):
+    referral_link = f"https://t.me/tuo_bot?start=ref_{current_user.wallet_address}"
     return {"referral_link": referral_link}
 
-# Endpoint per ottenere l'immagine della ruota (se presente)
-@app.get("/wheel")
-async def get_wheel():
-    image_path = os.path.join("static", "ruota.png")
-    if os.path.exists(image_path):
-        return FileResponse(image_path, media_type="image/png")
-    else:
-        raise HTTPException(status_code=404, detail="Immagine della ruota non trovata.")
+@app.post("/api/sharetask")
+async def api_sharetask(current_user: User = Depends(get_current_user)):
+    video_url = "https://www.youtube.com/watch?v=AbpPYERGCXI&ab_channel=GKY-OFFICIAL"
+    return {
+        "message": "Condividi questo video per ottenere 1 giro extra (massimo 1 volta a settimana).",
+        "video_url": video_url,
+        "instruction": "Dopo aver condiviso, chiama /api/claim_share_reward per reclamare il premio."
+    }
 
-# Root che reindirizza all'index
+@app.post("/api/claim_share_reward")
+async def api_claim_share_reward(current_user: User = Depends(get_current_user)):
+    session = Session()
+    try:
+        now = datetime.datetime.now(pytz.timezone("Europe/Rome"))
+        if current_user.last_share_task:
+            diff = now - current_user.last_share_task.astimezone(pytz.timezone("Europe/Rome"))
+            if diff < datetime.timedelta(days=7):
+                remaining = datetime.timedelta(days=7) - diff
+                raise HTTPException(status_code=400, detail=f"Riprova tra {remaining.days} giorni.")
+        current_user.extra_spins += 1
+        current_user.last_share_task = now
+        session.commit()
+        return {"message": f"Task completata! Extra giri: {current_user.extra_spins}"}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Errore in claim_share_reward: {e}")
+        raise HTTPException(status_code=500, detail="Errore nel riscatto del premio.")
+    finally:
+        session.close()
+
+@app.get("/api/giankyadmin")
+async def api_giankyadmin(current_user: User = Depends(get_current_user)):
+    session = Session()
+    try:
+        counter = session.query(GlobalCounter).first()
+        if not counter:
+            return {"report": "Nessun dato disponibile ancora."}
+        report_text = f"Entrate: {counter.total_in} GKY, Uscite: {counter.total_out} GKY, Bilancio: {counter.total_in - counter.total_out} GKY"
+        return {"report": report_text}
+    except Exception as e:
+        logging.error(f"Errore in giankyadmin: {e}")
+        raise HTTPException(status_code=500, detail="Errore nel report.")
+    finally:
+        session.close()
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return """
