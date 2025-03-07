@@ -3,11 +3,11 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questo modulo gestisce:
-  • Giro della ruota (spin) e distribuzione automatica dei premi.
-  • Acquisto di extra giri.
-  • Altri endpoint: referral, share task, report admin.
+  • Giro della ruota (spin) e distribuzione automatica dei premi in GKY.
+  • Acquisto di extra giri tramite endpoint dedicati.
+  • Altri endpoint (referral, share task, ecc.).
 
-Tutti gli endpoint usano il wallet_address fornito nel body.
+I wallet vengono passati nel body delle richieste (senza JWT).
 """
 
 import os
@@ -32,6 +32,7 @@ load_dotenv()
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
+# Inizializza il database
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
@@ -110,14 +111,13 @@ def get_dynamic_gas_price():
     try:
         base = w3.eth.gas_price
         safe = int(base * 1.2)
-        logging.info(f"Gas Price: {w3.from_wei(base, 'gwei')} -> {w3.from_wei(safe, 'gwei')}")
+        logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return Web3.to_wei('50', 'gwei')
+        return w3.toWei('50', 'gwei')
 
 def invia_token(destinatario: str, quantita: int) -> bool:
-    gas_price = get_dynamic_gas_price()
     try:
         token_contract = w3.eth.contract(
             address=TOKEN_ADDRESS,
@@ -135,10 +135,10 @@ def invia_token(destinatario: str, quantita: int) -> bool:
             'from': WALLET_DISTRIBUZIONE,
             'nonce': w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE),
             'gas': 100000,
-            'gasPrice': gas_price,
+            'gasPrice': get_dynamic_gas_price(),
         })
         signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
         logging.info(f"Token inviati: {quantita} GKY, txHash: {tx_hash.hex()}")
     except Exception as e:
         logging.error(f"Errore nell'invio dei token: {e}")
@@ -149,6 +149,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         if counter:
             counter.total_out += quantita
         else:
+            from database import GlobalCounter  # se necessario
             counter = GlobalCounter(total_in=0.0, total_out=quantita)
             session_db.add(counter)
         session_db.commit()
@@ -193,30 +194,28 @@ def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool
         return False
     token_amount = params.get("_value", 0)
     if token_amount < cost * 10**18:
-        logging.error(f"Importo insufficiente: {w3_no_mw.from_wei(token_amount, 'ether')} vs {cost}")
+        logging.error(f"Importo insufficiente: {w3_no_mw.fromWei(token_amount, 'ether')} vs {cost}")
         return False
     return True
 
+# Aggiornamento della funzione get_prize:
 def get_prize() -> str:
     r = random.random() * 100
-    if r < 10:
+    # Nuove soglie: r <20 => "10 GKY", 20-40 => "20 GKY", 40-60 => "50 GKY", 60-70 => "100 GKY", 70-80 => "250 GKY", 80-85 => "500 GKY", 85-90 => "1000 GKY", altrimenti "NO PRIZE"
+    if r < 20:
         return "10 GKY"
-    elif r < 15:
+    elif r < 40:
         return "20 GKY"
-    elif r < 25:
-        return "50 GKY"
-    elif r < 35:
-        return "100 GKY"
-    elif r < 45:
-        return "250 GKY"
-    elif r < 50:
-        return "500 GKY"
-    elif r < 55:
-        return "1000 GKY"
     elif r < 60:
-        return "NFT BASISC"
-    elif r < 65:
-        return "NFT STARTER"
+        return "50 GKY"
+    elif r < 70:
+        return "100 GKY"
+    elif r < 80:
+        return "250 GKY"
+    elif r < 85:
+        return "500 GKY"
+    elif r < 90:
+        return "1000 GKY"
     else:
         return "NO PRIZE"
 

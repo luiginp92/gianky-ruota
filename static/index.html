@@ -39,7 +39,7 @@
         <button id="btnTask" class="btn btn-secondary btn-custom">Completa Task</button>
       </div>
     </div>
-    <!-- Sezione Ruota integrata -->
+    <!-- Ruota integrata -->
     <div class="row mt-4">
       <div class="col text-center">
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
@@ -62,7 +62,7 @@
   
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <!-- Carica Winwheel.js (non defer per assicurare la disponibilità prima del codice inline) -->
+  <!-- Carica Winwheel.js subito (non defer) -->
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
   <script defer>
@@ -114,11 +114,11 @@
       { text: '250 GKY', color: '#9B59B6' },
       { text: '500 GKY', color: '#3498DB' },
       { text: '1000 GKY', color: '#1ABC9C' },
-      { text: 'NFT BASISC', color: '#2ECC71' },
-      { text: 'NFT STARTER', color: '#F39C12' },
       { text: 'NO PRIZE', color: '#C0392B' },
       { text: 'NO PRIZE', color: '#BDC3C7' },
-      { text: 'NO PRIZE', color: '#BDC3C7' }
+      { text: 'NO PRIZE', color: '#BDC3C7' },
+      { text: '10 GKY', color: '#F1C40F' },  // duplicato per maggiore probabilità
+      { text: '20 GKY', color: '#FF8C00' }   // duplicato per maggiore probabilità
     ];
     const segments = prizeData.map(item => ({
       fillStyle: item.color,
@@ -188,6 +188,7 @@
         return;
       }
       try {
+        // Chiama /api/spin per registrare lo spin (l'endpoint restituisce il premio da assegnare)
         const spinRes = await fetch("/api/spin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -196,10 +197,10 @@
         if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
         const spinData = await spinRes.json();
         console.log("Risultato spin dal backend:", spinData);
-        const prize = spinData.prize;
-        const chosenIndex = segments.findIndex(seg => seg.text.trim() === prize.trim());
+        // Trova l'indice del segmento corrispondente al premio
+        const chosenIndex = segments.findIndex(seg => seg.text.trim() === spinData.prize.trim());
         if (chosenIndex === -1) {
-          alert("Premio non riconosciuto: " + prize);
+          alert("Premio non riconosciuto: " + spinData.prize);
           resetWheel();
           return;
         }
