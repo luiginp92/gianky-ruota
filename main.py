@@ -5,9 +5,9 @@ Gianky Coin Web App – main.py
 Questo modulo gestisce:
   • Logica del gioco: spin della ruota, distribuzione automatica dei premi e acquisto extra tiri.
   • Altri endpoint: referral, share task, report admin.
- 
+  
 I parametri per le transazioni (chiave privata, provider URL, indirizzo token e wallet di distribuzione)
-sono letti dalle variabili d’ambiente (es. in un file .env).
+sono letti dalle variabili d’ambiente.
 """
 
 import os
@@ -31,13 +31,11 @@ from fastapi.security import OAuth2PasswordBearer
 
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
-# Carica le variabili d’ambiente dal file .env
 from dotenv import load_dotenv
 load_dotenv()
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# Inizializza il database
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
@@ -70,7 +68,7 @@ w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# ----------------- CONFIGURAZIONE JWT & AUTENTICAZIONE (per eventuali endpoint legacy) -----------------
+# ----------------- JWT & AUTENTICAZIONE -----------------
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret_jwt_key_change_me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -104,6 +102,29 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     if not user:
         raise credentials_exception
     return user
+
+# ----------------- MODELLI DI INPUT (Pydantic) -----------------
+class SpinRequest(BaseModel):
+    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+
+class AuthRequest(BaseModel):
+    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+    telegram_id: Optional[str] = None
+
+class AuthVerifyRequest(BaseModel):
+    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+    signature: str
+
+class BuySpinsRequest(BaseModel):
+    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
+
+class ConfirmBuyRequest(BaseModel):
+    txHash: str
+    numSpins: int = Field(..., description="Numero di extra tiri (1, 3 o 10)", gt=0)
+
+class DistributePrizeRequest(BaseModel):
+    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+    prize: str
 
 # ----------------- FUNZIONI UTILI -----------------
 def get_dynamic_gas_price():
@@ -197,9 +218,9 @@ def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool
         return False
     return True
 
-# # Distribuzione basata su probabilità che corrisponde ai segmenti della ruota
 def get_prize() -> str:
     r = random.random() * 100
+    # Distribuzione basata su probabilità che corrisponde ai segmenti della ruota
     if r < 10:
         return "10 GKY"
     elif r < 15:
@@ -224,8 +245,7 @@ def get_prize() -> str:
 # ----------------- ENDPOINTS -----------------
 
 @app.post("/api/spin")
-async def api_spin(req: SpinRequest):
-    current_user = get_user(req.wallet_address)
+async def api_spin(req: SpinRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
         italy = pytz.timezone("Europe/Rome")
@@ -273,6 +293,8 @@ async def api_spin(req: SpinRequest):
 
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
+    current_user = get_current_user(token="dummy_token_for_distribution")  # Per chiamate da front-end, si usa il wallet nel body
+    # In questo endpoint, usiamo il wallet_address passato per individuare l'utente
     current_user = get_user(req.wallet_address)
     if "GKY" in req.prize:
         try:
@@ -290,9 +312,9 @@ async def api_distribute(req: DistributePrizeRequest):
 async def api_buyspins(req: BuySpinsRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
-        if req.numSpins not in (1, 3, 10):
+        if req.num_spins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi acquistare solo 1, 3 o 10 giri extra.")
-        cost = 50 if req.numSpins == 1 else 125 if req.numSpins == 3 else 300
+        cost = 50 if req.num_spins == 1 else 125 if req.num_spins == 3 else 300
         msg = f"Trasferisci {cost} GKY a {WALLET_DISTRIBUZIONE} e poi chiama /api/confirmbuy con il tx hash."
         return {"message": msg}
     except Exception as e:
