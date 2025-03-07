@@ -3,12 +3,11 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questo modulo gestisce:
-  • Il giro della ruota (spin) e la distribuzione automatica dei premi.
-  • Acquisto di extra giri (buyspins e confirmbuy).
+  • Giro della ruota (spin) e distribuzione automatica dei premi.
+  • Acquisto di extra giri.
   • Altri endpoint: referral, share task, report admin.
-  
-Il sistema usa il wallet fornito dal client (nel body) per le operazioni.
-I parametri per le transazioni sono letti dalle variabili d’ambiente.
+
+Tutti gli endpoint usano il wallet_address fornito nel body.
 """
 
 import os
@@ -33,7 +32,6 @@ load_dotenv()
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
-# Inizializza il database
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
@@ -201,7 +199,6 @@ def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool
 
 def get_prize() -> str:
     r = random.random() * 100
-    # La probabilità e i premi possono essere modificati in base alle esigenze
     if r < 10:
         return "10 GKY"
     elif r < 15:

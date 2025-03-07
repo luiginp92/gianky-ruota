@@ -27,7 +27,7 @@
       <h3>Istruzioni per l'acquisto</h3>
       <p id="instructionMessage"></p>
       <p>
-        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio:
+        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al portafoglio:
         <br>
         <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
         <br>
@@ -95,7 +95,7 @@
           const res = await fetch("/api/confirmbuy", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet_address: walletAddress, txHash, numSpins: parseInt(numSpins) })
+            body: JSON.stringify({ wallet_address: walletAddress, txHash: txHash, numSpins: parseInt(numSpins) })
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
