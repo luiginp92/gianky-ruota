@@ -68,6 +68,7 @@
   <!-- Dipendenze JS -->
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <!-- Carica Winwheel.js dopo TweenMax -->
   <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
   <script defer>
@@ -88,7 +89,7 @@
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
-      // Implementa qui la logica per aggiornare i saldi se desiderato
+      // Logica per aggiornare i saldi (da implementare se necessario)
     }
     window.addEventListener("load", updateBalances);
     
@@ -119,8 +120,6 @@
       { text: '250 GKY', color: '#9B59B6' },
       { text: '500 GKY', color: '#3498DB' },
       { text: '1000 GKY', color: '#1ABC9C' },
-      { text: 'NFT BASISC', color: '#2ECC71' },
-      { text: 'NFT STARTER', color: '#F39C12' },
       { text: 'NO PRIZE', color: '#C0392B' },
       { text: 'NO PRIZE', color: '#BDC3C7' },
       { text: 'NO PRIZE', color: '#BDC3C7' }
@@ -130,6 +129,15 @@
       fillStyle: item.color,
       text: item.text
     }));
+    
+    function findPrizeIndex(prizeText) {
+      for (let i = 0; i < prizeData.length; i++) {
+        if (prizeData[i].text.trim() === prizeText.trim()) {
+          return i;
+        }
+      }
+      return -1;
+    }
     
     function createWheel(finalAngle) {
       return new Winwheel({
@@ -201,7 +209,7 @@
         const spinData = await spinRes.json();
         console.log("Risultato spin:", spinData);
         const prize = spinData.prize;
-        let chosenIndex = segments.findIndex(seg => seg.text.trim() === prize.trim());
+        let chosenIndex = findPrizeIndex(prize);
         if (chosenIndex === -1) {
           alert("Premio non riconosciuto: " + prize);
           document.getElementById("btnSpin").disabled = false;
