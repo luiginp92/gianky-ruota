@@ -12,8 +12,10 @@
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: #343a40; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
+    #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
+    #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
-  <!-- Carica TweenMax 2.1.3 (necessario per Winwheel.js) -->
+  <!-- Carica TweenMax -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
 </head>
 <body>
@@ -23,31 +25,33 @@
       <div>MATIC: <span id="maticBalance">0</span></div>
       <div>GiankyCoin: <span id="tokenBalance">0</span></div>
     </div>
+    <div id="freeSpins">Giri disponibili: <span id="freeSpinsCount">0</span></div>
   </header>
   <div class="container content">
+    <div class="row mb-4">
+      <div class="col text-center">
+        <canvas id="wheelCanvas" width="300" height="300"></canvas>
+      </div>
+    </div>
     <div class="row text-center">
+      <div class="col">
+        <button id="btnSpin" class="btn btn-primary btn-custom">Gira la ruota</button>
+      </div>
+    </div>
+    <div class="row text-center mt-3">
       <div class="col">
         <button id="btnConnect" class="btn btn-success btn-custom">Connetti Wallet</button>
       </div>
       <div class="col">
         <button id="btnBuySpins" class="btn btn-warning btn-custom">Acquista Extra Tiri</button>
       </div>
+    </div>
+    <div class="row text-center mt-3">
       <div class="col">
         <button id="btnReferral" class="btn btn-info btn-custom">Ottieni Referral</button>
       </div>
       <div class="col">
         <button id="btnTask" class="btn btn-secondary btn-custom">Completa Task</button>
-      </div>
-    </div>
-    <!-- Ruota integrata -->
-    <div class="row mt-4">
-      <div class="col text-center">
-        <canvas id="wheelCanvas" width="300" height="300"></canvas>
-      </div>
-    </div>
-    <div class="row text-center mt-2">
-      <div class="col">
-        <button id="btnSpin" class="btn btn-primary btn-custom">Gira la Ruota</button>
       </div>
     </div>
     <div class="row mt-4">
@@ -60,162 +64,13 @@
     <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
   </footer>
   
+  <!-- Dipendenze JS -->
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <!-- Carica Winwheel.js subito (non defer) -->
-  <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
+  <!-- Carica Winwheel.js -->
+  <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
   <script defer>
-    async function updateBalances() {
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) return;
-      const provider = new ethers.providers.JsonRpcProvider("https://polygon-rpc.com");
-      try {
-        const balanceWei = await provider.getBalance(wallet);
-        const balanceMatic = ethers.utils.formatEther(balanceWei);
-        document.getElementById("maticBalance").innerText = parseFloat(balanceMatic).toFixed(4);
-      } catch (error) {
-        console.error("Errore nel recuperare il saldo MATIC:", error);
-      }
-      try {
-        const tokenAddress = "0x370806781689E670f85311700445449aC7C3Ff7a";
-        const abi = ["function balanceOf(address owner) view returns (uint256)"];
-        const tokenContract = new ethers.Contract(tokenAddress, abi, provider);
-        const tokenBalanceWei = await tokenContract.balanceOf(wallet);
-        const tokenBalance = ethers.utils.formatEther(tokenBalanceWei);
-        document.getElementById("tokenBalance").innerText = parseFloat(tokenBalance).toFixed(4);
-      } catch (error) {
-        console.error("Errore nel recuperare il saldo GiankyCoin:", error);
-      }
-    }
-    window.addEventListener("load", updateBalances);
-    
-    document.getElementById("btnConnect").addEventListener("click", () => {
-      window.location.href = "/static/connectwallet.html";
-    });
-    document.getElementById("btnBuySpins").addEventListener("click", () => {
-      window.location.href = "/static/buyspins.html";
-    });
-    document.getElementById("btnReferral").addEventListener("click", () => {
-      const wallet = localStorage.getItem("walletAddress");
-      if(wallet) window.location.href = "/static/referral.html?wallet=" + wallet;
-    });
-    document.getElementById("btnTask").addEventListener("click", () => {
-      const wallet = localStorage.getItem("walletAddress");
-      if(wallet) window.location.href = "/static/task.html?wallet=" + wallet;
-    });
-    
-    // Inizializza la ruota
-    const prizeData = [
-      { text: '10 GKY', color: '#F1C40F' },
-      { text: '20 GKY', color: '#FF8C00' },
-      { text: '50 GKY', color: '#E67E22' },
-      { text: '100 GKY', color: '#E74C3C' },
-      { text: '250 GKY', color: '#9B59B6' },
-      { text: '500 GKY', color: '#3498DB' },
-      { text: '1000 GKY', color: '#1ABC9C' },
-      { text: 'NO PRIZE', color: '#C0392B' },
-      { text: 'NO PRIZE', color: '#BDC3C7' },
-      { text: 'NO PRIZE', color: '#BDC3C7' },
-      { text: '10 GKY', color: '#F1C40F' },  // duplicato per maggiore probabilità
-      { text: '20 GKY', color: '#FF8C00' }   // duplicato per maggiore probabilità
-    ];
-    const segments = prizeData.map(item => ({
-      fillStyle: item.color,
-      text: item.text
-    }));
-    
-    let theWheel = new Winwheel({
-      canvasId: 'wheelCanvas',
-      numSegments: segments.length,
-      outerRadius: 140,
-      segments: segments,
-      animation: {
-        type: 'spinToStop',
-        duration: 3,
-        spins: 5,
-        callbackFinished: async function(indicatedSegment) {
-          alert("Hai vinto: " + indicatedSegment.text);
-          const wallet = localStorage.getItem("walletAddress");
-          if (!wallet || wallet.trim().length !== 42) {
-            alert("Wallet non valido o non connesso.");
-            resetWheel();
-            return;
-          }
-          try {
-            // Registra lo spin sul backend
-            const spinRes = await fetch("/api/spin", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ wallet_address: wallet.trim() })
-            });
-            if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
-            const spinData = await spinRes.json();
-            console.log("Risultato spin dal backend:", spinData);
-            const prize = spinData.prize;
-            if (prize !== "NO PRIZE" && prize.includes("GKY")) {
-              const distRes = await fetch("/api/distribute", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ wallet_address: wallet.trim(), prize: prize })
-              });
-              if (!distRes.ok) throw new Error("Distribuzione fallita: " + distRes.status);
-              const distData = await distRes.json();
-              alert(distData.message);
-            }
-          } catch (error) {
-            console.error("Errore nello spin/distribuzione:", error);
-            alert("Errore nello spin/distribuzione. Contatta l'assistenza.");
-          }
-          resetWheel();
-        }
-      }
-    });
-    
-    function resetWheel() {
-      theWheel.stopAnimation(false);
-      theWheel.rotationAngle = 0;
-      theWheel.draw();
-      document.getElementById("btnSpin").disabled = false;
-    }
-    
-    document.getElementById("btnSpin").addEventListener("click", async () => {
-      document.getElementById("btnSpin").disabled = true;
-      let wallet = localStorage.getItem("walletAddress");
-      if (!wallet) {
-        alert("Wallet non collegato.");
-        document.getElementById("btnSpin").disabled = false;
-        return;
-      }
-      try {
-        // Chiama /api/spin per registrare lo spin (l'endpoint restituisce il premio da assegnare)
-        const spinRes = await fetch("/api/spin", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: wallet.trim() })
-        });
-        if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
-        const spinData = await spinRes.json();
-        console.log("Risultato spin dal backend:", spinData);
-        // Trova l'indice del segmento corrispondente al premio
-        const chosenIndex = segments.findIndex(seg => seg.text.trim() === spinData.prize.trim());
-        if (chosenIndex === -1) {
-          alert("Premio non riconosciuto: " + spinData.prize);
-          resetWheel();
-          return;
-        }
-        const anglePerSegment = 360 / segments.length;
-        const stopAngleSegmentCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
-        const extraSpins = 360 * 5;
-        const finalAngle = (360 - stopAngleSegmentCenter) + extraSpins;
-        theWheel.animation.stopAngle = finalAngle;
-        theWheel.startAnimation();
-      } catch (error) {
-        console.error("Errore nello spin:", error);
-        alert("Errore nello spin. Contatta l'assistenza.");
-        document.getElementById("btnSpin").disabled = false;
-      }
-    });
-  </script>
-</body>
-</html>
+    // Navigazione
+    document.getElementById("btnConnect").addEventListener("click", function() {
+      window.location.href =
