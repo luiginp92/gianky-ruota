@@ -2,55 +2,40 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>Connetti Wallet - GiankyCoin</title>
+  <title>Connetti Wallet - GiankyBot</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    body { padding: 20px; }
-    .container { max-width: 600px; margin: auto; text-align: center; }
+    body { padding: 20px; text-align: center; }
+    .container { max-width: 600px; margin: auto; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Connetti il tuo Wallet</h1>
     <p>Inserisci il tuo indirizzo Polygon (0x...):</p>
-    <input type="text" id="walletAddressInput" class="form-control" placeholder="0x...">
-    <button id="connectWallet" class="btn btn-primary mt-3">Connetti Wallet</button>
+    <input type="text" id="walletAddressInput" class="form-control" placeholder="0x..." />
+    <br>
+    <button id="connectWallet" class="btn btn-primary">Connetti Wallet</button>
+    <br><br>
+    <button id="disconnectWallet" class="btn btn-danger">Disconnetti Wallet</button>
   </div>
-
+  
   <script>
-    document.getElementById("connectWallet").addEventListener("click", async function() {
-      const input = document.getElementById("walletAddressInput").value.trim();
-      const re = /^0x[a-fA-F0-9]{40}$/;
-      if (!re.test(input)) {
-        alert("Indirizzo non valido");
-        return;
-      }
-      try {
-        // Richiedi il nonce
-        let res = await fetch("/api/auth/request_nonce", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ wallet_address: input })
-        });
-        if (!res.ok) throw new Error("Errore nella richiesta del nonce");
-        const nonceData = await res.json();
-        // Usa "dummy" come firma per simulare la verifica
-        res = await fetch("/api/auth/verify", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ wallet_address: input, signature: "dummy" })
-        });
-        if (!res.ok) throw new Error("Errore nell'autenticazione");
-        const authData = await res.json();
-        // Salva il token e l'indirizzo wallet in localStorage
-        localStorage.setItem("token", authData.access_token);
-        localStorage.setItem("walletAddress", input);
-        alert("Wallet connesso correttamente!");
+    document.addEventListener("DOMContentLoaded", function(){
+      document.getElementById("connectWallet").addEventListener("click", function() {
+        const walletAddress = document.getElementById("walletAddressInput").value.trim();
+        if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+          alert("Inserisci un indirizzo valido.");
+          return;
+        }
+        localStorage.setItem("walletAddress", walletAddress);
         window.location.href = "/static/index.html";
-      } catch (error) {
-        console.error("Errore nell'autenticazione:", error);
-        alert("Errore nell'autenticazione. Controlla la console.");
-      }
+      });
+      
+      document.getElementById("disconnectWallet").addEventListener("click", function() {
+        localStorage.removeItem("walletAddress");
+        window.location.href = "/static/connectwallet.html";
+      });
     });
   </script>
 </body>

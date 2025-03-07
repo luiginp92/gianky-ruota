@@ -31,76 +31,82 @@
         <br>
         <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
         <br>
-        Dopo il trasferimento, copia l'hash della transazione (TxHash) e incollalo qui per confermare l'acquisto.
+        Dopo il trasferimento, copia l'hash della transazione (txHash) e incollalo qui per confermare l'acquisto.
       </p>
       <div class="mb-3">
-        <label for="txHash" class="form-label">TxHash della transazione</label>
-        <input type="text" id="txHash" class="form-control" placeholder="Inserisci TxHash">
+        <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
+        <input type="text" id="txHash" class="form-control" placeholder="TxHash della transazione">
       </div>
       <button id="confirmPurchase" class="btn btn-success">Conferma Acquisto</button>
     </div>
   </div>
-
+  
   <script>
-    function getToken() {
-      return localStorage.getItem("token");
+    function safeGetItem(key) {
+      try {
+        return localStorage.getItem(key);
+      } catch(e) {
+        console.error("Errore in localStorage.getItem:", e);
+        return null;
+      }
     }
-
-    document.getElementById("requestPurchase").addEventListener("click", async () => {
-      const token = getToken();
-      if (!token) {
-        alert("Token mancante. Effettua l'autenticazione (Connetti Wallet).");
-        return;
+    
+    document.addEventListener("DOMContentLoaded", function(){
+      function getWalletAddress() {
+        return safeGetItem("walletAddress");
       }
-      const numSpins = parseInt(document.getElementById("numSpins").value);
-      try {
-        const res = await fetch("/api/buyspins", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token
-          },
-          body: JSON.stringify({ num_spins: numSpins })
-        });
-        if (!res.ok) throw new Error("Errore: " + res.status);
-        const data = await res.json();
-        document.getElementById("instructionMessage").innerText = data.message;
-        document.getElementById("instructions").style.display = "block";
-      } catch (error) {
-        console.error("Errore nella richiesta d'acquisto:", error);
-        alert("Errore nella richiesta d'acquisto: " + error.message);
-      }
-    });
-
-    document.getElementById("confirmPurchase").addEventListener("click", async () => {
-      const token = getToken();
-      if (!token) {
-        alert("Token mancante. Effettua l'autenticazione (Connetti Wallet).");
-        return;
-      }
-      const numSpins = parseInt(document.getElementById("numSpins").value);
-      const txHash = document.getElementById("txHash").value.trim();
-      if (!txHash) {
-        alert("Inserisci il TxHash.");
-        return;
-      }
-      try {
-        const res = await fetch("/api/confirmbuy", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token
-          },
-          body: JSON.stringify({ tx_hash: txHash, num_spins: numSpins })
-        });
-        if (!res.ok) throw new Error("Errore: " + res.status);
-        const data = await res.json();
-        alert(data.message);
-        window.location.href = "/static/index.html";
-      } catch (error) {
-        console.error("Errore nella conferma d'acquisto:", error);
-        alert("Errore nella conferma d'acquisto: " + error.message);
-      }
+    
+      document.getElementById("requestPurchase").addEventListener("click", async () => {
+        const walletAddress = getWalletAddress();
+        if (!walletAddress) {
+          alert("Wallet non collegato o non disponibile.");
+          return;
+        }
+        const numSpins = document.getElementById("numSpins").value;
+        try {
+          const res = await fetch("/api/buyspins", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
+          });
+          if (!res.ok) throw new Error("Errore: " + res.status);
+          const data = await res.json();
+          document.getElementById("instructionMessage").innerText = data.message;
+          document.getElementById("instructions").style.display = "block";
+        } catch (error) {
+          console.error("Errore nella richiesta di acquisto:", error);
+          alert("Errore nella richiesta di acquisto.");
+        }
+      });
+    
+      document.getElementById("confirmPurchase").addEventListener("click", async () => {
+        const walletAddress = getWalletAddress();
+        if (!walletAddress) {
+          alert("Wallet non collegato o non disponibile.");
+          return;
+        }
+        const numSpins = document.getElementById("numSpins").value;
+        let txHash = document.getElementById("txHash").value.trim();
+        if (!txHash) {
+          alert("Inserisci il txHash.");
+          return;
+        }
+        try {
+          const res = await fetch("/api/confirmbuy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ walletAddress, txHash, numSpins: parseInt(numSpins) })
+          });
+          if (!res.ok) throw new Error("Errore: " + res.status);
+          const data = await res.json();
+          localStorage.setItem("purchasedExtraSpins", data.extra_spins);
+          alert(data.message);
+          window.location.href = "/static/index.html";
+        } catch (error) {
+          console.error("Errore nella conferma dell'acquisto:", error);
+          alert("Errore nella conferma dell'acquisto.");
+        }
+      });
     });
   </script>
 </body>
