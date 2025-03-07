@@ -3,8 +3,8 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questo modulo gestisce:
- • Logica del gioco: spin della ruota, distribuzione automatica dei premi e acquisto extra tiri.
- • Endpoint per referral, share task, report admin.
+  • Logica del gioco: spin della ruota, distribuzione automatica dei premi e acquisto extra tiri.
+  • Altri endpoint: referral, share task, report admin.
  
 I parametri per le transazioni (chiave privata, provider URL, indirizzo token e wallet di distribuzione)
 sono letti dalle variabili d’ambiente (es. in un file .env).
@@ -17,7 +17,7 @@ import pytz
 import logging
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -26,9 +26,12 @@ import uvicorn
 from web3 import Web3
 from eth_account.messages import encode_defunct
 
+from jose import JWTError, jwt
+from fastapi.security import OAuth2PasswordBearer
+
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 
-# Carica le variabili d’ambiente
+# Carica le variabili d’ambiente dal file .env
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -67,48 +70,42 @@ w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# ----------------- MODELLI DI INPUT -----------------
-class SpinRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+# ----------------- CONFIGURAZIONE JWT & AUTENTICAZIONE (per eventuali endpoint legacy) -----------------
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecret_jwt_key_change_me")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
-class BuySpinsRequest(BaseModel):
-    walletAddress: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
-    numSpins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
+def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None):
+    to_encode = data.copy()
+    expire = datetime.datetime.utcnow() + (expires_delta or datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-class ConfirmBuyRequest(BaseModel):
-    walletAddress: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
-    txHash: str
-    numSpins: int = Field(..., description="Numero di extra tiri (1, 3 o 10)", gt=0)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/verify")
 
-class DistributePrizeRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
-    prize: str
-
-# ----------------- FUNZIONI UTILI -----------------
-def get_user(wallet_address: str) -> User:
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Autenticazione non valida",
+        headers={"WWW-Authenticate": "Bearer"}
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        wallet_address = payload.get("wallet_address")
+        if not wallet_address:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
     session = Session()
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
-    except Exception as e:
-        logging.error(f"Errore nella ricerca dell'utente: {e}")
-        raise HTTPException(status_code=500, detail="Errore interno")
     finally:
         session.close()
     if not user:
-        session = Session()
-        try:
-            user = User(wallet_address=wallet_address, extra_spins=0)
-            session.add(user)
-            session.commit()
-        except Exception as e:
-            session.rollback()
-            logging.error(f"Errore nella creazione dell'utente: {e}")
-            raise HTTPException(status_code=500, detail="Errore nella creazione dell'utente")
-        finally:
-            session.close()
-    logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}")
+        raise credentials_exception
     return user
 
+# ----------------- FUNZIONI UTILI -----------------
 def get_dynamic_gas_price():
     try:
         base = w3.eth.gasPrice
@@ -162,8 +159,46 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         session_db.close()
     return True
 
+def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool:
+    try:
+        tx = w3_no_mw.eth.get_transaction(tx_hash)
+    except Exception as e:
+        logging.error(f"Transazione {tx_hash} non trovata: {e}")
+        return False
+    if tx.get("to", "").lower() != TOKEN_ADDRESS.lower():
+        logging.error("La TX non è indirizzata al contratto token.")
+        return False
+    token_contract = w3_no_mw.eth.contract(
+        address=TOKEN_ADDRESS,
+        abi=[{
+            "constant": False,
+            "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
+            "name": "transfer",
+            "outputs": [{"name": "", "type": "bool"}],
+            "payable": False,
+            "stateMutability": "nonpayable",
+            "type": "function"
+        }]
+    )
+    try:
+        func_obj, params = token_contract.decode_function_input(tx.input)
+    except Exception as decode_error:
+        logging.error(f"Decodifica fallita: {decode_error}")
+        return False
+    if func_obj.fn_name != "transfer":
+        logging.error("La TX non richiama transfer.")
+        return False
+    if params.get("_to", "").lower() != WALLET_DISTRIBUZIONE.lower():
+        logging.error("La TX non invia al wallet di distribuzione.")
+        return False
+    token_amount = params.get("_value", 0)
+    if token_amount < cost * 10**18:
+        logging.error(f"Importo insufficiente: {w3_no_mw.fromWei(token_amount, 'ether')} vs {cost}")
+        return False
+    return True
+
+# # Distribuzione basata su probabilità che corrisponde ai segmenti della ruota
 def get_prize() -> str:
-    // Distribuzione basata su probabilità che corrisponde ai segmenti della ruota
     r = random.random() * 100
     if r < 10:
         return "10 GKY"
@@ -183,10 +218,6 @@ def get_prize() -> str:
         return "NFT BASISC"
     elif r < 65:
         return "NFT STARTER"
-    elif r < 80:
-        return "NO PRIZE"
-    elif r < 90:
-        return "NO PRIZE"
     else:
         return "NO PRIZE"
 
@@ -230,8 +261,8 @@ async def api_spin(req: SpinRequest):
             )
             session.add(record)
             session.commit()
-        logging.info(f"Spin per {current_user.wallet_address}: premio {premio}, giri residui {available}")
-        return {"message": result_text, "available_spins": available, "prize": premio}
+        logging.info(f"Spin per {current_user.wallet_address}: premio {premio}")
+        return {"message": result_text, "prize": premio}
     except HTTPException as he:
         raise he
     except Exception as e:
@@ -256,8 +287,7 @@ async def api_distribute(req: DistributePrizeRequest):
         return {"message": f"Premio '{req.prize}' assegnato al wallet {current_user.wallet_address}."}
 
 @app.post("/api/buyspins")
-async def api_buyspins(req: BuySpinsRequest):
-    current_user = get_user(req.walletAddress)
+async def api_buyspins(req: BuySpinsRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
         if req.numSpins not in (1, 3, 10):
@@ -272,8 +302,7 @@ async def api_buyspins(req: BuySpinsRequest):
         session.close()
 
 @app.post("/api/confirmbuy")
-async def api_confirmbuy(req: ConfirmBuyRequest):
-    current_user = get_user(req.walletAddress)
+async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(get_current_user)):
     session = Session()
     try:
         if req.txHash in USED_TX:
@@ -281,10 +310,12 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         if req.numSpins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi confermare solo 1, 3 o 10 giri extra.")
         cost = 50 if req.numSpins == 1 else 125 if req.numSpins == 3 else 300
+        if not current_user.wallet_address:
+            raise HTTPException(status_code=400, detail="Collega il wallet prima di confermare.")
         if not verifica_transazione_gky(current_user.wallet_address, req.txHash, cost):
             raise HTTPException(status_code=400, detail="Tx non valida o importo insufficiente.")
         current_user.extra_spins = (current_user.extra_spins or 0) + req.numSpins
-        current_user.last_play_date = None  # reset per consentire nuovi spin
+        current_user.last_play_date = None  # Reset per consentire nuovi spin
         session.commit()
         session.refresh(current_user)
         logging.info(f"Extra spins aggiornati: {current_user.extra_spins}")
