@@ -8,18 +8,14 @@
     canvas { border: 1px solid #000; margin: 20px auto; display: block; }
     button { padding: 10px 20px; font-size: 1rem; cursor: pointer; }
   </style>
-  <!-- Carica TweenMax 2.1.3 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
 </head>
 <body>
-  <h1>Gira la Ruota</h1>
+  <h1>Test Ruota</h1>
   <canvas id="canvas" width="500" height="500"></canvas>
   <br>
   <button id="spinButton">Gira la ruota</button>
-  
-  <!-- Carica Winwheel.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
-  
   <script>
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
@@ -35,12 +31,10 @@
       { text: 'NO PRIZE', color: '#BDC3C7' },
       { text: 'NO PRIZE', color: '#BDC3C7' }
     ];
-    
     const segments = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
     }));
-    
     function createWheel(finalAngle) {
       return new Winwheel({
         canvasId: 'canvas',
@@ -54,12 +48,10 @@
           stopAngle: finalAngle,
           callbackFinished: function(indicatedSegment) {
             alert("Hai vinto: " + indicatedSegment.text);
-            // Non esegue distribuzione in questo test
           }
         }
       });
     }
-    
     document.getElementById("spinButton").addEventListener("click", () => {
       const chosenIndex = Math.floor(Math.random() * segments.length);
       const anglePerSegment = 360 / segments.length;
