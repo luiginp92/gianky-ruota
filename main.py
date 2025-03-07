@@ -3,7 +3,7 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questo modulo gestisce:
-  • Logica del gioco: spin della ruota, distribuzione automatica dei premi e acquisto extra tiri.
+  • La logica del gioco: spin della ruota, distribuzione automatica dei premi e acquisto extra giri.
   • Altri endpoint: referral, share task, report admin.
   
 I parametri per le transazioni (chiave privata, provider URL, indirizzo token e wallet di distribuzione)
@@ -30,7 +30,6 @@ from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
 
 from database import Session, User, PremioVinto, GlobalCounter, init_db
-
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -68,7 +67,32 @@ w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# ----------------- JWT & AUTENTICAZIONE -----------------
+# ----------------- MODELLI DI INPUT (Pydantic) -----------------
+class SpinRequest(BaseModel):
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+
+class AuthRequest(BaseModel):
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    telegram_id: Optional[str] = None
+
+class AuthVerifyRequest(BaseModel):
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    signature: str
+
+class BuySpinsRequest(BaseModel):
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
+
+class ConfirmBuyRequest(BaseModel):
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    txHash: str
+    numSpins: int = Field(..., description="Numero di extra tiri (1, 3 o 10)", gt=0)
+
+class DistributePrizeRequest(BaseModel):
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    prize: str
+
+# ----------------- JWT & AUTENTICAZIONE (non usato per gli endpoint di gioco) -----------------
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret_jwt_key_change_me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -103,30 +127,31 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
     return user
 
-# ----------------- MODELLI DI INPUT (Pydantic) -----------------
-class SpinRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
-
-class AuthRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
-    telegram_id: Optional[str] = None
-
-class AuthVerifyRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
-    signature: str
-
-class BuySpinsRequest(BaseModel):
-    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
-
-class ConfirmBuyRequest(BaseModel):
-    txHash: str
-    numSpins: int = Field(..., description="Numero di extra tiri (1, 3 o 10)", gt=0)
-
-class DistributePrizeRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
-    prize: str
-
 # ----------------- FUNZIONI UTILI -----------------
+def get_user(wallet_address: str):
+    session = Session()
+    try:
+        user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
+    except Exception as e:
+        logging.error(f"Errore nella ricerca dell'utente: {e}")
+        raise HTTPException(status_code=500, detail="Errore interno")
+    finally:
+        session.close()
+    if not user:
+        session = Session()
+        try:
+            user = User(wallet_address=wallet_address, extra_spins=0)
+            session.add(user)
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            logging.error(f"Errore nella creazione dell'utente: {e}")
+            raise HTTPException(status_code=500, detail="Errore nella creazione dell'utente")
+        finally:
+            session.close()
+    logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}")
+    return user
+
 def get_dynamic_gas_price():
     try:
         base = w3.eth.gasPrice
@@ -220,7 +245,7 @@ def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool
 
 def get_prize() -> str:
     r = random.random() * 100
-    # Distribuzione basata su probabilità che corrisponde ai segmenti della ruota
+    # Distribuzione basata su probabilità – i segmenti della ruota sono fissi
     if r < 10:
         return "10 GKY"
     elif r < 15:
@@ -244,20 +269,22 @@ def get_prize() -> str:
 
 # ----------------- ENDPOINTS -----------------
 
+# Endpoint per il giro della ruota (spin)
 @app.post("/api/spin")
-async def api_spin(req: SpinRequest, current_user: User = Depends(get_current_user)):
+async def api_spin(req: SpinRequest):
+    user = get_user(req.wallet_address)
     session = Session()
     try:
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        if not current_user.last_play_date or current_user.last_play_date.astimezone(italy).date() != now.date():
-            available = 1 + (current_user.extra_spins or 0)
-            current_user.last_play_date = now
+        if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
+            available = 1 + (user.extra_spins or 0)
+            user.last_play_date = now
             session.commit()
         else:
-            available = current_user.extra_spins or 0
+            available = user.extra_spins or 0
             if available > 0:
-                current_user.extra_spins -= 1
+                user.extra_spins -= 1
                 session.commit()
                 available -= 1
             else:
@@ -267,21 +294,21 @@ async def api_spin(req: SpinRequest, current_user: User = Depends(get_current_us
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
             amount = int(premio.split(" ")[0])
-            if invia_token(current_user.wallet_address, amount):
+            if invia_token(user.wallet_address, amount):
                 result_text = f"Hai vinto {premio}!"
             else:
                 result_text = "Errore nel trasferimento dei token."
         else:
             result_text = f"Hai vinto: {premio}!"
             record = PremioVinto(
-                telegram_id=current_user.telegram_id or "N/A",
-                wallet=current_user.wallet_address,
+                telegram_id=user.telegram_id or "N/A",
+                wallet=user.wallet_address,
                 premio=premio,
-                user_id=current_user.id
+                user_id=user.id
             )
             session.add(record)
             session.commit()
-        logging.info(f"Spin per {current_user.wallet_address}: premio {premio}")
+        logging.info(f"Spin per {user.wallet_address}: premio {premio}")
         return {"message": result_text, "prize": premio}
     except HTTPException as he:
         raise he
@@ -291,25 +318,26 @@ async def api_spin(req: SpinRequest, current_user: User = Depends(get_current_us
     finally:
         session.close()
 
+# Endpoint per distribuire il premio (trasferisce i token)
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
-    current_user = get_current_user(token="dummy_token_for_distribution")  # Per chiamate da front-end, si usa il wallet nel body
-    # In questo endpoint, usiamo il wallet_address passato per individuare l'utente
-    current_user = get_user(req.wallet_address)
+    user = get_user(req.wallet_address)
     if "GKY" in req.prize:
         try:
             amount = int(req.prize.split(" ")[0])
         except Exception:
             raise HTTPException(status_code=400, detail="Formato premio non valido.")
-        if invia_token(current_user.wallet_address, amount):
-            return {"message": f"Premio '{req.prize}' trasferito correttamente al wallet {current_user.wallet_address}."}
+        if invia_token(user.wallet_address, amount):
+            return {"message": f"Premio '{req.prize}' trasferito correttamente al wallet {user.wallet_address}."}
         else:
             raise HTTPException(status_code=500, detail="Errore nel trasferimento del premio.")
     else:
-        return {"message": f"Premio '{req.prize}' assegnato al wallet {current_user.wallet_address}."}
+        return {"message": f"Premio '{req.prize}' assegnato al wallet {user.wallet_address}."}
 
+# Endpoint per richiedere le istruzioni per acquistare extra giri
 @app.post("/api/buyspins")
-async def api_buyspins(req: BuySpinsRequest, current_user: User = Depends(get_current_user)):
+async def api_buyspins(req: BuySpinsRequest):
+    user = get_user(req.wallet_address)
     session = Session()
     try:
         if req.num_spins not in (1, 3, 10):
@@ -323,8 +351,10 @@ async def api_buyspins(req: BuySpinsRequest, current_user: User = Depends(get_cu
     finally:
         session.close()
 
+# Endpoint per confermare l'acquisto degli extra giri
 @app.post("/api/confirmbuy")
-async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(get_current_user)):
+async def api_confirmbuy(req: ConfirmBuyRequest):
+    user = get_user(req.wallet_address)
     session = Session()
     try:
         if req.txHash in USED_TX:
@@ -332,15 +362,15 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(ge
         if req.numSpins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi confermare solo 1, 3 o 10 giri extra.")
         cost = 50 if req.numSpins == 1 else 125 if req.numSpins == 3 else 300
-        if not current_user.wallet_address:
+        if not user.wallet_address:
             raise HTTPException(status_code=400, detail="Collega il wallet prima di confermare.")
-        if not verifica_transazione_gky(current_user.wallet_address, req.txHash, cost):
+        if not verifica_transazione_gky(user.wallet_address, req.txHash, cost):
             raise HTTPException(status_code=400, detail="Tx non valida o importo insufficiente.")
-        current_user.extra_spins = (current_user.extra_spins or 0) + req.numSpins
-        current_user.last_play_date = None  # Reset per consentire nuovi spin
+        user.extra_spins = (user.extra_spins or 0) + req.numSpins
+        user.last_play_date = None  # Reset per consentire nuovi spin
         session.commit()
-        session.refresh(current_user)
-        logging.info(f"Extra spins aggiornati: {current_user.extra_spins}")
+        session.refresh(user)
+        logging.info(f"Extra spins aggiornati: {user.extra_spins}")
         USED_TX.add(req.txHash)
         counter = session.query(GlobalCounter).first()
         if counter:
@@ -349,8 +379,8 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(ge
             counter = GlobalCounter(total_in=cost, total_out=0.0)
             session.add(counter)
         session.commit()
-        available = 1 + (current_user.extra_spins or 0)
-        return {"message": f"Acquisto confermato! Extra giri: {current_user.extra_spins}", "available_spins": available}
+        available = 1 + (user.extra_spins or 0)
+        return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
         session.rollback()
         raise he
@@ -361,11 +391,22 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(ge
     finally:
         session.close()
 
+# Endpoint referral
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
 
+# Endpoint per ottenere l'immagine della ruota (se presente)
+@app.get("/wheel")
+async def get_wheel():
+    image_path = os.path.join("static", "ruota.png")
+    if os.path.exists(image_path):
+        return FileResponse(image_path, media_type="image/png")
+    else:
+        raise HTTPException(status_code=404, detail="Immagine della ruota non trovata.")
+
+# Root che reindirizza all'index
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return """

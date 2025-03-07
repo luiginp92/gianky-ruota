@@ -67,7 +67,7 @@
           const res = await fetch("/api/buyspins", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ walletAddress, numSpins: parseInt(numSpins) })
+            body: JSON.stringify({ wallet_address: walletAddress, num_spins: parseInt(numSpins) })
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
@@ -95,7 +95,7 @@
           const res = await fetch("/api/confirmbuy", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ walletAddress, txHash, numSpins: parseInt(numSpins) })
+            body: JSON.stringify({ wallet_address: walletAddress, txHash, numSpins: parseInt(numSpins) })
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
