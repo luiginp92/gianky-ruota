@@ -3,10 +3,10 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Questo modulo gestisce:
- • Lo spin della ruota, che determina il premio e (se il premio contiene "GKY") attiva il trasferimento dei token
- • La distribuzione dei token (dal wallet di distribuzione a quello dell’utente vincitore)
+ • Lo spin della ruota (scelta casuale del premio)
+ • Il trasferimento automatico dei token dal wallet di distribuzione al vincitore (se premio in GKY)
  • L’acquisto di extra giri
- • Autenticazione e altri endpoint (referral, ecc.)
+ • Autenticazione (dummy per il prototipo) e referral
 """
 
 import os, random, datetime, pytz, logging
@@ -20,8 +20,8 @@ import uvicorn
 
 from web3 import Web3
 from eth_account.messages import encode_defunct
-
 from jose import JWTError, jwt
+
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 from dotenv import load_dotenv
 load_dotenv()
@@ -32,7 +32,7 @@ init_db()
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ----------------- CONFIGURAZIONE BLOCKCHAIN -----------------
+# ------------------ CONFIGURAZIONE BLOCKCHAIN ------------------
 PRIVATE_KEY = os.getenv("DISTRIBUTION_PRIVATE_KEY")
 if not PRIVATE_KEY:
     raise RuntimeError("Errore: DISTRIBUTION_PRIVATE_KEY non impostata.")
@@ -44,12 +44,11 @@ if not TOKEN_ADDRESS:
 
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
 
-# Creiamo l'istanza Web3; per evitare errori legati al middleware custom (che in questo caso non è necessario) non lo inietto
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# ----------------- JWT & AUTENTICAZIONE -----------------
+# ------------------ JWT ------------------
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret_jwt_key_change_me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -60,7 +59,7 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# ----------------- MODELLI DI INPUT (Pydantic) -----------------
+# ------------------ MODELLI DI INPUT ------------------
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
 
@@ -85,17 +84,16 @@ class AuthVerifyRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     signature: str
 
-# ----------------- FUNZIONI UTILI -----------------
+# ------------------ FUNZIONI UTILI ------------------
 def get_dynamic_gas_price():
     try:
-        # Usa il metodo get_gas_price() per Web3.py v6; se usi v5 potresti usare w3.eth.gasPrice
-        base = w3.eth.get_gas_price()
+        base = w3.eth.gasPrice
         safe = int(base * 1.2)
         logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return w3.to_wei(50, 'gwei')  # usa w3.to_wei in minuscolo
+        return w3.toWei(50, 'gwei')
 
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
@@ -112,17 +110,16 @@ def invia_token(destinatario: str, quantita: int) -> bool:
                 "type": "function"
             }]
         )
-        nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
-        # Utilizza w3.to_wei (con underscore) per conversione
-        token_amount = w3.to_wei(quantita, 'ether')
-        tx = token_contract.functions.transfer(destinatario, token_amount).build_transaction({
+        nonce = w3.eth.getTransactionCount(WALLET_DISTRIBUZIONE)
+        token_amount = w3.toWei(quantita, 'ether')
+        tx = token_contract.functions.transfer(destinatario, token_amount).buildTransaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
             'gas': 100000,
             'gasPrice': gas_price,
         })
-        signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        signed_tx = w3.eth.account.signTransaction(tx, PRIVATE_KEY)
+        tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
         logging.info(f"Token inviati: {quantita} GKY, txHash: {tx_hash.hex()}")
     except Exception as e:
         logging.error(f"Errore nell'invio dei token: {e}")
@@ -133,7 +130,6 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         if counter:
             counter.total_out += quantita
         else:
-            from database import GlobalCounter
             counter = GlobalCounter(total_in=0.0, total_out=quantita)
             session_db.add(counter)
         session_db.commit()
@@ -145,9 +141,11 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
-    # L'elenco dei premi usato dal backend – da modificare se necessario
+    # Elenco coerente di premi: se "NO PRIZE" viene restituito, non si trasferiscono token
     prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
-    return random.choice(prizes)
+    prize = random.choice(prizes)
+    logging.info(f"get_prize() scelto: {prize}")
+    return prize
 
 def get_user(wallet_address: str):
     session = Session()
@@ -163,8 +161,7 @@ def get_user(wallet_address: str):
     finally:
         session.close()
 
-# ----------------- ENDPOINTS -----------------
-
+# ------------------ ENDPOINTS ------------------
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
     user = get_user(req.wallet_address)
@@ -172,6 +169,7 @@ async def api_spin(req: SpinRequest):
     try:
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
+        # Se è il primo spin del giorno, assegnamo 1 spin base + extra
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + user.extra_spins
             user.last_play_date = now
@@ -181,7 +179,8 @@ async def api_spin(req: SpinRequest):
             if available <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
         premio = get_prize()
-        if premio == "NO PRIZE":
+        # Se il premio (dopo strip e uppercase) è "NO PRIZE", non trasferiamo token
+        if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
             amount = int(premio.split(" ")[0])
@@ -210,7 +209,7 @@ async def api_spin(req: SpinRequest):
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
     user = get_user(req.wallet_address)
-    if req.prize == "NO PRIZE":
+    if req.prize.strip().upper() == "NO PRIZE":
         return {"message": "Nessun premio da distribuire."}
     if "GKY" in req.prize:
         try:
@@ -247,7 +246,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             raise HTTPException(status_code=400, detail="Tx già usata per un acquisto.")
         if req.num_spins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi confermare solo 1, 3 o 10 giri extra.")
-        cost = 50 if req.num_spins == 1 else (125 if req.num_spins == 3 else 300)
+        # Per questo prototipo, la verifica della tx è minima
         try:
             tx = w3_no_mw.eth.get_transaction(req.tx_hash)
         except Exception as e:
