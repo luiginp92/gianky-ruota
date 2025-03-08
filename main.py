@@ -2,12 +2,11 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Questo modulo gestisce:
- • /api/spin: Esegue lo spin, aggiorna il contatore dei giri e determina il premio.
-   Se il premio contiene "GKY", invia automaticamente i token dal wallet di distribuzione al wallet dell’utente.
- • /api/distribute: Trasferisce il premio (in GKY) dal wallet di distribuzione al wallet dell’utente.
- • /api/buyspins e /api/confirmbuy: Gestiscono l’acquisto di extra giri.
- • Altri endpoint: auth, referral, ecc.
+Gestisce:
+ • Spin (che determina il premio e, se il premio contiene "GKY", avvia il trasferimento)
+ • Distribuzione dei token vinti dal wallet di distribuzione al wallet dell’utente
+ • Acquisto di extra spin
+ • Autenticazione (JWT) e altri endpoint (referral, share task, ecc.)
 """
 
 import os, random, datetime, pytz, logging
@@ -45,8 +44,8 @@ if not TOKEN_ADDRESS:
 
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
 
-# Creiamo il provider senza middleware (su Polygon non è necessario)
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
+# (Non inietto il middleware custom per evitare l'errore wrap_make_request)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
@@ -89,14 +88,13 @@ class AuthVerifyRequest(BaseModel):
 # ----------------- FUNZIONI UTILI -----------------
 def get_dynamic_gas_price():
     try:
-        # Utilizza la proprietà gas_price di w3.eth (viene usata la funzione statica)
         base = w3.eth.gas_price
         safe = int(base * 1.2)
-        logging.info(f"Gas Price: {Web3.fromWei(base, 'gwei')} -> {Web3.fromWei(safe, 'gwei')}")
+        logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return Web3.toWei(50, 'gwei')
+        return w3.toWei(50, 'gwei')
 
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
@@ -114,7 +112,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
             }]
         )
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
-        # Calcola l’importo in wei (supponendo 18 decimali)
+        # Calcola l’importo (assumendo 18 decimali)
         token_amount = quantita * (10 ** 18)
         tx = token_contract.functions.transfer(
             destinatario,
@@ -149,9 +147,9 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
-    # L'elenco dei premi (corrisponde anche al front-end)
+    # L'elenco dei premi (coerente con il front-end)
     prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
-    # Per test, scegliamo casualmente (puoi personalizzare la logica)
+    # Per il prototipo, scegliamo casualmente
     return random.choice(prizes)
 
 def get_user(wallet_address: str):

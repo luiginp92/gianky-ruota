@@ -80,7 +80,7 @@
       window.location.href = "/static/task.html";
     });
     
-    // Aggiorna contatore giri
+    // Aggiorna il contatore dei giri
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -89,7 +89,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Premi – devono corrispondere a quelli scelti nel backend
+    // Premi – lo stesso array usato dal backend
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -108,7 +108,7 @@
       text: item.text
     }));
     
-    // Crea la ruota immediatamente al caricamento
+    // Crea la ruota all'avvio (così la ruota è visibile subito)
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: segments.length,
@@ -181,7 +181,7 @@
         alert("Non hai giri disponibili. Acquista extra tiri.");
         return;
       }
-      // Decrementa il contatore
+      // Decrementa il contatore dei giri
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       if (total > 0) {
