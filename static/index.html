@@ -15,7 +15,7 @@
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
-  <!-- Carica TweenMax e Winwheel all'avvio -->
+  <!-- Carica TweenMax e Winwheel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
@@ -68,20 +68,12 @@
   
   <script>
     // Navigazione
-    document.getElementById("btnConnect").addEventListener("click", () => {
-      window.location.href = "/static/connectwallet.html";
-    });
-    document.getElementById("btnBuySpins").addEventListener("click", () => {
-      window.location.href = "/static/buyspins.html";
-    });
-    document.getElementById("btnReferral").addEventListener("click", () => {
-      window.location.href = "/static/referral.html";
-    });
-    document.getElementById("btnTask").addEventListener("click", () => {
-      window.location.href = "/static/task.html";
-    });
+    document.getElementById("btnConnect").addEventListener("click", () => window.location.href = "/static/connectwallet.html");
+    document.getElementById("btnBuySpins").addEventListener("click", () => window.location.href = "/static/buyspins.html");
+    document.getElementById("btnReferral").addEventListener("click", () => window.location.href = "/static/referral.html");
+    document.getElementById("btnTask").addEventListener("click", () => window.location.href = "/static/task.html");
     
-    // Aggiorna saldi e giri disponibili (chiamata all'endpoint /api/balance)
+    // Aggiorna saldi e contatore giri
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -92,13 +84,10 @@
           document.getElementById("maticBalance").innerText = data.matic;
           document.getElementById("tokenBalance").innerText = data.gky;
         }
-      } catch (error) {
-        console.error("Errore nel recupero dei saldi:", error);
-      }
+      } catch (error) { console.error("Errore nel recupero dei saldi:", error); }
     }
     window.addEventListener("load", updateBalances);
     
-    // Contatore dei giri: 1 base + extra (memorizzati in localStorage)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -107,7 +96,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Segmenti della ruota (devono corrispondere al backend)
+    // Segmenti della ruota (devono corrispondere ai possibili premi dal backend)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -125,7 +114,7 @@
       text: item.text
     }));
     
-    // Crea la ruota al caricamento (sempre visibile)
+    // Crea la ruota visibile al caricamento
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: segments.length,
@@ -138,12 +127,9 @@
       }
     });
     
-    // Trova l'indice del premio
     function findPrizeIndex(prizeText) {
       for (let i = 0; i < prizeData.length; i++) {
-        if (prizeData[i].text.trim() === prizeText.trim()) {
-          return i;
-        }
+        if (prizeData[i].text.trim() === prizeText.trim()) return i;
       }
       return -1;
     }
@@ -177,7 +163,7 @@
               if (!res.ok) throw new Error("Distribuzione fallita: " + res.status);
               const data = await res.json();
               alert(data.message);
-              updateBalances(); // Aggiorna i saldi dopo il trasferimento
+              updateBalances();
             } catch (error) {
               console.error("Errore nella distribuzione:", error);
               alert("Errore nella distribuzione. Contatta l'assistenza.");
@@ -200,7 +186,7 @@
         alert("Non hai giri disponibili. Acquista extra tiri.");
         return;
       }
-      // Decrementa i giri extra (aggiornando localStorage)
+      // Aggiorna il contatore decrementando un giro extra
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       if (total > 0) {
