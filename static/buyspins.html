@@ -27,15 +27,15 @@
       <h3>Istruzioni per l'acquisto</h3>
       <p id="instructionMessage"></p>
       <p>
-        Effettua un trasferimento del costo indicato al seguente portafoglio:
+        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio:
         <br>
-        <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
+        <code id="distributionAddress"></code>
         <br>
-        Dopo il trasferimento, inserisci l'hash della transazione qui per confermare l'acquisto.
+        Dopo aver effettuato il trasferimento, copia l'hash della transazione (txHash) e incollalo qui per confermare l'acquisto.
       </p>
       <div class="mb-3">
-        <label for="txHash" class="form-label">TxHash della transazione</label>
-        <input type="text" id="txHash" class="form-control" placeholder="TxHash">
+        <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
+        <input type="text" id="txHash" class="form-control" placeholder="TxHash della transazione">
       </div>
       <button id="confirmPurchase" class="btn btn-success">Conferma Acquisto</button>
     </div>
@@ -52,14 +52,19 @@
     }
     
     document.addEventListener("DOMContentLoaded", function(){
-      const walletAddress = safeGetItem("walletAddress");
-      if (!walletAddress) {
-        alert("Wallet non collegato.");
-        window.location.href = "/static/connectwallet.html";
-        return;
+      function getWalletAddress() {
+        return safeGetItem("walletAddress");
       }
-      
+    
+      // Imposta l'indirizzo di distribuzione nel messaggio (puoi anche hardcodarlo se preferisci)
+      document.getElementById("distributionAddress").innerText = "0xBc0c054066966a7A6C875981a18376e2296e5815";
+    
       document.getElementById("requestPurchase").addEventListener("click", async () => {
+        const walletAddress = getWalletAddress();
+        if (!walletAddress) {
+          alert("Wallet non collegato o non disponibile.");
+          return;
+        }
         const numSpins = document.getElementById("numSpins").value;
         try {
           const res = await fetch("/api/buyspins", {
@@ -78,8 +83,13 @@
       });
     
       document.getElementById("confirmPurchase").addEventListener("click", async () => {
+        const walletAddress = getWalletAddress();
+        if (!walletAddress) {
+          alert("Wallet non collegato o non disponibile.");
+          return;
+        }
         const numSpins = document.getElementById("numSpins").value;
-        const txHash = document.getElementById("txHash").value.trim();
+        let txHash = document.getElementById("txHash").value.trim();
         if (!txHash) {
           alert("Inserisci il txHash.");
           return;
@@ -92,7 +102,7 @@
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
-          localStorage.setItem("purchasedExtraSpins", data.extra_spins);
+          localStorage.setItem("purchasedExtraSpins", data.available_spins - 1);
           alert(data.message);
           window.location.href = "/static/index.html";
         } catch (error) {

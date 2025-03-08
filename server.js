@@ -6,20 +6,16 @@ const { ethers } = require('ethers');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware
 app.use(bodyParser.json());
-app.use(express.static('static')); // Serve i file statici dalla cartella "static"
+app.use(express.static('static'));
 
-// Variabili ambiente
 const DISTRIBUTION_PRIVATE_KEY = process.env.DISTRIBUTION_PRIVATE_KEY;
 const PROVIDER_URL = process.env.PROVIDER_URL || "https://polygon-rpc.com/";
 const TOKEN_ADDRESS = process.env.TOKEN_ADDRESS || "0x370806781689E670f85311700445449aC7C3Ff7a";
 
-// Imposta il provider e il wallet di distribuzione
 const provider = new ethers.providers.JsonRpcProvider(PROVIDER_URL);
 const distributionWallet = new ethers.Wallet(DISTRIBUTION_PRIVATE_KEY, provider);
 
-// ABI minimo per il token ERC20
 const tokenAbi = [
   "function transfer(address to, uint amount) public returns (bool)",
   "function decimals() public view returns (uint8)"
@@ -27,7 +23,6 @@ const tokenAbi = [
 
 const tokenContract = new ethers.Contract(TOKEN_ADDRESS, tokenAbi, distributionWallet);
 
-// Mappa dei premi a quantità (con 18 decimali)
 const prizeAmounts = {
   "10 GKY": ethers.utils.parseUnits("10", 18),
   "20 GKY": ethers.utils.parseUnits("20", 18),
@@ -35,31 +30,23 @@ const prizeAmounts = {
   "100 GKY": ethers.utils.parseUnits("100", 18),
   "250 GKY": ethers.utils.parseUnits("250", 18),
   "500 GKY": ethers.utils.parseUnits("500", 18),
-  "1000 GKY": ethers.utils.parseUnits("1000", 18),
-  "NFT BASISC": ethers.BigNumber.from("0"),
-  "NFT STARTER": ethers.BigNumber.from("0")
+  "1000 GKY": ethers.utils.parseUnits("1000", 18)
 };
 
 app.post('/api/distribute', async (req, res) => {
-  const { wallet_address, prize } = req.body;
-  if (!wallet_address || !prize) {
+  const { walletAddress, prize } = req.body;
+  if (!walletAddress || !prize) {
     return res.status(400).json({ message: "Dati mancanti" });
   }
-  
   if (prize === "NO PRIZE") {
     return res.json({ message: "Nessun premio da distribuire" });
   }
-  
   const amount = prizeAmounts[prize];
   if (amount === undefined) {
     return res.status(400).json({ message: "Premio non valido" });
   }
-  if (amount.eq(0)) {
-    return res.json({ message: `Premio ${prize} assegnato. Verifica la tua collezione NFT.` });
-  }
-  
   try {
-    const tx = await tokenContract.transfer(wallet_address, amount);
+    const tx = await tokenContract.transfer(walletAddress, amount);
     await tx.wait();
     res.json({ message: `Premio ${prize} distribuito con successo! Transazione: ${tx.hash}` });
   } catch (error) {
@@ -68,9 +55,8 @@ app.post('/api/distribute', async (req, res) => {
   }
 });
 
-// Endpoint spin (simulato)
 app.post('/api/spin', async (req, res) => {
-  res.json({ message: "Spin completato! Buona fortuna!", prize: "50 GKY" });
+  res.json({ message: "Spin completato! Buona fortuna!" });
 });
 
 app.post('/api/buyspins', (req, res) => {
@@ -87,9 +73,8 @@ app.post('/api/buyspins', (req, res) => {
   else if (numSpins === 3) cost = "125";
   else if (numSpins === 10) cost = "300";
   
-  const distributionAddress = distributionWallet.address;
   return res.json({ 
-    message: `Per acquistare ${numSpins} tiri extra, trasferisci ${cost} GKY al portafoglio: ${distributionAddress}. Dopo il trasferimento, conferma la transazione tramite l'endpoint /api/confirmbuy.` 
+    message: `Per acquistare ${numSpins} tiri extra, trasferisci ${cost} GKY al portafoglio: ${distributionWallet.address}. Dopo il trasferimento, conferma tramite /api/confirmbuy.` 
   });
 });
 
@@ -107,12 +92,8 @@ app.post('/api/confirmbuy', async (req, res) => {
     if (!tx) {
       return res.status(400).json({ message: "Transazione non trovata" });
     }
-    if (!global.extraSpinsStore) global.extraSpinsStore = {};
-    if (!global.extraSpinsStore[walletAddress]) {
-      global.extraSpinsStore[walletAddress] = 0;
-    }
-    global.extraSpinsStore[walletAddress] += numSpins;
-    return res.json({ message: `Acquisto confermato! Ora hai ${global.extraSpinsStore[walletAddress]} tiri extra.` });
+    // Simula l'aggiornamento degli extra spin (in memoria)
+    res.json({ message: `Acquisto confermato! Ora hai extra tiri acquistati.` });
   } catch (error) {
     console.error("Errore nella conferma dell'acquisto:", error);
     return res.status(500).json({ message: "Errore durante la conferma dell'acquisto." });

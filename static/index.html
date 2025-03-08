@@ -15,7 +15,7 @@
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
-  <!-- Carica TweenMax per Winwheel.js -->
+  <!-- Carica TweenMax (necessario per Winwheel.js) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
 </head>
 <body>
@@ -87,9 +87,7 @@
     });
     
     async function updateBalances() {
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) return;
-      // Logica per aggiornare i saldi (da implementare se necessario)
+      // Implementa qui il recupero dei saldi se disponibile
     }
     window.addEventListener("load", updateBalances);
     
@@ -111,7 +109,6 @@
       }
     }
     
-    // Configurazione della ruota
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -124,7 +121,6 @@
       { text: 'NO PRIZE', color: '#BDC3C7' },
       { text: 'NO PRIZE', color: '#BDC3C7' }
     ];
-    
     const segments = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
@@ -219,6 +215,7 @@
         const stopAngleCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
         const extraSpins = 360 * 5;
         const finalAngle = (360 - stopAngleCenter) + extraSpins;
+        console.log("Angolo finale calcolato:", finalAngle);
         theWheel = createWheel(finalAngle);
         theWheel.startAnimation();
       } catch (error) {
