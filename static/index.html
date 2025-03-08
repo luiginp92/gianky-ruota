@@ -15,7 +15,7 @@
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
-  <!-- Carica TweenMax e Winwheel subito -->
+  <!-- Carica TweenMax e Winwheel immediatamente -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
@@ -31,7 +31,7 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- La ruota viene creata subito e visibile -->
+        <!-- La ruota è creata subito all'apertura -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -81,7 +81,7 @@
       window.location.href = "/static/task.html";
     });
     
-    // Funzione per aggiornare il contatore dei giri
+    // Aggiorna il contatore dei giri (usa il valore salvato in localStorage)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -90,7 +90,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Definizione dei premi (da allineare col backend)
+    // Definizione dei segmenti della ruota (devono corrispondere al backend)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -109,7 +109,7 @@
       text: item.text
     }));
     
-    // Crea la ruota subito al caricamento
+    // Crea la ruota al caricamento, così è sempre visibile
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: segments.length,
@@ -132,7 +132,7 @@
       return -1;
     }
     
-    // Crea una nuova ruota con lo stopAngle calcolato
+    // Crea una nuova ruota con stopAngle calcolato
     function createWheel(finalAngle) {
       return new Winwheel({
         canvasId: 'wheelCanvas',
@@ -184,7 +184,7 @@
         alert("Non hai giri disponibili. Acquista extra tiri.");
         return;
       }
-      // Decrementa il contatore dei giri
+      // Decrementa il contatore dei giri extra (salvato in localStorage)
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       if (total > 0) {

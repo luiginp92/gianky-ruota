@@ -2,11 +2,11 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Questo modulo gestisce:
- • Lo spin della ruota (scelta casuale del premio)
- • Il trasferimento automatico dei token dal wallet di distribuzione al vincitore (se premio in GKY)
- • L’acquisto di extra giri
- • Autenticazione (dummy per il prototipo) e referral
+Gestisce:
+ • Lo spin della ruota e la scelta del premio
+ • Il trasferimento automatico dei token (se il premio è in GKY)
+ • L'acquisto e la conferma degli extra giri
+ • Altri endpoint (referral, autenticazione dummy, ecc.)
 """
 
 import os, random, datetime, pytz, logging
@@ -76,18 +76,10 @@ class DistributePrizeRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     prize: str
 
-class AuthRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
-    telegram_id: Optional[str] = None
-
-class AuthVerifyRequest(BaseModel):
-    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
-    signature: str
-
 # ------------------ FUNZIONI UTILI ------------------
 def get_dynamic_gas_price():
     try:
-        base = w3.eth.gasPrice
+        base = w3.eth.gas_price  # usa gas_price con underscore
         safe = int(base * 1.2)
         logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
@@ -110,16 +102,16 @@ def invia_token(destinatario: str, quantita: int) -> bool:
                 "type": "function"
             }]
         )
-        nonce = w3.eth.getTransactionCount(WALLET_DISTRIBUZIONE)
-        token_amount = w3.toWei(quantita, 'ether')
+        nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
+        token_amount = w3.to_wei(quantita, 'ether')  # usa to_wei con underscore
         tx = token_contract.functions.transfer(destinatario, token_amount).buildTransaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
             'gas': 100000,
             'gasPrice': gas_price,
         })
-        signed_tx = w3.eth.account.signTransaction(tx, PRIVATE_KEY)
-        tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
+        signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
         logging.info(f"Token inviati: {quantita} GKY, txHash: {tx_hash.hex()}")
     except Exception as e:
         logging.error(f"Errore nell'invio dei token: {e}")
@@ -130,6 +122,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         if counter:
             counter.total_out += quantita
         else:
+            from database import GlobalCounter  # assicuriamoci di averlo
             counter = GlobalCounter(total_in=0.0, total_out=quantita)
             session_db.add(counter)
         session_db.commit()
@@ -141,7 +134,6 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
-    # Elenco coerente di premi: se "NO PRIZE" viene restituito, non si trasferiscono token
     prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
     prize = random.choice(prizes)
     logging.info(f"get_prize() scelto: {prize}")
@@ -169,7 +161,6 @@ async def api_spin(req: SpinRequest):
     try:
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se è il primo spin del giorno, assegnamo 1 spin base + extra
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + user.extra_spins
             user.last_play_date = now
@@ -179,7 +170,6 @@ async def api_spin(req: SpinRequest):
             if available <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
         premio = get_prize()
-        # Se il premio (dopo strip e uppercase) è "NO PRIZE", non trasferiamo token
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
@@ -246,7 +236,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             raise HTTPException(status_code=400, detail="Tx già usata per un acquisto.")
         if req.num_spins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi confermare solo 1, 3 o 10 giri extra.")
-        # Per questo prototipo, la verifica della tx è minima
+        # Per questo prototipo, verifichiamo semplicemente che la tx esista
         try:
             tx = w3_no_mw.eth.get_transaction(req.tx_hash)
         except Exception as e:
