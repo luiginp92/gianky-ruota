@@ -86,11 +86,7 @@
       window.location.href = "/static/task.html";
     });
     
-    async function updateBalances() {
-      // Implementa qui il recupero dei saldi se disponibile
-    }
-    window.addEventListener("load", updateBalances);
-    
+    // (Qui potresti implementare il recupero dei saldi, se desiderato)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -121,6 +117,7 @@
       { text: 'NO PRIZE', color: '#BDC3C7' },
       { text: 'NO PRIZE', color: '#BDC3C7' }
     ];
+    
     const segments = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
