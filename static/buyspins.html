@@ -31,7 +31,7 @@
         <br>
         <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
         <br>
-        Dopo il trasferimento, copia l'hash della transazione (txHash) e incollalo qui per confermare l'acquisto.
+        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo qui per confermare l'acquisto.
       </p>
       <div class="mb-3">
         <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
@@ -86,7 +86,7 @@
           return;
         }
         const numSpins = document.getElementById("numSpins").value;
-        let txHash = document.getElementById("txHash").value.trim();
+        const txHash = document.getElementById("txHash").value.trim();
         if (!txHash) {
           alert("Inserisci il txHash.");
           return;
@@ -99,7 +99,7 @@
           });
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
-          localStorage.setItem("purchasedExtraSpins", data.extra_spins);
+          localStorage.setItem("purchasedExtraSpins", data.extra_spins || "0");
           alert(data.message);
           window.location.href = "/static/index.html";
         } catch (error) {

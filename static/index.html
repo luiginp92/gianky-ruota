@@ -15,7 +15,7 @@
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
-  <!-- Carica TweenMax e Winwheel subito -->
+  <!-- Includo TweenMax e Winwheel all'avvio -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
@@ -31,6 +31,7 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
+        <!-- La ruota è creata all'avvio -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -89,7 +90,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Premi – lo stesso array usato dal backend
+    // Array dei premi (coerente con il backend)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -108,7 +109,7 @@
       text: item.text
     }));
     
-    // Crea la ruota all'avvio (così la ruota è visibile subito)
+    // Crea la ruota all'avvio, in modo che sia subito visibile
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: segments.length,

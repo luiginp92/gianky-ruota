@@ -2,11 +2,11 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Gestisce:
- • Spin (che determina il premio e, se il premio contiene "GKY", avvia il trasferimento)
- • Distribuzione dei token vinti dal wallet di distribuzione al wallet dell’utente
- • Acquisto di extra spin
- • Autenticazione (JWT) e altri endpoint (referral, share task, ecc.)
+Questo modulo gestisce:
+ • Lo spin della ruota, che determina il premio e (se il premio contiene "GKY") attiva il trasferimento dei token
+ • La distribuzione dei token (dal wallet di distribuzione a quello dell’utente vincitore)
+ • L’acquisto di extra giri
+ • Autenticazione e altri endpoint (referral, ecc.)
 """
 
 import os, random, datetime, pytz, logging
@@ -44,8 +44,8 @@ if not TOKEN_ADDRESS:
 
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
 
+# Creiamo l'istanza Web3; per evitare errori legati al middleware custom (che in questo caso non è necessario) non lo inietto
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
-# (Non inietto il middleware custom per evitare l'errore wrap_make_request)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
@@ -60,7 +60,7 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# ----------------- MODELLI DI INPUT -----------------
+# ----------------- MODELLI DI INPUT (Pydantic) -----------------
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
 
@@ -88,13 +88,14 @@ class AuthVerifyRequest(BaseModel):
 # ----------------- FUNZIONI UTILI -----------------
 def get_dynamic_gas_price():
     try:
-        base = w3.eth.gas_price
+        # Usa il metodo get_gas_price() per Web3.py v6; se usi v5 potresti usare w3.eth.gasPrice
+        base = w3.eth.get_gas_price()
         safe = int(base * 1.2)
         logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return w3.toWei(50, 'gwei')
+        return w3.to_wei(50, 'gwei')  # usa w3.to_wei in minuscolo
 
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
@@ -112,12 +113,9 @@ def invia_token(destinatario: str, quantita: int) -> bool:
             }]
         )
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
-        # Calcola l’importo (assumendo 18 decimali)
-        token_amount = quantita * (10 ** 18)
-        tx = token_contract.functions.transfer(
-            destinatario,
-            token_amount
-        ).build_transaction({
+        # Utilizza w3.to_wei (con underscore) per conversione
+        token_amount = w3.to_wei(quantita, 'ether')
+        tx = token_contract.functions.transfer(destinatario, token_amount).build_transaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
             'gas': 100000,
@@ -147,9 +145,8 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
-    # L'elenco dei premi (coerente con il front-end)
+    # L'elenco dei premi usato dal backend – da modificare se necessario
     prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
-    # Per il prototipo, scegliamo casualmente
     return random.choice(prizes)
 
 def get_user(wallet_address: str):
