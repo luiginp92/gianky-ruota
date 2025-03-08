@@ -2,12 +2,11 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Questo modulo gestisce:
- • /api/spin: Effettua lo spin, aggiorna il contatore dei giri e determina il premio.
-   Se il premio contiene "GKY", invia automaticamente i token dal wallet di distribuzione
-   al wallet dell’utente.
+Gestisce:
+ • /api/spin: Esegue lo spin, aggiorna il contatore dei giri e determina il premio.
+   Se il premio contiene "GKY", invia automaticamente i token dal wallet di distribuzione al wallet dell’utente.
  • /api/distribute: Trasferisce il premio (in GKY) dal wallet di distribuzione al wallet dell’utente.
- • /api/buyspins e /api/confirmbuy: Gestiscono l’acquisto di extra giri.
+ • /api/buyspins e /api/confirmbuy: Gestiscono l’acquisto di extra giri (senza autenticazione JWT in questo prototipo).
  • Altri endpoint (auth, referral, ecc.)
 Assicurati di impostare le variabili d’ambiente richieste.
 """
@@ -19,7 +18,7 @@ import pytz
 import logging
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -29,11 +28,9 @@ from web3 import Web3
 from eth_account.messages import encode_defunct
 
 from jose import JWTError, jwt
-from fastapi.security import OAuth2PasswordBearer
+# Per semplificare, in questo prototipo non usiamo le dipendenze di autenticazione nei metodi spin/acquisto
 
 from database import Session, User, PremioVinto, GlobalCounter, init_db
-
-# Carica le variabili d’ambiente (ad es. da un file .env)
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -56,6 +53,7 @@ if not TOKEN_ADDRESS:
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
 
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
+# Middleware per POA (se necessario)
 def custom_geth_poa_middleware(make_request, web3=None):
     def middleware(method, params):
         response = make_request(method, params)
@@ -70,13 +68,13 @@ w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# Helper per la conversione in wei (assumendo 18 decimali per GKY)
-def to_wei(amount, unit):
+# Helper per conversione in wei (assumiamo 18 decimali per GKY)
+def to_wei(amount: float, unit: str) -> int:
     if unit == 'ether':
         return int(amount * 10**18)
     return int(amount)
 
-# ----------------- JWT & AUTENTICAZIONE -----------------
+# ----------------- JWT & AUTENTICAZIONE (per auth) -----------------
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret_jwt_key_change_me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -86,9 +84,6 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
     expire = datetime.datetime.utcnow() + (expires_delta or datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-# Per semplificare i test, gli endpoint ora usano il wallet passato nel body
-# (in un ambiente di produzione, si userebbe l’autenticazione JWT)
 
 # ----------------- MODELLI DI INPUT -----------------
 class SpinRequest(BaseModel):
@@ -118,13 +113,13 @@ class AuthVerifyRequest(BaseModel):
 # ----------------- FUNZIONI UTILI -----------------
 def get_dynamic_gas_price():
     try:
-        base = w3.eth.get_gas_price()
+        base = w3.eth.gasPrice  # proprietà della versione 5
         safe = int(base * 1.2)
         logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return to_wei(50, 'ether')
+        return Web3.toWei(50, 'gwei')
 
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
@@ -141,12 +136,13 @@ def invia_token(destinatario: str, quantita: int) -> bool:
                 "type": "function"
             }]
         )
+        nonce = w3.eth.getTransactionCount(WALLET_DISTRIBUZIONE)
         tx = token_contract.functions.transfer(
             destinatario,
-            to_wei(quantita, 'ether')
+            quantita * 10**18
         ).build_transaction({
             'from': WALLET_DISTRIBUZIONE,
-            'nonce': w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE),
+            'nonce': nonce,
             'gas': 100000,
             'gasPrice': gas_price,
         })
@@ -173,7 +169,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
-    # Scegli casualmente un premio dalla lista
+    # Per semplicità, scegliamo casualmente tra alcuni premi (modifica come preferisci)
     prizes = ['10 GKY', '10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
     return random.choice(prizes)
 
@@ -192,77 +188,7 @@ def get_user(wallet_address: str):
         session.close()
 
 # ----------------- ENDPOINTS -----------------
-
-# (Per semplicità in questo prototipo gli endpoint di spin, acquisto extra, ecc. non richiedono token JWT.)
-
-@app.post("/api/auth/request_nonce")
-async def request_nonce(auth: AuthRequest):
-    nonce = str(random.randint(100000, 999999))
-    session = Session()
-    try:
-        user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
-        if not user:
-            user = User(wallet_address=auth.wallet_address, telegram_id=auth.telegram_id, extra_spins=0)
-            session.add(user)
-        user.nonce = nonce
-        session.commit()
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Errore in request_nonce: {e}")
-        raise HTTPException(status_code=500, detail="Errore nella richiesta del nonce.")
-    finally:
-        session.close()
-    return {"nonce": nonce}
-
-@app.post("/api/auth/verify")
-async def auth_verify(auth: AuthVerifyRequest):
-    session = Session()
-    try:
-        user = session.query(User).filter_by(wallet_address=auth.wallet_address).first()
-        if not user or not user.nonce:
-            raise HTTPException(status_code=400, detail="Richiedi prima un nonce.")
-        if auth.signature != "dummy":
-            message = encode_defunct(text=user.nonce)
-            try:
-                recovered = w3.eth.account.recover_message(message, signature=auth.signature)
-            except Exception as e:
-                logging.error(f"Errore nella verifica della firma: {e}")
-                raise HTTPException(status_code=400, detail="Firma non valida.")
-            if recovered.lower() != auth.wallet_address.lower():
-                raise HTTPException(status_code=400, detail="Firma non corrisponde all'indirizzo.")
-        token = create_access_token({"wallet_address": auth.wallet_address})
-        user.nonce = None
-        session.commit()
-        return {"access_token": token, "token_type": "bearer"}
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Errore in auth_verify: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante la verifica dell'autenticazione.")
-    finally:
-        session.close()
-
-@app.get("/api/ruota")
-async def api_ruota(wallet_address: str):
-    # Restituisce i giri disponibili per il wallet (1 + extra_spins)
-    user = get_user(wallet_address)
-    session = Session()
-    try:
-        italy = pytz.timezone("Europe/Rome")
-        now = datetime.datetime.now(italy)
-        if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
-            available = 1 + user.extra_spins
-            user.last_play_date = now
-            session.commit()
-        else:
-            available = user.extra_spins or 0
-        return {"available_spins": 1 + user.extra_spins, "message": f"Giri disponibili: {1 + user.extra_spins}"}
-    except Exception as e:
-        logging.error(f"Errore in /api/ruota: {e}")
-        raise HTTPException(status_code=500, detail="Errore nel recupero dello stato della ruota.")
-    finally:
-        session.close()
+# Gli endpoint di spin, buyspins e confirmbuy ora usano il wallet fornito nel body (senza dipendenza JWT)
 
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
@@ -332,6 +258,7 @@ async def api_buyspins(req: BuySpinsRequest):
             raise HTTPException(status_code=400, detail="Puoi acquistare solo 1, 3 o 10 giri extra.")
         cost = 50 if req.num_spins == 1 else (125 if req.num_spins == 3 else 300)
         msg = f"Per acquistare {req.num_spins} giri extra, trasferisci {cost} GKY a {WALLET_DISTRIBUZIONE} e poi conferma tramite /api/confirmbuy."
+        logging.info(f"Richiesta buyspins per {req.wallet_address} con num_spins: {req.num_spins}")
         return {"message": msg}
     except Exception as e:
         logging.error(f"Errore in buyspins: {e}")
@@ -377,7 +304,7 @@ async def api_referral(wallet_address: str):
 
 @app.get("/wheel")
 async def get_wheel():
-    # Questo endpoint ritorna un'immagine di fallback se presente
+    # Se è presente un'immagine di fallback (non usata se si usa Winwheel.js)
     image_path = os.path.join("static", "ruota.png")
     if os.path.exists(image_path):
         return FileResponse(image_path, media_type="image/png")
