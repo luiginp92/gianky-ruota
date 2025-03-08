@@ -15,7 +15,7 @@
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
-  <!-- TweenMax per Winwheel.js -->
+  <!-- TweenMax per Winwheel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
 </head>
 <body>
@@ -85,7 +85,6 @@
       window.location.href = "/static/task.html";
     });
     
-    // Aggiorna contatore dei giri (se memorizzato in localStorage)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -94,7 +93,6 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Array dei premi (deve corrispondere all’array del backend)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -113,7 +111,7 @@
       text: item.text
     }));
     
-    // Crea la ruota al caricamento in modo che sia sempre visibile
+    // La ruota viene creata al caricamento, così è sempre visibile
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: segments.length,
@@ -123,7 +121,7 @@
         type: 'spinToStop',
         duration: 5,
         spins: 8
-        // stopAngle verrà impostato dinamicamente
+        // stopAngle sarà impostato dinamicamente al click
       }
     });
     
@@ -187,7 +185,7 @@
         alert("Non hai giri disponibili. Acquista extra tiri.");
         return;
       }
-      // Decrementa contatore locali
+      // Aggiorna il contatore decrementando di 1
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       if (total > 0) {

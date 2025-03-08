@@ -2,35 +2,22 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>Gira la Ruota - GiankyBot (Probabilità)</title>
+  <title>Gira la Ruota - GiankyBot (Test)</title>
   <style>
-    body { 
-      text-align: center; 
-      font-family: sans-serif; 
-      padding: 20px; 
-    }
-    canvas { 
-      border: 1px solid #000; 
-      margin: 20px auto; 
-      display: block; 
-    }
-    button { 
-      padding: 10px 20px; 
-      font-size: 1rem; 
-      cursor: pointer; 
-    }
+    body { text-align: center; font-family: sans-serif; padding: 20px; }
+    canvas { border: 1px solid #000; margin: 20px auto; display: block; }
+    button { padding: 10px 20px; font-size: 1rem; cursor: pointer; }
   </style>
-  <!-- Carica TweenMax 2.1.3 (necessario per Winwheel.js) -->
+  <!-- TweenMax -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
+  <!-- Winwheel -->
+  <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
 <body>
-  <h1>Gira la Ruota</h1>
+  <h1>Test Ruota</h1>
   <canvas id="canvas" width="500" height="500"></canvas>
   <br>
   <button id="spinButton">Gira la ruota</button>
-  
-  <!-- Carica Winwheel.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Winwheel.js/2.7.0/Winwheel.min.js"></script>
   
   <script>
     const prizeData = [
@@ -51,7 +38,6 @@
       text: item.text
     }));
     
-    // Crea la ruota immediatamente per renderla visibile
     let theWheel = new Winwheel({
       canvasId: 'canvas',
       numSegments: segments.length,
@@ -60,15 +46,18 @@
       animation: {
         type: 'spinToStop',
         duration: 5,
-        spins: 8
+        spins: 8,
+        callbackFinished: function(indicatedSegment) {
+          alert("Hai vinto: " + indicatedSegment.text);
+          theWheel.rotationAngle = 0;
+          theWheel.draw();
+          document.getElementById("spinButton").disabled = false;
+        }
       }
     });
     
     document.getElementById("spinButton").addEventListener("click", () => {
-      // Qui non facciamo chiamate al backend, solo test della ruota
-      // Calcoliamo un angolo casuale di stop per test
-      const randomStopAngle = Math.floor(Math.random() * 360) + 360 * 5;
-      theWheel.animation.stopAngle = randomStopAngle;
+      document.getElementById("spinButton").disabled = true;
       theWheel.startAnimation();
     });
   </script>

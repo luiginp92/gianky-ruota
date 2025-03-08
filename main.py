@@ -8,12 +8,7 @@ Questo modulo gestisce:
  • /api/distribute: Trasferisce il premio (in GKY) dal wallet di distribuzione al wallet dell’utente.
  • /api/buyspins e /api/confirmbuy: Gestiscono l’acquisto di extra giri.
  • Altri endpoint (auth, referral, ecc.)
-Assicurati di impostare le seguenti variabili d’ambiente (es. in Heroku o in un file .env):
- • DISTRIBUTION_PRIVATE_KEY
- • PROVIDER_URL (es. https://polygon-rpc.com/)
- • TOKEN_ADDRESS (es. 0x370806781689E670f85311700445449aC7C3Ff7a)
- • WALLET_DISTRIBUZIONE
- • SECRET_KEY (per JWT)
+Assicurati che le variabili d’ambiente siano correttamente impostate.
 """
 
 import os, random, datetime, pytz, logging
@@ -66,11 +61,7 @@ w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# Helper per conversione (assumiamo 18 decimali)
-def to_wei(amount: float, unit: str) -> int:
-    return Web3.to_wei(amount, unit)
-
-# ----------------- JWT & AUTENTICAZIONE (per auth) -----------------
+# ----------------- JWT & AUTENTICAZIONE -----------------
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret_jwt_key_change_me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -109,7 +100,7 @@ class AuthVerifyRequest(BaseModel):
 # ----------------- FUNZIONI UTILI -----------------
 def get_dynamic_gas_price():
     try:
-        base = w3.eth.gas_price  # usa gas_price in minuscolo
+        base = w3.eth.gas_price
         safe = int(base * 1.2)
         logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
@@ -132,10 +123,10 @@ def invia_token(destinatario: str, quantita: int) -> bool:
                 "type": "function"
             }]
         )
-        nonce = w3.eth.getTransactionCount(WALLET_DISTRIBUZIONE)
+        nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
         tx = token_contract.functions.transfer(
             destinatario,
-            quantita * 10**18
+            Web3.to_wei(quantita, 'ether')
         ).build_transaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
@@ -165,7 +156,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
-    # Allineiamo l'array dei premi con quello del front-end
+    # I premi qui devono corrispondere a quelli mostrati sulla ruota
     prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
     return random.choice(prizes)
 
@@ -192,7 +183,6 @@ async def api_spin(req: SpinRequest):
     try:
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se è il primo spin del giorno, assegna 1 giro base + extra
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + user.extra_spins
             user.last_play_date = now
@@ -258,7 +248,7 @@ async def api_buyspins(req: BuySpinsRequest):
     except Exception as e:
         logging.error(f"Errore in buyspins: {e}")
         raise HTTPException(status_code=500, detail="Errore nella richiesta d'acquisto.")
-    
+
 @app.post("/api/confirmbuy")
 async def api_confirmbuy(req: ConfirmBuyRequest):
     user = get_user(req.wallet_address)
@@ -299,7 +289,7 @@ async def api_referral(wallet_address: str):
 
 @app.get("/wheel")
 async def get_wheel():
-    # Se non si usa l'immagine di fallback, restituisce un 404
+    # Se usi un'immagine di fallback (non più usata, perché la ruota è creata in JS)
     image_path = os.path.join("static", "ruota.png")
     if os.path.exists(image_path):
         return FileResponse(image_path, media_type="image/png")
