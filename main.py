@@ -7,7 +7,7 @@ Questo modulo gestisce:
    Se il premio contiene "GKY", invia automaticamente i token dal wallet di distribuzione al wallet dell’utente.
  • /api/distribute: Trasferisce il premio (in GKY) dal wallet di distribuzione al wallet dell’utente.
  • /api/buyspins e /api/confirmbuy: Gestiscono l’acquisto di extra giri.
- • Altri endpoint (auth, referral, ecc.)
+ • Altri endpoint (auth, referral, share task, report, ecc.)
 Assicurati che le variabili d’ambiente siano correttamente impostate.
 """
 
@@ -100,13 +100,14 @@ class AuthVerifyRequest(BaseModel):
 # ----------------- FUNZIONI UTILI -----------------
 def get_dynamic_gas_price():
     try:
-        base = w3.eth.gas_price
+        # Se w3.eth.gas_price è callable (alcune versioni lo richiedono), chiamalo
+        base = w3.eth.gas_price() if callable(w3.eth.gas_price) else w3.eth.gas_price
         safe = int(base * 1.2)
         logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return Web3.to_wei(50, 'gwei')
+        return w3.toWei(50, 'gwei')
 
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
@@ -126,7 +127,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
         tx = token_contract.functions.transfer(
             destinatario,
-            Web3.to_wei(quantita, 'ether')
+            w3.toWei(quantita, 'ether')
         ).build_transaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
@@ -145,6 +146,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         if counter:
             counter.total_out += quantita
         else:
+            from database import GlobalCounter
             counter = GlobalCounter(total_in=0.0, total_out=quantita)
             session_db.add(counter)
         session_db.commit()
@@ -156,8 +158,9 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
-    # I premi qui devono corrispondere a quelli mostrati sulla ruota
+    # I premi mostrati sulla ruota: (l'ordine deve corrispondere al front-end)
     prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
+    # Scegliamo casualmente il premio
     return random.choice(prizes)
 
 def get_user(wallet_address: str):
@@ -183,6 +186,7 @@ async def api_spin(req: SpinRequest):
     try:
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
+        # Se è il primo spin del giorno, l'utente ha 1 spin gratuito + eventuali extra
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + user.extra_spins
             user.last_play_date = now
@@ -267,7 +271,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             raise HTTPException(status_code=400, detail="Tx non trovata.")
         USED_TX.add(req.tx_hash)
         user.extra_spins += req.num_spins
-        user.last_play_date = None
+        user.last_play_date = None  # Reset dello spin giornaliero
         session.commit()
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
         available = 1 + user.extra_spins
@@ -286,15 +290,6 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
-
-@app.get("/wheel")
-async def get_wheel():
-    # Se usi un'immagine di fallback (non più usata, perché la ruota è creata in JS)
-    image_path = os.path.join("static", "ruota.png")
-    if os.path.exists(image_path):
-        return FileResponse(image_path, media_type="image/png")
-    else:
-        raise HTTPException(status_code=404, detail="Immagine della ruota non trovata.")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
