@@ -31,7 +31,7 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- La ruota è sempre visibile -->
+        <!-- La ruota è visibile al caricamento -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -73,7 +73,7 @@
     document.getElementById("btnReferral").addEventListener("click", () => window.location.href = "/static/referral.html");
     document.getElementById("btnTask").addEventListener("click", () => window.location.href = "/static/task.html");
     
-    // Aggiorna saldi e contatore giri
+    // Aggiorna saldi e contatore
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -84,7 +84,7 @@
           document.getElementById("maticBalance").innerText = data.matic;
           document.getElementById("tokenBalance").innerText = data.gky;
         }
-      } catch (error) { console.error("Errore nel recupero dei saldi:", error); }
+      } catch (error) { console.error("Errore nei saldi:", error); }
     }
     window.addEventListener("load", updateBalances);
     
@@ -96,7 +96,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Segmenti della ruota (devono corrispondere ai possibili premi dal backend)
+    // Segmenti della ruota (corrispondono esattamente ai possibili premi)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -114,17 +114,13 @@
       text: item.text
     }));
     
-    // Crea la ruota visibile al caricamento
+    // Crea la ruota visibile all'avvio
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: segments.length,
       outerRadius: 140,
       segments: segments,
-      animation: {
-        type: 'spinToStop',
-        duration: 5,
-        spins: 8
-      }
+      animation: { type: 'spinToStop', duration: 5, spins: 8 }
     });
     
     function findPrizeIndex(prizeText) {
@@ -186,7 +182,7 @@
         alert("Non hai giri disponibili. Acquista extra tiri.");
         return;
       }
-      // Aggiorna il contatore decrementando un giro extra
+      // Decrementa il contatore (aggiorna localStorage)
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       if (total > 0) {
