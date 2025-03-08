@@ -15,7 +15,7 @@
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
-  <!-- Carica TweenMax (necessario per Winwheel.js) -->
+  <!-- TweenMax per Winwheel.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
 </head>
 <body>
@@ -30,7 +30,6 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Canvas per la ruota sempre visibile -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -68,7 +67,7 @@
   <!-- Dipendenze JS -->
   <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <!-- Carica Winwheel.js dopo TweenMax -->
+  <!-- Winwheel.js -->
   <script defer src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
   
   <script defer>
@@ -86,7 +85,7 @@
       window.location.href = "/static/task.html";
     });
     
-    // Aggiorna contatore giri (se memorizzato in localStorage)
+    // Aggiorna contatore dei giri (se memorizzato in localStorage)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -95,16 +94,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    function decrementFreeSpins() {
-      let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
-      let total = 1 + extra;
-      if (total > 0) {
-        total--;
-        localStorage.setItem("purchasedExtraSpins", total > 0 ? total - 1 : 0);
-        document.getElementById("freeSpinsCount").innerText = total;
-      }
-    }
-    
+    // Array dei premi (deve corrispondere all’array del backend)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -123,20 +113,18 @@
       text: item.text
     }));
     
-    // Crea e mostra la ruota al caricamento della pagina
-    window.addEventListener("load", () => {
-      window.theWheel = new Winwheel({
-        canvasId: 'wheelCanvas',
-        numSegments: segments.length,
-        outerRadius: 140,
-        segments: segments,
-        animation: {
-          type: 'spinToStop',
-          duration: 5,
-          spins: 8
-          // Non impostiamo stopAngle qui; verrà calcolato dinamicamente allo spin
-        }
-      });
+    // Crea la ruota al caricamento in modo che sia sempre visibile
+    let theWheel = new Winwheel({
+      canvasId: 'wheelCanvas',
+      numSegments: segments.length,
+      outerRadius: 140,
+      segments: segments,
+      animation: {
+        type: 'spinToStop',
+        duration: 5,
+        spins: 8
+        // stopAngle verrà impostato dinamicamente
+      }
     });
     
     function findPrizeIndex(prizeText) {
@@ -199,7 +187,14 @@
         alert("Non hai giri disponibili. Acquista extra tiri.");
         return;
       }
-      decrementFreeSpins();
+      // Decrementa contatore locali
+      let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
+      let total = 1 + extra;
+      if (total > 0) {
+        total--;
+        localStorage.setItem("purchasedExtraSpins", total > 0 ? total - 1 : 0);
+        document.getElementById("freeSpinsCount").innerText = total;
+      }
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
         alert("Wallet non collegato.");
@@ -227,8 +222,8 @@
         const extraSpins = 360 * 5;
         const finalAngle = (360 - stopAngleCenter) + extraSpins;
         console.log("Angolo finale calcolato:", finalAngle);
-        window.theWheel = createWheel(finalAngle);
-        window.theWheel.startAnimation();
+        theWheel = createWheel(finalAngle);
+        theWheel.startAnimation();
       } catch (error) {
         console.error("Errore nello spin:", error);
         alert("Errore nello spin. Contatta l'assistenza.");

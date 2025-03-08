@@ -2,20 +2,21 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Gestisce:
+Questo modulo gestisce:
  • /api/spin: Esegue lo spin, aggiorna il contatore dei giri e determina il premio.
    Se il premio contiene "GKY", invia automaticamente i token dal wallet di distribuzione al wallet dell’utente.
  • /api/distribute: Trasferisce il premio (in GKY) dal wallet di distribuzione al wallet dell’utente.
- • /api/buyspins e /api/confirmbuy: Gestiscono l’acquisto di extra giri (senza autenticazione JWT in questo prototipo).
+ • /api/buyspins e /api/confirmbuy: Gestiscono l’acquisto di extra giri.
  • Altri endpoint (auth, referral, ecc.)
-Assicurati di impostare le variabili d’ambiente richieste.
+Assicurati di impostare le seguenti variabili d’ambiente (es. in Heroku o in un file .env):
+ • DISTRIBUTION_PRIVATE_KEY
+ • PROVIDER_URL (es. https://polygon-rpc.com/)
+ • TOKEN_ADDRESS (es. 0x370806781689E670f85311700445449aC7C3Ff7a)
+ • WALLET_DISTRIBUZIONE
+ • SECRET_KEY (per JWT)
 """
 
-import os
-import random
-import datetime
-import pytz
-import logging
+import os, random, datetime, pytz, logging
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -28,8 +29,6 @@ from web3 import Web3
 from eth_account.messages import encode_defunct
 
 from jose import JWTError, jwt
-# Per semplificare, in questo prototipo non usiamo le dipendenze di autenticazione nei metodi spin/acquisto
-
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 from dotenv import load_dotenv
 load_dotenv()
@@ -53,7 +52,6 @@ if not TOKEN_ADDRESS:
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
 
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
-# Middleware per POA (se necessario)
 def custom_geth_poa_middleware(make_request, web3=None):
     def middleware(method, params):
         response = make_request(method, params)
@@ -68,11 +66,9 @@ w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# Helper per conversione in wei (assumiamo 18 decimali per GKY)
+# Helper per conversione (assumiamo 18 decimali)
 def to_wei(amount: float, unit: str) -> int:
-    if unit == 'ether':
-        return int(amount * 10**18)
-    return int(amount)
+    return Web3.to_wei(amount, unit)
 
 # ----------------- JWT & AUTENTICAZIONE (per auth) -----------------
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret_jwt_key_change_me")
@@ -113,13 +109,13 @@ class AuthVerifyRequest(BaseModel):
 # ----------------- FUNZIONI UTILI -----------------
 def get_dynamic_gas_price():
     try:
-        base = w3.eth.gasPrice  # proprietà della versione 5
+        base = w3.eth.gas_price  # usa gas_price in minuscolo
         safe = int(base * 1.2)
         logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return Web3.toWei(50, 'gwei')
+        return Web3.to_wei(50, 'gwei')
 
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
@@ -169,8 +165,8 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
-    # Per semplicità, scegliamo casualmente tra alcuni premi (modifica come preferisci)
-    prizes = ['10 GKY', '10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
+    # Allineiamo l'array dei premi con quello del front-end
+    prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
     return random.choice(prizes)
 
 def get_user(wallet_address: str):
@@ -188,7 +184,6 @@ def get_user(wallet_address: str):
         session.close()
 
 # ----------------- ENDPOINTS -----------------
-# Gli endpoint di spin, buyspins e confirmbuy ora usano il wallet fornito nel body (senza dipendenza JWT)
 
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
@@ -197,7 +192,7 @@ async def api_spin(req: SpinRequest):
     try:
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se è il primo spin del giorno, l'utente ha 1 giro base + extra
+        # Se è il primo spin del giorno, assegna 1 giro base + extra
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + user.extra_spins
             user.last_play_date = now
@@ -263,7 +258,7 @@ async def api_buyspins(req: BuySpinsRequest):
     except Exception as e:
         logging.error(f"Errore in buyspins: {e}")
         raise HTTPException(status_code=500, detail="Errore nella richiesta d'acquisto.")
-
+    
 @app.post("/api/confirmbuy")
 async def api_confirmbuy(req: ConfirmBuyRequest):
     user = get_user(req.wallet_address)
@@ -304,7 +299,7 @@ async def api_referral(wallet_address: str):
 
 @app.get("/wheel")
 async def get_wheel():
-    # Se è presente un'immagine di fallback (non usata se si usa Winwheel.js)
+    # Se non si usa l'immagine di fallback, restituisce un 404
     image_path = os.path.join("static", "ruota.png")
     if os.path.exists(image_path):
         return FileResponse(image_path, media_type="image/png")
