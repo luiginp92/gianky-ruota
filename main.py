@@ -7,8 +7,7 @@ Questo modulo gestisce:
    Se il premio contiene "GKY", invia automaticamente i token dal wallet di distribuzione al wallet dell’utente.
  • /api/distribute: Trasferisce il premio (in GKY) dal wallet di distribuzione al wallet dell’utente.
  • /api/buyspins e /api/confirmbuy: Gestiscono l’acquisto di extra giri.
- • Altri endpoint (auth, referral, share task, report, ecc.)
-Assicurati che le variabili d’ambiente siano correttamente impostate.
+ • Altri endpoint: auth, referral, ecc.
 """
 
 import os, random, datetime, pytz, logging
@@ -46,18 +45,8 @@ if not TOKEN_ADDRESS:
 
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
 
+# Creiamo il provider senza middleware (su Polygon non è necessario)
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
-def custom_geth_poa_middleware(make_request, web3=None):
-    def middleware(method, params):
-        response = make_request(method, params)
-        result = response.get("result")
-        if isinstance(result, dict) and "extraData" in result:
-            extra = result["extraData"]
-            if isinstance(extra, str) and len(extra) > 66:
-                response["result"]["extraData"] = "0x" + extra[-64:]
-        return response
-    return middleware
-w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
@@ -100,14 +89,14 @@ class AuthVerifyRequest(BaseModel):
 # ----------------- FUNZIONI UTILI -----------------
 def get_dynamic_gas_price():
     try:
-        # Se w3.eth.gas_price è callable (alcune versioni lo richiedono), chiamalo
-        base = w3.eth.gas_price() if callable(w3.eth.gas_price) else w3.eth.gas_price
+        # Utilizza la proprietà gas_price di w3.eth (viene usata la funzione statica)
+        base = w3.eth.gas_price
         safe = int(base * 1.2)
-        logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
+        logging.info(f"Gas Price: {Web3.fromWei(base, 'gwei')} -> {Web3.fromWei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return w3.toWei(50, 'gwei')
+        return Web3.toWei(50, 'gwei')
 
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
@@ -125,9 +114,11 @@ def invia_token(destinatario: str, quantita: int) -> bool:
             }]
         )
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
+        # Calcola l’importo in wei (supponendo 18 decimali)
+        token_amount = quantita * (10 ** 18)
         tx = token_contract.functions.transfer(
             destinatario,
-            w3.toWei(quantita, 'ether')
+            token_amount
         ).build_transaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
@@ -158,9 +149,9 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
-    # I premi mostrati sulla ruota: (l'ordine deve corrispondere al front-end)
+    # L'elenco dei premi (corrisponde anche al front-end)
     prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
-    # Scegliamo casualmente il premio
+    # Per test, scegliamo casualmente (puoi personalizzare la logica)
     return random.choice(prizes)
 
 def get_user(wallet_address: str):
@@ -186,7 +177,6 @@ async def api_spin(req: SpinRequest):
     try:
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se è il primo spin del giorno, l'utente ha 1 spin gratuito + eventuali extra
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
             available = 1 + user.extra_spins
             user.last_play_date = now
@@ -271,7 +261,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             raise HTTPException(status_code=400, detail="Tx non trovata.")
         USED_TX.add(req.tx_hash)
         user.extra_spins += req.num_spins
-        user.last_play_date = None  # Reset dello spin giornaliero
+        user.last_play_date = None
         session.commit()
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
         available = 1 + user.extra_spins

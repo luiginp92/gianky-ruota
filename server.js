@@ -48,9 +48,9 @@ app.post('/api/distribute', async (req, res) => {
   try {
     const tx = await tokenContract.transfer(walletAddress, amount);
     await tx.wait();
-    res.json({ message: `Premio ${prize} distribuito! Transazione: ${tx.hash}` });
+    res.json({ message: `Premio ${prize} distribuito! Tx: ${tx.hash}` });
   } catch (error) {
-    console.error("Errore nella distribuzione del premio:", error);
+    console.error("Errore nella distribuzione:", error);
     res.status(500).json({ message: "Distribuzione fallita" });
   }
 });

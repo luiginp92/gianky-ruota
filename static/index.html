@@ -15,7 +15,7 @@
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
   </style>
-  <!-- Carica TweenMax e Winwheel (senza defer per garantire la definizione di Winwheel) -->
+  <!-- Carica TweenMax e Winwheel subito -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
@@ -80,6 +80,7 @@
       window.location.href = "/static/task.html";
     });
     
+    // Aggiorna contatore giri
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -88,6 +89,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
+    // Premi – devono corrispondere a quelli scelti nel backend
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -106,7 +108,7 @@
       text: item.text
     }));
     
-    // Crea la ruota subito al caricamento (sempre visibile)
+    // Crea la ruota immediatamente al caricamento
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: segments.length,
