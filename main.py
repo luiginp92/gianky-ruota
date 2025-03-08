@@ -3,17 +3,17 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Gestisce:
- • Lo spin della ruota e la scelta del premio
+ • Lo spin della ruota e la scelta del premio (usando un elenco fisso)
  • Il trasferimento automatico dei token (se il premio è in GKY)
  • L'acquisto e la conferma degli extra giri
- • Altri endpoint (referral, autenticazione dummy, ecc.)
+ • L'endpoint per richiedere i saldi del wallet
 """
 
 import os, random, datetime, pytz, logging
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
@@ -45,6 +45,8 @@ if not TOKEN_ADDRESS:
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
 
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
+# Se il middleware non è necessario, puoi commentare questa riga:
+# w3.middleware_onion.inject(custom_geth_poa_middleware, layer=0)
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
@@ -76,16 +78,39 @@ class DistributePrizeRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     prize: str
 
+# Endpoint per il saldo del wallet (MATIC e GiankyCoin)
+@app.get("/api/balance/{wallet_address}")
+async def get_balance(wallet_address: str):
+    try:
+        provider = Web3(Web3.HTTPProvider(PROVIDER_URL))
+        matic_balance = provider.eth.get_balance(wallet_address)
+        token_contract = provider.eth.contract(
+            address=TOKEN_ADDRESS,
+            abi=[{
+                "constant": True,
+                "inputs": [{"name": "owner", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"name": "", "type": "uint256"}],
+                "payable": False,
+                "stateMutability": "view",
+                "type": "function"
+            }]
+        )
+        token_balance = token_contract.functions.balanceOf(wallet_address).call()
+        return {"matic": Web3.from_wei(matic_balance, 'ether'), "gky": Web3.from_wei(token_balance, 'ether')}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ------------------ FUNZIONI UTILI ------------------
 def get_dynamic_gas_price():
     try:
-        base = w3.eth.gas_price  # usa gas_price con underscore
+        base = w3.eth.gas_price
         safe = int(base * 1.2)
-        logging.info(f"Gas Price: {w3.fromWei(base, 'gwei')} -> {w3.fromWei(safe, 'gwei')}")
+        logging.info(f"Gas Price: {Web3.from_wei(base, 'gwei')} -> {Web3.from_wei(safe, 'gwei')}")
         return safe
     except Exception as e:
         logging.error(f"Errore nel gas price: {e}")
-        return w3.toWei(50, 'gwei')
+        return Web3.to_wei(50, 'gwei')
 
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
@@ -103,7 +128,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
             }]
         )
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
-        token_amount = w3.to_wei(quantita, 'ether')  # usa to_wei con underscore
+        token_amount = Web3.to_wei(quantita, 'ether')
         tx = token_contract.functions.transfer(destinatario, token_amount).buildTransaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
@@ -122,7 +147,6 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         if counter:
             counter.total_out += quantita
         else:
-            from database import GlobalCounter  # assicuriamoci di averlo
             counter = GlobalCounter(total_in=0.0, total_out=quantita)
             session_db.add(counter)
         session_db.commit()
@@ -134,6 +158,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     return True
 
 def get_prize() -> str:
+    # Utilizza un elenco fisso per garantire coerenza con i segmenti della ruota
     prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
     prize = random.choice(prizes)
     logging.info(f"get_prize() scelto: {prize}")
@@ -169,7 +194,7 @@ async def api_spin(req: SpinRequest):
             available = user.extra_spins or 0
             if available <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
-        premio = get_prize()
+        premio = get_prize()  # Viene chiamato una sola volta
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
@@ -236,7 +261,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             raise HTTPException(status_code=400, detail="Tx già usata per un acquisto.")
         if req.num_spins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi confermare solo 1, 3 o 10 giri extra.")
-        # Per questo prototipo, verifichiamo semplicemente che la tx esista
+        # Verifica semplificata: controlliamo che la tx esista
         try:
             tx = w3_no_mw.eth.get_transaction(req.tx_hash)
         except Exception as e:
@@ -260,10 +285,34 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
     finally:
         session.close()
 
+# Endpoint per il referral (semplice)
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
+
+# Endpoint per aggiornare i saldi (MATIC e GKY)
+@app.get("/api/balance/{wallet_address}")
+async def api_balance(wallet_address: str):
+    try:
+        provider = Web3(Web3.HTTPProvider(PROVIDER_URL))
+        matic_balance = provider.eth.get_balance(wallet_address)
+        token_contract = provider.eth.contract(
+            address=TOKEN_ADDRESS,
+            abi=[{
+                "constant": True,
+                "inputs": [{"name": "owner", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"name": "", "type": "uint256"}],
+                "payable": False,
+                "stateMutability": "view",
+                "type": "function"
+            }]
+        )
+        token_balance = token_contract.functions.balanceOf(wallet_address).call()
+        return {"matic": Web3.from_wei(matic_balance, 'ether'), "gky": Web3.from_wei(token_balance, 'ether')}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
