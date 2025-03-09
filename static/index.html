@@ -31,7 +31,7 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- La ruota è visibile al caricamento -->
+        <!-- La ruota è visibile all'avvio -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -96,7 +96,7 @@
     }
     window.addEventListener("load", getFreeSpins);
     
-    // Segmenti della ruota (corrispondono esattamente ai possibili premi)
+    // Segmenti della ruota: qui le percentuali sono modificate (la maggioranza sarà "NO PRIZE")
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -105,7 +105,11 @@
       { text: '250 GKY', color: '#9B59B6' },
       { text: '500 GKY', color: '#3498DB' },
       { text: '1000 GKY', color: '#1ABC9C' },
+      // Aggiungiamo più "NO PRIZE" per far perdere l'utente più frequentemente:
       { text: 'NO PRIZE', color: '#C0392B' },
+      { text: 'NO PRIZE', color: '#BDC3C7' },
+      { text: 'NO PRIZE', color: '#BDC3C7' },
+      { text: 'NO PRIZE', color: '#BDC3C7' },
       { text: 'NO PRIZE', color: '#BDC3C7' },
       { text: 'NO PRIZE', color: '#BDC3C7' }
     ];
@@ -114,7 +118,7 @@
       text: item.text
     }));
     
-    // Crea la ruota visibile all'avvio
+    // Crea la ruota al caricamento (la ruota è visibile subito)
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       numSegments: segments.length,
@@ -182,13 +186,15 @@
         alert("Non hai giri disponibili. Acquista extra tiri.");
         return;
       }
-      // Decrementa il contatore (aggiorna localStorage)
+      // Decrementa il contatore: se il free spin è già usato, decrementa gli extra
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
-      if (total > 0) {
+      if (total > 1) { // se l'utente ha usato il free spin (1 free spin già garantito al giorno)
         total--;
-        localStorage.setItem("purchasedExtraSpins", total > 0 ? total - 1 : 0);
+        localStorage.setItem("purchasedExtraSpins", total > 1 ? total - 1 : 0);
         document.getElementById("freeSpinsCount").innerText = total;
+      } else if (total === 1) {
+        // Primo spin gratuito: non decrementare
       }
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {

@@ -3,8 +3,7 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Gestisce:
- • Lo spin della ruota e la scelta del premio
- • Il trasferimento automatico dei token (per premi in GKY)
+ • Lo spin della ruota, la scelta del premio e il trasferimento automatico dei token
  • L'acquisto e la conferma degli extra giri
  • L'endpoint per il saldo del wallet
 """
@@ -48,7 +47,7 @@ w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# ------------------ HELPERS PER WEB3 ------------------
+# Funzioni helper per conversioni
 def to_wei(val, unit):
     return Web3.to_wei(val, unit)
 
@@ -137,14 +136,23 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         )
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
         token_amount = to_wei(quantita, 'ether')
-        tx = token_contract.functions.transfer(destinatario, token_amount).build_transaction({
-            'from': WALLET_DISTRIBUZIONE,
-            'nonce': nonce,
-            'gas': 100000,
-            'gasPrice': gas_price,
-        })
+        # Gestisce sia build_transaction (v6) che buildTransaction (v5)
+        transfer_fn = token_contract.functions.transfer(destinatario, token_amount)
+        if hasattr(transfer_fn, "build_transaction"):
+            tx = transfer_fn.build_transaction({
+                'from': WALLET_DISTRIBUZIONE,
+                'nonce': nonce,
+                'gas': 100000,
+                'gasPrice': gas_price,
+            })
+        else:
+            tx = transfer_fn.buildTransaction({
+                'from': WALLET_DISTRIBUZIONE,
+                'nonce': nonce,
+                'gas': 100000,
+                'gasPrice': gas_price,
+            })
         signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-        # Usa raw_transaction (con underscore) se disponibile
         raw_tx = signed_tx.raw_transaction if hasattr(signed_tx, 'raw_transaction') else signed_tx.rawTransaction
         tx_hash = w3.eth.send_raw_transaction(raw_tx)
         logging.info(f"Token inviati: {quantita} GKY, txHash: {tx_hash.hex()}")
@@ -167,13 +175,17 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         session_db.close()
     return True
 
-# ------------------ ASSEGNAZIONE PREMIO ------------------
+# ------------------ ASSEGNAZIONE PREMIO CON PROBABILITÀ AGGIORNATE ------------------
 def get_prize() -> str:
-    prizes = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY', 'NO PRIZE', 'NO PRIZE', 'NO PRIZE']
-    prize = random.choice(prizes)
+    # 7 premi vincenti e 12 "NO PRIZE" per una probabilità di vincita ~36.8%
+    winning = ['10 GKY', '20 GKY', '50 GKY', '100 GKY', '250 GKY', '500 GKY', '1000 GKY']
+    losing = ['NO PRIZE'] * 12
+    outcomes = winning + losing
+    prize = random.choice(outcomes)
     logging.info(f"get_prize() scelto: {prize}")
     return prize
 
+# ------------------ OTTENIMENTO UTENTE E GESTIONE SPIN ------------------
 def get_user(wallet_address: str):
     session = Session()
     try:
@@ -188,7 +200,6 @@ def get_user(wallet_address: str):
     finally:
         session.close()
 
-# ------------------ ENDPOINT SPIN ------------------
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
     user = get_user(req.wallet_address)
@@ -196,14 +207,21 @@ async def api_spin(req: SpinRequest):
     try:
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
+        # Controlla se l'utente ha già usato il free spin oggi:
         if not user.last_play_date or user.last_play_date.astimezone(italy).date() != now.date():
+            # Primo spin del giorno: free spin + extra spins rimanenti (non vengono decurtati il free spin)
+            free_spin = True
             available = 1 + user.extra_spins
             user.last_play_date = now
             session.commit()
         else:
-            available = user.extra_spins or 0
-            if available <= 0:
+            # Dopo il free spin: si utilizzano solo gli extra spins
+            if user.extra_spins <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
+            free_spin = False
+            available = user.extra_spins
+            user.extra_spins -= 1
+            session.commit()
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
@@ -224,7 +242,9 @@ async def api_spin(req: SpinRequest):
             session.add(record)
             session.commit()
         logging.info(f"Spin per {req.wallet_address}: premio {premio}")
-        return {"message": result_text, "prize": premio, "available_spins": 1 + user.extra_spins}
+        # Restituisce il numero di giri rimanenti (free spin + extra)
+        remaining = (1 + user.extra_spins) if free_spin else user.extra_spins
+        return {"message": result_text, "prize": premio, "available_spins": remaining}
     except Exception as e:
         logging.error(f"Errore nello spin: {e}")
         raise HTTPException(status_code=500, detail="Errore durante lo spin.")
@@ -274,7 +294,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             raise HTTPException(status_code=400, detail="Tx già usata per un acquisto.")
         if req.num_spins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi confermare solo 1, 3 o 10 giri extra.")
-        # Semplice verifica che la tx esista
+        # Verifica minima che la tx esista (non controlliamo ulteriormente)
         try:
             tx = w3_no_mw.eth.get_transaction(req.tx_hash)
         except Exception as e:
