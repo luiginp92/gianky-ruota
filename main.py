@@ -180,17 +180,15 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali:
-    # ("10 GKY", 30), ("20 GKY", 15), ("50 GKY", 10), ("100 GKY", 5),
-    # ("250 GKY", 3), ("500 GKY", 2), ("1000 GKY", 1), ("NO PRIZE", 44)
+    # Premi e percentuali (modificate: dimezzate per premi superiori a 50 GKY)
     prizes = [
         ("10 GKY", 30),
         ("20 GKY", 15),
         ("50 GKY", 10),
-        ("100 GKY", 5),
-        ("250 GKY", 3),
-        ("500 GKY", 2),
-        ("1000 GKY", 1),
+        ("100 GKY", 2),    # dimezzato da 5
+        ("250 GKY", 1),    # dimezzato da 3
+        ("500 GKY", 1),    # dimezzato da 2
+        ("1000 GKY", 1),   # minimo 1
         ("NO PRIZE", 44)
     ]
     total = sum(weight for _, weight in prizes)
@@ -329,7 +327,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
     # Questo endpoint restituisce una conferma della distribuzione,
-    # dato che il trasferimento token è già avvenuto in /api/spin.
+    # dato che il trasferimento dei token è già avvenuto in /api/spin.
     if req.prize.strip().upper() == "NO PRIZE":
         return {"message": "Nessun premio da distribuire."}
     else:
