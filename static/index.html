@@ -72,7 +72,7 @@
     document.getElementById("btnBuySpins").addEventListener("click", () => window.location.href = "/static/buyspins.html");
     document.getElementById("btnReferral").addEventListener("click", () => window.location.href = "/static/referral.html");
     document.getElementById("btnTask").addEventListener("click", () => window.location.href = "/static/task.html");
-    
+
     // Aggiorna saldi e contatore
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
@@ -84,19 +84,25 @@
           document.getElementById("maticBalance").innerText = data.matic;
           document.getElementById("tokenBalance").innerText = data.gky;
         }
-      } catch (error) { console.error("Errore nei saldi:", error); }
+      } catch (error) {
+        console.error("Errore nei saldi:", error);
+      }
     }
     window.addEventListener("load", updateBalances);
-    
+
+    // Contatore dei giri gratuiti
     function getFreeSpins() {
+      // Nel nostro caso, il free spin viene concesso solo dal back-end;
+      // qui usiamo il valore memorizzato in locale per mostrare il contatore.
+      // Assicurati che venga aggiornato in base alla risposta del back-end.
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       document.getElementById("freeSpinsCount").innerText = total;
       return total;
     }
     window.addEventListener("load", getFreeSpins);
-    
-    // Configurazione della ruota: Usa ESATTAMENTE 8 segmenti in questo ordine!
+
+    // Configurazione della ruota: Usa ESATTAMENTE 8 segmenti nell'ordine richiesto
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -107,12 +113,12 @@
       { text: '1000 GKY', color: '#1ABC9C' },
       { text: 'NO PRIZE', color: '#C0392B' }
     ];
-    
+
     const segments = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
     }));
-    
+
     // Crea la ruota con 8 segmenti
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
@@ -121,7 +127,7 @@
       segments: segments,
       animation: { type: 'spinToStop', duration: 5, spins: 8 }
     });
-    
+
     function findPrizeIndex(prizeText) {
       prizeText = prizeText.trim().toUpperCase();
       for (let i = 0; i < prizeData.length; i++) {
@@ -129,7 +135,7 @@
       }
       return -1;
     }
-    
+
     function createWheel(finalAngle) {
       return new Winwheel({
         canvasId: 'wheelCanvas',
@@ -169,20 +175,19 @@
         }
       });
     }
-    
+
     function resetWheel() {
       theWheel.stopAnimation(false);
       theWheel.rotationAngle = 0;
       theWheel.draw();
       document.getElementById("btnSpin").disabled = false;
     }
-    
+
     document.getElementById("btnSpin").addEventListener("click", async () => {
       if (getFreeSpins() <= 0) {
         alert("Non hai giri disponibili. Acquista extra tiri.");
         return;
       }
-      // Logica per decrementare i giri extra (gestita separatamente se serve)
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
         alert("Wallet non collegato.");
@@ -205,8 +210,8 @@
           document.getElementById("btnSpin").disabled = false;
           return;
         }
-        const anglePerSegment = 360 / segments.length;
-        const stopAngleCenter = (chosenIndex * anglePerSegment) + (anglePerSegment / 2);
+        const segmentAngle = 360 / segments.length;
+        const stopAngleCenter = (chosenIndex * segmentAngle) + (segmentAngle / 2);
         const extraSpins = 360 * 5;
         const finalAngle = (360 - stopAngleCenter) + extraSpins;
         console.log("Angolo finale calcolato:", finalAngle);

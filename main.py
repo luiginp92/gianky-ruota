@@ -71,10 +71,6 @@ def get_dynamic_gas_price():
 
 # ------------------ VERIFICA TX ------------------
 def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool:
-    """
-    Verifica minima: controlla che la TX esista, che il destinatario sia il contratto token
-    e (eventualmente) che l'importo trasferito sia sufficiente.
-    """
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
         if tx.get("to", "").lower() != TOKEN_ADDRESS.lower():
@@ -184,7 +180,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali da te specificati:
+    # Premi e percentuali:
     # ("10 GKY", 30), ("20 GKY", 15), ("50 GKY", 10), ("100 GKY", 5),
     # ("250 GKY", 3), ("500 GKY", 2), ("1000 GKY", 1), ("NO PRIZE", 44)
     prizes = [
@@ -232,7 +228,6 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se l'utente ha un last_play_date, lo assicuriamo come aware
         if user.last_play_date is None:
             last_play = None
         else:
@@ -240,12 +235,12 @@ async def api_spin(req: SpinRequest):
                 last_play = italy.localize(user.last_play_date)
             else:
                 last_play = user.last_play_date.astimezone(italy)
-        # Concedi free spin solo se non ha mai giocato o sono trascorse almeno 24 ore
+        # Concedi free spin solo se non hai mai giocato o sono trascorse almeno 24 ore
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now  # Registra il free spin
+            user.last_play_date = now
             session.commit()
             free_spin = True
-            available = user.extra_spins  # Free spin concesso: non decrementa gli extra spin
+            available = user.extra_spins  # Free spin concesso: non decrementa gli extra
         else:
             free_spin = False
             if user.extra_spins <= 0:
@@ -314,7 +309,6 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
-        # Non resettiamo last_play_date per mantenere il free spin concesso solo dopo 24 ore
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
@@ -329,6 +323,18 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         raise HTTPException(status_code=500, detail="Errore nella conferma degli extra giri.")
     finally:
         session.close()
+
+# ------------------ ENDPOINT DISTRIBUTE ------------------
+@app.post("/api/distribute")
+async def api_distribute(req: DistributePrizeRequest):
+    """
+    Poiché la distribuzione dei token avviene già in /api/spin,
+    questo endpoint restituisce semplicemente una conferma.
+    """
+    if req.prize.strip().upper() == "NO PRIZE":
+        return {"message": "Nessun premio da distribuire."}
+    else:
+        return {"message": f"Premio {req.prize} già distribuito al wallet {req.wallet_address}."}
 
 # ------------------ ENDPOINT REFERRAL ------------------
 @app.get("/api/referral")
