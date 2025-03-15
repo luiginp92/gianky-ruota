@@ -13,7 +13,7 @@
 <body>
   <div class="container">
     <h1>Il tuo Link Referral</h1>
-    <p>Condividi questo link con i tuoi amici. Quando un nuovo utente utilizzerà questo link per collegarsi, tu e il nuovo utente riceverete 2 giri gratuiti.</p>
+    <p>Condividi questo link con i tuoi amici: quando un nuovo utente si collega tramite questo link, TU e il nuovo utente riceverete 2 giri gratuiti.</p>
     <div class="mb-3">
       <input type="text" id="referralLink" class="form-control" readonly>
     </div>
@@ -21,20 +21,19 @@
   </div>
 
   <script>
-    // Assumi che l'indirizzo del wallet sia già salvato in localStorage
+    // Recupera il wallet salvato in localStorage
     const wallet = localStorage.getItem("walletAddress");
+    const referralInput = document.getElementById("referralLink");
     if (wallet && wallet.length === 42) {
-      // Il link referral viene creato in base a un pattern predefinito.
       const referralLink = "https://t.me/tuo_bot?start=ref_" + wallet;
-      document.getElementById("referralLink").value = referralLink;
+      referralInput.value = referralLink;
     } else {
-      document.getElementById("referralLink").value = "Wallet non trovato. Connetti il wallet prima.";
+      referralInput.value = "Wallet non trovato. Collega il wallet prima.";
     }
-
+    
     document.getElementById("copyButton").addEventListener("click", () => {
-      const input = document.getElementById("referralLink");
-      input.select();
-      input.setSelectionRange(0, 99999);
+      referralInput.select();
+      referralInput.setSelectionRange(0, 99999);
       document.execCommand("copy");
       alert("Link copiato negli appunti!");
     });
