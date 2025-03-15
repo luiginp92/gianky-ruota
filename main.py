@@ -166,7 +166,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali come da te indicato:
+    # Premi e percentuali esattamente come specificato:
     # ("10 GKY", 30), ("20 GKY", 15), ("50 GKY", 10), ("100 GKY", 5),
     # ("250 GKY", 3), ("500 GKY", 2), ("1000 GKY", 1), ("NO PRIZE", 44)
     prizes = [
@@ -213,18 +213,19 @@ async def api_spin(req: SpinRequest):
     try:
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Concedi free spin solo se l'utente non ha mai giocato o se sono passate almeno 24 ore dall'ultimo free spin.
+        free_spin = False
+        # Concedi il free spin solo se l'utente non ha mai giocato o se sono passate almeno 24 ore dal suo ultimo free spin.
         if user.last_play_date is None or (now - user.last_play_date) >= datetime.timedelta(hours=24):
-            user.last_play_date = now
+            free_spin = True
+            user.last_play_date = now  # registra il momento in cui il free spin viene utilizzato
             session.commit()
-            # Free spin concesso: non si tocca il conto degli extra.
-            available = user.extra_spins
         else:
             if user.extra_spins <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
             user.extra_spins -= 1
             session.commit()
-            available = user.extra_spins
+        # Ricarica l'utente per avere dati aggiornati
+        session.refresh(user)
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
@@ -245,6 +246,7 @@ async def api_spin(req: SpinRequest):
             session.add(record)
             session.commit()
         logging.info(f"Spin per {req.wallet_address}: premio {premio}")
+        # I giri disponibili successivi sono solo gli extra spin (il free spin viene concesso una sola volta ogni 24 ore)
         remaining = user.extra_spins
         return {"message": result_text, "prize": premio, "available_spins": remaining}
     except Exception as e:
@@ -285,7 +287,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             raise HTTPException(status_code=400, detail="Tx non valida o importo insufficiente.")
         USED_TX.add(req.tx_hash)
         user.extra_spins += req.num_spins
-        # NON RESETTIAMO last_play_date per non riabilitare il free spin in anticipo
+        # NON resettiamo last_play_date qui, così il free spin rimane disponibile solo dopo 24 ore dall'ultimo uso
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
