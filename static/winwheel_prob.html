@@ -8,6 +8,7 @@
     canvas { border: 1px solid #000; margin: 20px auto; display: block; }
     button { padding: 10px 20px; font-size: 1rem; cursor: pointer; }
   </style>
+  <!-- Importa TweenMax e Winwheel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
@@ -18,7 +19,8 @@
   <button id="spinButton">Gira la ruota</button>
   
   <script>
-    // L'array dei segmenti è esattamente allineato con il back-end
+    // I segmenti devono essere allineati con il back-end:
+    //  "10 GKY", "20 GKY", "50 GKY", "100 GKY", "250 GKY", "500 GKY", "1000 GKY", "NO PRIZE"
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -47,16 +49,15 @@
         callbackFinished: function(indicatedSegment) {
           alert("Hai vinto: " + indicatedSegment.text);
           document.getElementById("spinButton").disabled = false;
+          // Dopo l'animazione, puoi aggiornare eventuali UI o contatori
         }
       }
     });
     
+    // Calcola l'angolo di stop in base al premio ricevuto dal back-end
     function spinToPrize(prize) {
-      // Trova l'indice del premio nell'array prizeData
       let index = prizeData.findIndex(item => item.text.trim().toUpperCase() === prize.trim().toUpperCase());
-      if (index === -1) {
-        index = prizeData.length - 1;
-      }
+      if (index === -1) index = prizeData.length - 1;
       const segmentAngle = 360 / prizeData.length;
       const segmentCenter = index * segmentAngle + segmentAngle / 2;
       const extraSpins = 360 * 5;
@@ -67,13 +68,13 @@
     
     document.getElementById("spinButton").addEventListener("click", () => {
       document.getElementById("spinButton").disabled = true;
-      // Supponiamo che il wallet sia salvato in localStorage (altrimenti modificalo)
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
         alert("Wallet non connesso.");
         document.getElementById("spinButton").disabled = false;
         return;
       }
+      // Chiamata al back-end per lo spin
       fetch("/api/spin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

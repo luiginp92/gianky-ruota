@@ -25,7 +25,9 @@ from database import Session, User, PremioVinto, GlobalCounter, init_db
 from dotenv import load_dotenv
 load_dotenv()
 
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
@@ -74,7 +76,7 @@ def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool
         if tx.get("to", "").lower() != TOKEN_ADDRESS.lower():
             logging.error("La TX non è indirizzata al contratto token.")
             return False
-        # (Implementazione minima: ulteriori controlli possono essere aggiunti)
+        # Implementazione minima: se la TX viene recuperata, la consideriamo valida
         return True
     except Exception as e:
         logging.error(f"Errore verifica TX: {e}")
@@ -179,7 +181,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali da te specificati:
+    # Premi e percentuali specificati:
     # ("10 GKY", 30), ("20 GKY", 15), ("50 GKY", 10), ("100 GKY", 5),
     # ("250 GKY", 3), ("500 GKY", 2), ("1000 GKY", 1), ("NO PRIZE", 44)
     prizes = [
@@ -227,16 +229,16 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se last_play_date esiste, assicurarsi che sia aware
+        # Se last_play_date esiste, assicurati che sia "aware"
         last_play = user.last_play_date
         if last_play is not None and last_play.tzinfo is None:
             last_play = italy.localize(last_play)
-        # Concedi free spin solo se l'utente non ha mai giocato o sono trascorse almeno 24 ore
+        # Concedi free spin solo se non hai mai giocato o sono passate almeno 24 ore
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
             user.last_play_date = now
             session.commit()
             free_spin = True
-            available = user.extra_spins  # Free spin concesso, non tocca gli extra
+            available = user.extra_spins  # Free spin concesso: non tocca gli extra
         else:
             free_spin = False
             if user.extra_spins <= 0:
@@ -245,7 +247,7 @@ async def api_spin(req: SpinRequest):
             session.commit()
             available = user.extra_spins
         premio = get_prize()
-        # Qui il premio calcolato deve essere esattamente quello distribuito
+        # Il premio restituito dal back-end deve essere quello distribuito
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
@@ -306,7 +308,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
-        # NON resettiamo last_play_date: il free spin resta concesso solo 24 ore dopo l'ultimo spin
+        # Non resettiamo last_play_date per far sì che il free spin rimanga disponibile solo dopo 24 ore dall'ultimo uso
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
