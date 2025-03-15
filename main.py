@@ -169,16 +169,16 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 def get_prize() -> str:
     # Distribuzione pesata: la somma delle percentuali è 100.
     prizes = [
-        ("NFT BASIC", 2),
-        ("NFT STARTER", 4),
+        
+       
         ("10 GKY", 30),
-        ("20 GKY", 25),
-        ("50 GKY", 20),
-        ("100 GKY", 10),
-        ("250 GKY", 5),
+        ("20 GKY", 15),
+        ("50 GKY", 10),
+        ("100 GKY", 5),
+        ("250 GKY", 3),
         ("500 GKY", 2),
         ("1000 GKY", 1),
-        ("NO PRIZE", 1)
+        ("NO PRIZE", 44)
     ]
     total = sum(weight for _, weight in prizes)
     r = random.uniform(0, total)
