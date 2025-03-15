@@ -19,7 +19,7 @@
   <button id="spinButton">Gira la ruota</button>
   
   <script>
-    // Array dei segmenti allineato con il back-end: 8 segmenti
+    // L'array dei segmenti DEVE corrispondere esattamente al back-end (8 segmenti)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -45,6 +45,7 @@
         type: 'spinToStop',
         duration: 5,
         spins: 8,
+        // Il callback verrà chiamato al termine dell'animazione
         callbackFinished: function(indicatedSegment) {
           alert("Hai vinto: " + indicatedSegment.text);
           document.getElementById("spinButton").disabled = false;
@@ -52,14 +53,19 @@
       }
     });
     
-    // Calcola l'indice del premio e l'angolo di stop
+    // Trova l'indice del premio (comparazione case-insensitive)
     function findPrizeIndex(prizeText) {
-      return prizeData.findIndex(item => item.text.trim().toUpperCase() === prizeText.trim().toUpperCase());
+      prizeText = prizeText.trim().toUpperCase();
+      for (let i = 0; i < prizeData.length; i++) {
+        if (prizeData[i].text.trim().toUpperCase() === prizeText) return i;
+      }
+      return -1;
     }
     
+    // Calcola l'angolo di stop in base all'indice trovato
     function spinToPrize(prize) {
       let index = findPrizeIndex(prize);
-      if (index === -1) index = prizeData.length - 1;
+      if (index === -1) index = prizeData.length - 1; // Default a "NO PRIZE" se non trovato
       const segmentAngle = 360 / prizeData.length;
       const stopAngleCenter = (index * segmentAngle) + (segmentAngle / 2);
       const extraSpins = 360 * 5;
@@ -76,6 +82,7 @@
         document.getElementById("spinButton").disabled = false;
         return;
       }
+      // Chiamata al back-end per ottenere il premio reale
       fetch("/api/spin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
