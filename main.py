@@ -180,12 +180,12 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali (modificate: dimezzate per premi superiori a 50 GKY)
+    # Premi e percentuali (per premi superiori a 50 GKY le percentuali sono dimezzate)
     prizes = [
         ("10 GKY", 30),
         ("20 GKY", 15),
         ("50 GKY", 10),
-        ("100 GKY", 2),    # dimezzato da 5
+        ("100 GKY", 3),    # dimezzato da 5
         ("250 GKY", 1),    # dimezzato da 3
         ("500 GKY", 1),    # dimezzato da 2
         ("1000 GKY", 1),   # minimo 1
