@@ -84,11 +84,13 @@
           document.getElementById("maticBalance").innerText = data.matic;
           document.getElementById("tokenBalance").innerText = data.gky;
         }
-      } catch (error) { console.error("Errore nei saldi:", error); }
+      } catch (error) {
+        console.error("Errore nei saldi:", error);
+      }
     }
     window.addEventListener("load", updateBalances);
 
-    // Contatore dei giri gratuiti: il free spin viene concesso dal back‑end, qui mostriamo il totale (1 + extra)
+    // Contatore dei giri: il free spin viene concesso dal back‑end, quindi mostriamo (1 + extra)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -97,7 +99,7 @@
     }
     window.addEventListener("load", getFreeSpins);
 
-    // Configurazione della ruota: 8 segmenti nell'ordine esatto
+    // Array dei premi (8 segmenti) nell'ordine esatto
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -114,9 +116,10 @@
       text: item.text
     }));
 
-    // Crea la ruota con 8 segmenti
+    // Crea la ruota con startAngle impostato a 22.5 per allineare il primo segmento al top
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
+      startAngle: 22.5,
       numSegments: segments.length,
       outerRadius: 140,
       segments: segments,
@@ -134,6 +137,7 @@
     function createWheel(finalAngle) {
       return new Winwheel({
         canvasId: 'wheelCanvas',
+        startAngle: 22.5,
         numSegments: segments.length,
         outerRadius: 140,
         segments: segments,
@@ -206,9 +210,10 @@
           return;
         }
         const segmentAngle = 360 / segments.length;
-        const stopAngleCenter = (chosenIndex * segmentAngle) + (segmentAngle / 2);
+        // Calcola il centro del segmento in base a startAngle=22.5:
+        const centerAngle = chosenIndex * segmentAngle + 22.5;
         const extraSpins = 360 * 5;
-        const finalAngle = (360 - stopAngleCenter) + extraSpins;
+        const finalAngle = extraSpins + centerAngle;
         console.log("Angolo finale calcolato:", finalAngle);
         theWheel = createWheel(finalAngle);
         theWheel.startAnimation();

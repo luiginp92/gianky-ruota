@@ -328,8 +328,8 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
 # ------------------ ENDPOINT DISTRIBUTE ------------------
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
-    # Poiché la distribuzione dei token avviene già in /api/spin,
-    # questo endpoint restituisce semplicemente una conferma.
+    # Questo endpoint restituisce una conferma della distribuzione,
+    # dato che il trasferimento token è già avvenuto in /api/spin.
     if req.prize.strip().upper() == "NO PRIZE":
         return {"message": "Nessun premio da distribuire."}
     else:
