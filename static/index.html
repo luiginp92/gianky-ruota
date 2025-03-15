@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GiankyCoin Web App</title>
-  <!-- Imposta lo sfondo con l'immagine sfondo.png senza overlay grigio -->
+  <!-- Usa lo sfondo con sfondo.png -->
   <style>
     body {
       background: url('/static/sfondo.png') no-repeat center center fixed;
@@ -12,7 +12,7 @@
       padding-top: 20px;
       margin: 0;
     }
-    /* Rimuove il header con il titolo */
+    /* Rimuove il header (titolo) e lo sfondo grigio */
     header { display: none; }
     .content { padding: 2rem; }
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
@@ -20,7 +20,7 @@
     .balance-info { text-align: right; font-size: 0.9rem; }
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen iniziale */
+    /* Splash screen */
     #splash {
       position: fixed;
       top: 0; left: 0;
@@ -42,72 +42,60 @@
     <img src="/static/prepagina.png" alt="Caricamento..." style="max-width: 100%; height: auto;">
   </div>
 
-  <!-- Aree per saldi e giri (eventualmente gestiti da script, se necessario) -->
-  <div class="balance-info" id="balances" style="position: absolute; top: 10px; right: 10px; color: #fff;"></div>
-  <div id="freeSpins" style="position: absolute; top: 50px; right: 10px; color: #fff;"></div>
-
   <div class="container content">
+    <!-- Sezione saldi e giri (puoi anche visualizzarla in una parte fissa in alto a destra) -->
+    <div class="balance-info" id="balances"></div>
+    <div id="freeSpins" class="mb-3"></div>
+
+    <!-- Ruota -->
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- La ruota è visibile all'avvio -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
-    <div class="row text-center">
-      <div class="col">
-        <!-- Pulsante per girare la ruota: usa l'immagine gira.png -->
-        <button id="btnSpin" class="btn btn-primary btn-custom" style="background: none; border: none;">
-          <img src="/static/gira.png" alt="Gira la ruota" style="max-width: 100px;">
-        </button>
+
+    <!-- Pulsante centrale per "Gira la ruota" -->
+    <div class="row mb-3">
+      <div class="col text-center">
+        <button id="btnSpin" class="btn btn-primary btn-custom">Gira la ruota</button>
       </div>
     </div>
-    <div class="row text-center mt-3">
-      <div class="col">
-        <!-- Pulsante per connettere il wallet: conwall.png -->
-        <button id="btnConnect" class="btn btn-success btn-custom" style="background: none; border: none;">
-          <img src="/static/conwall.png" alt="Connetti Wallet" style="max-width: 100px;">
-        </button>
+
+    <!-- Altri 4 pulsanti disposti in due colonne: sinistra e destra -->
+    <div class="row">
+      <div class="col-md-6">
+        <div class="d-grid gap-2">
+          <button id="btnConnect" class="btn btn-success btn-custom">Connetti Wallet</button>
+          <button id="btnBuySpins" class="btn btn-warning btn-custom">Acquista Extra Tiri</button>
+        </div>
       </div>
-      <div class="col">
-        <!-- Pulsante per acquistare extra tiri: acquista.png -->
-        <button id="btnBuySpins" class="btn btn-warning btn-custom" style="background: none; border: none;">
-          <img src="/static/acquista.png" alt="Acquista Extra Tiri" style="max-width: 100px;">
-        </button>
-      </div>
-    </div>
-    <div class="row text-center mt-3">
-      <div class="col">
-        <!-- Pulsante per referral: refferal.png -->
-        <button id="btnReferral" class="btn btn-info btn-custom" style="background: none; border: none;">
-          <img src="/static/refferal.png" alt="Ottieni Referral" style="max-width: 100px;">
-        </button>
-      </div>
-      <div class="col">
-        <!-- Pulsante per task: taskc.png -->
-        <button id="btnTask" class="btn btn-secondary btn-custom" style="background: none; border: none;">
-          <img src="/static/taskc.png" alt="Completa Task" style="max-width: 100px;">
-        </button>
+      <div class="col-md-6">
+        <div class="d-grid gap-2">
+          <button id="btnReferral" class="btn btn-info btn-custom">Ottieni Referral</button>
+          <button id="btnTask" class="btn btn-secondary btn-custom">Completa Task</button>
+        </div>
       </div>
     </div>
+
     <div class="row mt-4">
       <div class="col">
         <div id="result" class="alert alert-info" style="display:none;"></div>
       </div>
     </div>
   </div>
+
   <footer class="footer">
     <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
   </footer>
   
   <script>
-    // Rimuovi la splash screen al caricamento completo
+    // Rimuove la splash screen al caricamento completo
     window.addEventListener("load", () => {
       setTimeout(() => {
-        const splash = document.getElementById("splash");
-        splash.style.display = "none";
+        document.getElementById("splash").style.display = "none";
       }, 1000);
     });
-    
+
     // Navigazione
     document.getElementById("btnConnect").addEventListener("click", () => window.location.href = "/static/connectwallet.html");
     document.getElementById("btnBuySpins").addEventListener("click", () => window.location.href = "/static/buyspins.html");
@@ -124,7 +112,6 @@
           const data = await res.json();
           document.getElementById("maticBalance").innerText = data.matic;
           document.getElementById("tokenBalance").innerText = data.gky;
-          // Aggiorna anche l'area balance (opzionale)
           document.getElementById("balances").innerText = `MATIC: ${data.matic} | GKY: ${data.gky}`;
         }
       } catch (error) {
@@ -133,16 +120,17 @@
     }
     window.addEventListener("load", updateBalances);
 
-    // Contatore dei giri: free spin (1 gratis) + extra (gestito dal back-end)
+    // Contatore dei giri: free spin (1 gratis) + extra (gestiti dal back-end)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       document.getElementById("freeSpinsCount").innerText = total;
+      document.getElementById("freeSpins").innerText = `Giri disponibili: ${total}`;
       return total;
     }
     window.addEventListener("load", getFreeSpins);
 
-    // Configurazione della ruota: 8 segmenti esatti
+    // Configurazione della ruota: 8 segmenti esatti con startAngle=22.5 per centrare il primo segmento
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -153,13 +141,11 @@
       { text: '1000 GKY', color: '#1ABC9C' },
       { text: 'NO PRIZE', color: '#C0392B' }
     ];
-    
     const segments = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
     }));
 
-    // Crea la ruota con startAngle impostato a 22.5 per centrare il primo segmento
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       startAngle: 22.5,
@@ -195,76 +181,4 @@
             if (wallet) wallet = wallet.trim();
             if (!wallet || wallet.length !== 42) {
               alert("Wallet non valido o non connesso.");
-              resetWheel();
-              return;
-            }
-            try {
-              const res = await fetch("/api/distribute", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ wallet_address: wallet, prize: indicatedSegment.text })
-              });
-              if (!res.ok) throw new Error("Distribuzione fallita: " + res.status);
-              const data = await res.json();
-              alert(data.message);
-              updateBalances();
-            } catch (error) {
-              console.error("Errore nella distribuzione:", error);
-              alert("Errore nella distribuzione. Contatta l'assistenza.");
-            }
-            resetWheel();
-          }
-        }
-      });
-    }
-
-    function resetWheel() {
-      theWheel.stopAnimation(false);
-      theWheel.rotationAngle = 0;
-      theWheel.draw();
-      document.getElementById("btnSpin").disabled = false;
-    }
-
-    document.getElementById("btnSpin").addEventListener("click", async () => {
-      if (getFreeSpins() <= 0) {
-        alert("Non hai giri disponibili. Acquista extra tiri.");
-        return;
-      }
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) {
-        alert("Wallet non collegato.");
-        document.getElementById("btnSpin").disabled = false;
-        return;
-      }
-      try {
-        const spinRes = await fetch("/api/spin", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: wallet })
-        });
-        if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
-        const spinData = await spinRes.json();
-        console.log("Risultato spin:", spinData);
-        const prize = spinData.prize;
-        let chosenIndex = findPrizeIndex(prize);
-        if (chosenIndex === -1) {
-          alert("Premio non riconosciuto: " + prize);
-          document.getElementById("btnSpin").disabled = false;
-          return;
-        }
-        const segmentAngle = 360 / segments.length;
-        const centerAngle = chosenIndex * segmentAngle + 22.5; // con startAngle=22.5
-        const extraSpins = 360 * 5;
-        const finalAngle = extraSpins + centerAngle;
-        console.log("Angolo finale calcolato:", finalAngle);
-        theWheel = createWheel(finalAngle);
-        theWheel.startAnimation();
-      } catch (error) {
-        console.error("Errore nello spin:", error);
-        alert("Errore nello spin. Contatta l'assistenza.");
-        document.getElementById("btnSpin").disabled = false;
-      }
-    });
-  </script>
-</body>
-</html>
+              res
