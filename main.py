@@ -181,7 +181,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali specificati:
+    # Premi e percentuali da te specificati:
     # ("10 GKY", 30), ("20 GKY", 15), ("50 GKY", 10), ("100 GKY", 5),
     # ("250 GKY", 3), ("500 GKY", 2), ("1000 GKY", 1), ("NO PRIZE", 44)
     prizes = [
@@ -229,16 +229,17 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se last_play_date esiste, assicurati che sia "aware"
-        last_play = user.last_play_date
-        if last_play is not None and last_play.tzinfo is None:
-            last_play = italy.localize(last_play)
+        # Se last_play_date è presente, trattalo come se fosse in Europe/Rome (se è naive)
+        if user.last_play_date is not None:
+            last_play = italy.localize(user.last_play_date) if user.last_play_date.tzinfo is None else user.last_play_date
+        else:
+            last_play = None
         # Concedi free spin solo se non hai mai giocato o sono passate almeno 24 ore
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now
+            user.last_play_date = now  # Aggiorna il free spin
             session.commit()
             free_spin = True
-            available = user.extra_spins  # Free spin concesso: non tocca gli extra
+            available = user.extra_spins  # Il free spin è concesso e non decrementa extra_spins
         else:
             free_spin = False
             if user.extra_spins <= 0:
@@ -247,7 +248,6 @@ async def api_spin(req: SpinRequest):
             session.commit()
             available = user.extra_spins
         premio = get_prize()
-        # Il premio restituito dal back-end deve essere quello distribuito
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
@@ -308,7 +308,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
-        # Non resettiamo last_play_date per far sì che il free spin rimanga disponibile solo dopo 24 ore dall'ultimo uso
+        # Non resettiamo last_play_date: il free spin rimane concesso solo 24 ore dopo l'ultimo uso
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")

@@ -19,8 +19,7 @@
   <button id="spinButton">Gira la ruota</button>
   
   <script>
-    // I segmenti devono essere allineati con il back-end:
-    //  "10 GKY", "20 GKY", "50 GKY", "100 GKY", "250 GKY", "500 GKY", "1000 GKY", "NO PRIZE"
+    // Array dei segmenti allineato con il back-end: 8 segmenti
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -49,20 +48,23 @@
         callbackFinished: function(indicatedSegment) {
           alert("Hai vinto: " + indicatedSegment.text);
           document.getElementById("spinButton").disabled = false;
-          // Dopo l'animazione, puoi aggiornare eventuali UI o contatori
         }
       }
     });
     
-    // Calcola l'angolo di stop in base al premio ricevuto dal back-end
+    // Calcola l'indice del premio e l'angolo di stop
+    function findPrizeIndex(prizeText) {
+      return prizeData.findIndex(item => item.text.trim().toUpperCase() === prizeText.trim().toUpperCase());
+    }
+    
     function spinToPrize(prize) {
-      let index = prizeData.findIndex(item => item.text.trim().toUpperCase() === prize.trim().toUpperCase());
+      let index = findPrizeIndex(prize);
       if (index === -1) index = prizeData.length - 1;
       const segmentAngle = 360 / prizeData.length;
-      const segmentCenter = index * segmentAngle + segmentAngle / 2;
+      const stopAngleCenter = (index * segmentAngle) + (segmentAngle / 2);
       const extraSpins = 360 * 5;
-      const stopAngle = extraSpins + (360 - segmentCenter);
-      theWheel.animation.stopAngle = stopAngle;
+      const finalAngle = (360 - stopAngleCenter) + extraSpins;
+      theWheel.animation.stopAngle = finalAngle;
       theWheel.startAnimation();
     }
     
@@ -74,7 +76,6 @@
         document.getElementById("spinButton").disabled = false;
         return;
       }
-      // Chiamata al back-end per lo spin
       fetch("/api/spin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,7 +83,7 @@
       })
       .then(response => response.json())
       .then(data => {
-        console.log("Risposta backend:", data);
+        console.log("Risultato spin dal back-end:", data);
         spinToPrize(data.prize);
       })
       .catch(err => {
