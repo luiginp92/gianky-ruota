@@ -6,7 +6,14 @@
   <title>GiankyCoin Web App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    body { background-color: #f8f9fa; padding-top: 20px; }
+    /* Imposta lo sfondo con l'immagine sfondo.png */
+    body {
+      background: url('/static/sfondo.png') no-repeat center center fixed;
+      background-size: cover;
+      padding-top: 20px;
+      margin: 0;
+    }
+    /* Lascia il layout originale */
     .header { background-color: #343a40; color: white; padding: 1rem; text-align: center; }
     .content { padding: 2rem; }
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
@@ -14,12 +21,30 @@
     .balance-info { text-align: right; font-size: 0.9rem; }
     #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
+    /* Splash screen iniziale */
+    #splash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
   </style>
   <!-- Carica TweenMax e Winwheel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
 <body>
+  <!-- Splash screen: prepagina.png -->
+  <div id="splash">
+    <img src="/static/prepagina.png" alt="Caricamento..." style="max-width: 100%; height: auto;">
+  </div>
+  
   <header class="header">
     <h1>GiankyCoin App</h1>
     <div class="balance-info">
@@ -67,6 +92,13 @@
   </footer>
   
   <script>
+    // Rimuovi la splash screen quando il DOM è pronto
+    document.addEventListener("DOMContentLoaded", () => {
+      setTimeout(() => {
+        document.getElementById("splash").style.display = "none";
+      }, 1000);
+    });
+    
     // Navigazione
     document.getElementById("btnConnect").addEventListener("click", () => window.location.href = "/static/connectwallet.html");
     document.getElementById("btnBuySpins").addEventListener("click", () => window.location.href = "/static/buyspins.html");
@@ -90,7 +122,7 @@
     }
     window.addEventListener("load", updateBalances);
 
-    // Contatore dei giri: il free spin viene concesso dal back‑end, quindi mostriamo (1 + extra)
+    // Contatore dei giri: il free spin viene concesso dal back-end (1 gratis + extra)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -99,7 +131,7 @@
     }
     window.addEventListener("load", getFreeSpins);
 
-    // Array dei premi (8 segmenti) nell'ordine esatto
+    // Array dei premi: 8 segmenti in ordine
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -110,13 +142,12 @@
       { text: '1000 GKY', color: '#1ABC9C' },
       { text: 'NO PRIZE', color: '#C0392B' }
     ];
-    
     const segments = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
     }));
 
-    // Crea la ruota con startAngle impostato a 22.5 per allineare il primo segmento al top
+    // Crea la ruota con startAngle=22.5 per centrare il primo segmento
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       startAngle: 22.5,
@@ -210,7 +241,6 @@
           return;
         }
         const segmentAngle = 360 / segments.length;
-        // Calcola il centro del segmento in base a startAngle=22.5:
         const centerAngle = chosenIndex * segmentAngle + 22.5;
         const extraSpins = 360 * 5;
         const finalAngle = extraSpins + centerAngle;
