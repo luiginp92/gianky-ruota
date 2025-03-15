@@ -2,39 +2,41 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Referral - GiankyCoin</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    body { padding: 20px; text-align: center; }
-    .container { max-width: 600px; margin: auto; }
+    body { background-color: #f8f9fa; padding: 20px; }
+    .container { max-width: 600px; margin: auto; text-align: center; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Referral</h1>
-    <p>Clicca sul pulsante per ottenere il tuo link di referral:</p>
-    <button id="getReferral" class="btn btn-info">Ottieni Referral</button>
-    <p id="referralLink" style="margin-top:20px; font-weight:bold;"></p>
+    <h1>Il tuo Link Referral</h1>
+    <p>Condividi questo link con i tuoi amici. Quando un nuovo utente utilizzerà questo link per collegarsi, tu e il nuovo utente riceverete 2 giri gratuiti.</p>
+    <div class="mb-3">
+      <input type="text" id="referralLink" class="form-control" readonly>
+    </div>
+    <button id="copyButton" class="btn btn-primary">Copia Link</button>
   </div>
 
   <script>
-    document.getElementById("getReferral").addEventListener("click", async function() {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        alert("Devi prima collegare il wallet.");
-        return;
-      }
-      try {
-        const res = await fetch("/api/referral", {
-          headers: { "Authorization": "Bearer " + token }
-        });
-        if (!res.ok) throw new Error("Errore nella richiesta");
-        const data = await res.json();
-        document.getElementById("referralLink").innerText = data.referral_link;
-      } catch (error) {
-        console.error("Errore nel recuperare il referral:", error);
-        alert("Errore nel recuperare il referral.");
-      }
+    // Assumi che l'indirizzo del wallet sia già salvato in localStorage
+    const wallet = localStorage.getItem("walletAddress");
+    if (wallet && wallet.length === 42) {
+      // Il link referral viene creato in base a un pattern predefinito.
+      const referralLink = "https://t.me/tuo_bot?start=ref_" + wallet;
+      document.getElementById("referralLink").value = referralLink;
+    } else {
+      document.getElementById("referralLink").value = "Wallet non trovato. Connetti il wallet prima.";
+    }
+
+    document.getElementById("copyButton").addEventListener("click", () => {
+      const input = document.getElementById("referralLink");
+      input.select();
+      input.setSelectionRange(0, 99999);
+      document.execCommand("copy");
+      alert("Link copiato negli appunti!");
     });
   </script>
 </body>
