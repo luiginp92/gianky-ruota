@@ -4,48 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GiankyCoin Web App</title>
-  <!-- Usa lo sfondo con sfondo.png -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    body {
-      background: url('/static/sfondo.png') no-repeat center center fixed;
-      background-size: cover;
-      padding-top: 20px;
-      margin: 0;
-    }
-    /* Nascondiamo il header (titolo) e rimuoviamo sfondi grigi */
-    header { display: none; }
+    body { background-color: #f8f9fa; padding-top: 20px; }
+    .header { background-color: #343a40; color: white; padding: 1rem; text-align: center; }
     .content { padding: 2rem; }
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
-    .footer { background-color: transparent; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
+    .footer { background-color: #343a40; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
-    #wheelCanvas { border: none; display: block; margin: 20px auto; }
+    #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen iniziale */
-    #splash {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
   </style>
   <!-- Carica TweenMax e Winwheel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
 <body>
-  <!-- Splash screen: prepagina.png -->
-  <div id="splash">
-    <img src="/static/prepagina.png" alt="Caricamento..." style="max-width: 100%; height: auto;">
-  </div>
-
-  <!-- Sezione saldi e giri (posizionata in alto a destra) -->
-  <div class="balance-info" id="balances" style="position: absolute; top: 10px; right: 10px; color: #fff;"></div>
-  <div id="freeSpins" style="position: absolute; top: 50px; right: 10px; color: #fff;"></div>
-
+  <header class="header">
+    <h1>GiankyCoin App</h1>
+    <div class="balance-info">
+      <div>MATIC: <span id="maticBalance">0</span></div>
+      <div>GiankyCoin: <span id="tokenBalance">0</span></div>
+    </div>
+    <div id="freeSpins">Giri disponibili: <span id="freeSpinsCount">0</span></div>
+  </header>
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
@@ -53,25 +35,25 @@
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
-    <!-- Pulsante centrale per "Gira la ruota" -->
-    <div class="row mb-3">
-      <div class="col text-center">
+    <div class="row text-center">
+      <div class="col">
         <button id="btnSpin" class="btn btn-primary btn-custom">Gira la ruota</button>
       </div>
     </div>
-    <!-- Altri 4 pulsanti disposti in due colonne -->
-    <div class="row">
-      <div class="col-md-6">
-        <div class="d-grid gap-2">
-          <button id="btnConnect" class="btn btn-success btn-custom">Connetti Wallet</button>
-          <button id="btnBuySpins" class="btn btn-warning btn-custom">Acquista Extra Tiri</button>
-        </div>
+    <div class="row text-center mt-3">
+      <div class="col">
+        <button id="btnConnect" class="btn btn-success btn-custom">Connetti Wallet</button>
       </div>
-      <div class="col-md-6">
-        <div class="d-grid gap-2">
-          <button id="btnReferral" class="btn btn-info btn-custom">Ottieni Referral</button>
-          <button id="btnTask" class="btn btn-secondary btn-custom">Completa Task</button>
-        </div>
+      <div class="col">
+        <button id="btnBuySpins" class="btn btn-warning btn-custom">Acquista Extra Tiri</button>
+      </div>
+    </div>
+    <div class="row text-center mt-3">
+      <div class="col">
+        <button id="btnReferral" class="btn btn-info btn-custom">Ottieni Referral</button>
+      </div>
+      <div class="col">
+        <button id="btnTask" class="btn btn-secondary btn-custom">Completa Task</button>
       </div>
     </div>
     <div class="row mt-4">
@@ -80,19 +62,11 @@
       </div>
     </div>
   </div>
-
   <footer class="footer">
     <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
   </footer>
   
   <script>
-    // Rimuovi la splash screen al DOMContentLoaded (non aspetta il caricamento completo di tutte le immagini)
-    document.addEventListener("DOMContentLoaded", () => {
-      setTimeout(() => {
-        document.getElementById("splash").style.display = "none";
-      }, 1000);
-    });
-    
     // Navigazione
     document.getElementById("btnConnect").addEventListener("click", () => window.location.href = "/static/connectwallet.html");
     document.getElementById("btnBuySpins").addEventListener("click", () => window.location.href = "/static/buyspins.html");
@@ -109,7 +83,6 @@
           const data = await res.json();
           document.getElementById("maticBalance").innerText = data.matic;
           document.getElementById("tokenBalance").innerText = data.gky;
-          document.getElementById("balances").innerText = `MATIC: ${data.matic} | GKY: ${data.gky}`;
         }
       } catch (error) {
         console.error("Errore nei saldi:", error);
@@ -117,17 +90,16 @@
     }
     window.addEventListener("load", updateBalances);
 
-    // Contatore dei giri: free spin (1 gratis) + extra (gestiti dal back-end)
+    // Contatore dei giri: il free spin viene concesso dal back‑end, quindi mostriamo (1 + extra)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       document.getElementById("freeSpinsCount").innerText = total;
-      document.getElementById("freeSpins").innerText = `Giri disponibili: ${total}`;
       return total;
     }
     window.addEventListener("load", getFreeSpins);
 
-    // Configurazione della ruota: 8 segmenti esatti con startAngle=22.5 per centrare il primo segmento
+    // Array dei premi (8 segmenti) nell'ordine esatto
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -138,11 +110,13 @@
       { text: '1000 GKY', color: '#1ABC9C' },
       { text: 'NO PRIZE', color: '#C0392B' }
     ];
+    
     const segments = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text
     }));
 
+    // Crea la ruota con startAngle impostato a 22.5 per allineare il primo segmento al top
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       startAngle: 22.5,
@@ -236,6 +210,7 @@
           return;
         }
         const segmentAngle = 360 / segments.length;
+        // Calcola il centro del segmento in base a startAngle=22.5:
         const centerAngle = chosenIndex * segmentAngle + 22.5;
         const extraSpins = 360 * 5;
         const finalAngle = extraSpins + centerAngle;
