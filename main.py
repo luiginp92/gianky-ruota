@@ -67,6 +67,41 @@ def get_dynamic_gas_price():
         logging.error(f"Errore nel gas price: {e}")
         return to_wei(50, 'gwei')
 
+# ------------------ FUNZIONE PER VERIFICARE LA TX ------------------
+def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool:
+    try:
+        tx = w3_no_mw.eth.get_transaction(tx_hash)
+        if tx.get("to", "").lower() != TOKEN_ADDRESS.lower():
+            logging.error("La TX non è indirizzata al contratto token.")
+            return False
+        token_contract = w3_no_mw.eth.contract(
+            address=TOKEN_ADDRESS,
+            abi=[{
+                "constant": False,
+                "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
+                "name": "transfer",
+                "outputs": [{"name": "", "type": "bool"}],
+                "payable": False,
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }]
+        )
+        func_obj, params = token_contract.decode_function_input(tx.input)
+        if func_obj.fn_name != "transfer":
+            logging.error("La TX non richiama transfer.")
+            return False
+        if params.get("_to", "").lower() != WALLET_DISTRIBUZIONE.lower():
+            logging.error("La TX non invia al wallet di distribuzione.")
+            return False
+        token_amount = params.get("_value", 0)
+        if token_amount < cost * 10**18:
+            logging.error(f"Importo insufficiente: {w3_no_mw.fromWei(token_amount, 'ether')} vs {cost}")
+            return False
+        return True
+    except Exception as e:
+        logging.error(f"Errore verifica TX: {e}")
+        return False
+
 # ------------------ JWT ------------------
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecret_jwt_key_change_me")
 ALGORITHM = "HS256"
@@ -166,7 +201,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali esattamente come specificato:
+    # Premi e percentuali da te specificati:
     # ("10 GKY", 30), ("20 GKY", 15), ("50 GKY", 10), ("100 GKY", 5),
     # ("250 GKY", 3), ("500 GKY", 2), ("1000 GKY", 1), ("NO PRIZE", 44)
     prizes = [
@@ -208,24 +243,27 @@ def get_user(wallet_address: str):
 # ------------------ ENDPOINT SPIN ------------------
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
+    # Ottieni l'utente e riattaccalo alla sessione corrente
     user = get_user(req.wallet_address)
     session = Session()
     try:
+        user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        free_spin = False
-        # Concedi il free spin solo se l'utente non ha mai giocato o se sono passate almeno 24 ore dal suo ultimo free spin.
+        # Se l'utente non ha mai giocato o sono trascorse almeno 24 ore, concedi il free spin
         if user.last_play_date is None or (now - user.last_play_date) >= datetime.timedelta(hours=24):
             free_spin = True
-            user.last_play_date = now  # registra il momento in cui il free spin viene utilizzato
+            user.last_play_date = now  # Registra il free spin
             session.commit()
+            # In questo spin, l'utente usa il free spin; pertanto, i giri disponibili successivi saranno solo gli extra spin
+            available = user.extra_spins
         else:
+            free_spin = False
             if user.extra_spins <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
             user.extra_spins -= 1
             session.commit()
-        # Ricarica l'utente per avere dati aggiornati
-        session.refresh(user)
+            available = user.extra_spins
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
@@ -246,7 +284,6 @@ async def api_spin(req: SpinRequest):
             session.add(record)
             session.commit()
         logging.info(f"Spin per {req.wallet_address}: premio {premio}")
-        # I giri disponibili successivi sono solo gli extra spin (il free spin viene concesso una sola volta ogni 24 ore)
         remaining = user.extra_spins
         return {"message": result_text, "prize": premio, "available_spins": remaining}
     except Exception as e:
@@ -286,8 +323,10 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         if not verifica_transazione_gky(user.wallet_address, req.tx_hash, cost):
             raise HTTPException(status_code=400, detail="Tx non valida o importo insufficiente.")
         USED_TX.add(req.tx_hash)
+        # Riattacca l'utente alla sessione corrente
+        user = session.merge(user)
         user.extra_spins += req.num_spins
-        # NON resettiamo last_play_date qui, così il free spin rimane disponibile solo dopo 24 ore dall'ultimo uso
+        # Non resettiamo last_play_date per non abilitare il free spin finché non siano trascorse 24 ore dall'ultimo free spin
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
