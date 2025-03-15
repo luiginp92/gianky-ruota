@@ -2,7 +2,14 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-[... documentazione iniziale ...]
+Questo modulo gestisce:
+  • Autenticazione tramite JWT
+  • Logica del gioco: visualizzazione della ruota e spin
+  • Acquisto di extra giri con conferma transazione automatica
+  • Altri endpoint: referral, share task, report admin
+
+I parametri per le transazioni (chiave privata, provider URL, indirizzo token e wallet distribuzione)
+sono letti dalle variabili d’ambiente tramite python-dotenv (file kd.env).
 """
 import os
 import random
@@ -217,13 +224,15 @@ def get_prize() -> str:
         else:
             return "NO PRIZE"
 
-# ----------------- MODELLI DI INPUT (Pydantic) -----------------
+# ------------------------------------------------
+# MODELLI DI INPUT (Pydantic) – Aggiornati con "pattern" al posto di "regex"
+# ------------------------------------------------
 class AuthRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     telegram_id: Optional[str] = None
 
 class AuthVerifyRequest(BaseModel):
-    wallet_address: str = Field(..., regex="^0x[a-fA-F0-9]{40}$")
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     signature: str
 
 class BuySpinsRequest(BaseModel):
@@ -233,7 +242,9 @@ class ConfirmBuyRequest(BaseModel):
     tx_hash: str
     num_spins: int = Field(..., description="Numero di extra tiri (1, 3 o 10)", gt=0)
 
-# ----------------- ENDPOINTS DI AUTENTICAZIONE -----------------
+# ------------------------------------------------
+# ENDPOINTS DI AUTENTICAZIONE
+# ------------------------------------------------
 @app.post("/api/auth/request_nonce")
 async def request_nonce(auth: AuthRequest):
     nonce = str(random.randint(100000, 999999))
@@ -248,7 +259,7 @@ async def request_nonce(auth: AuthRequest):
     except Exception as e:
         session.rollback()
         logging.error(f"Errore in request_nonce: {e}")
-        raise HTTPException(status_code=500, detail="Errore nella richiesta del nonce.")
+        raise HTTPException(status_code=500, detail="Errore durante la richiesta del nonce.")
     finally:
         session.close()
     return {"nonce": nonce}
@@ -282,7 +293,9 @@ async def auth_verify(auth: AuthVerifyRequest):
     finally:
         session.close()
 
-# ----------------- ENDPOINT PER STATO RUOTA -----------------
+# ------------------------------------------------
+# ENDPOINT PER STATO RUOTA
+# ------------------------------------------------
 @app.get("/api/ruota")
 async def api_ruota(current_user: User = Depends(get_current_user)):
     session = Session()
@@ -292,12 +305,17 @@ async def api_ruota(current_user: User = Depends(get_current_user)):
         italy_tz = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy_tz)
         if (not current_user.last_play_date) or (current_user.last_play_date.astimezone(italy_tz).date() != now.date()):
-            # Se non ha ancora giocato oggi, free spin disponibile: consuma il free spin
             current_user.last_play_date = now
             session.commit()
-            available = current_user.extra_spins or 0  # Free spin consumato
+            available = current_user.extra_spins or 0
         else:
             available = current_user.extra_spins or 0
+            if available > 0:
+                current_user.extra_spins -= 1
+                session.commit()
+                available -= 1
+            else:
+                raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
         return {"available_spins": available, "message": f"Giri disponibili: {available}"}
     except Exception as e:
         logging.error(f"Errore in /api/ruota: {e}")
@@ -313,7 +331,9 @@ async def get_wheel():
     else:
         raise HTTPException(status_code=404, detail="Immagine della ruota non trovata.")
 
-# ----------------- ENDPOINT SPIN -----------------
+# ------------------------------------------------
+# ENDPOINT SPIN
+# ------------------------------------------------
 @app.post("/api/spin")
 async def api_spin(current_user: User = Depends(get_current_user)):
     session = Session()
@@ -323,10 +343,9 @@ async def api_spin(current_user: User = Depends(get_current_user)):
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
         if (not current_user.last_play_date) or (current_user.last_play_date.astimezone(italy).date() != now.date()):
-            # Primo giro del giorno: free spin disponibile, consumalo
             current_user.last_play_date = now
             session.commit()
-            available = current_user.extra_spins or 0  # Free spin consumato
+            available = current_user.extra_spins or 0
         else:
             available = current_user.extra_spins or 0
             if available > 0:
@@ -363,7 +382,9 @@ async def api_spin(current_user: User = Depends(get_current_user)):
     finally:
         session.close()
 
-# ----------------- ENDPOINT ACQUISTO GIRI -----------------
+# ------------------------------------------------
+# ENDPOINT ACQUISTO GIRI
+# ------------------------------------------------
 @app.post("/api/buyspins")
 async def api_buyspins(req: BuySpinsRequest, current_user: User = Depends(get_current_user)):
     session = Session()
@@ -381,7 +402,9 @@ async def api_buyspins(req: BuySpinsRequest, current_user: User = Depends(get_cu
     finally:
         session.close()
 
-# ----------------- ENDPOINT CONFERMA ACQUISTO -----------------
+# ------------------------------------------------
+# ENDPOINT CONFERMA ACQUISTO GIRI
+# ------------------------------------------------
 @app.post("/api/confirmbuy")
 async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(get_current_user)):
     session = Session()
@@ -396,7 +419,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(ge
         if not verifica_transazione_gky(current_user.wallet_address, req.tx_hash, cost):
             raise HTTPException(status_code=400, detail="Tx non valida o importo insufficiente.")
         current_user.extra_spins = (current_user.extra_spins or 0) + req.num_spins
-        current_user.last_play_date = None  # In modo che al prossimo accesso venga concesso il free spin
+        current_user.last_play_date = None
         session.commit()
         session.refresh(current_user)
         logging.info(f"Extra spins aggiornati: {current_user.extra_spins}")
@@ -420,13 +443,17 @@ async def api_confirmbuy(req: ConfirmBuyRequest, current_user: User = Depends(ge
     finally:
         session.close()
 
-# ----------------- ENDPOINT REFERRAL -----------------
+# ------------------------------------------------
+# ENDPOINT REFERRAL
+# ------------------------------------------------
 @app.get("/api/referral")
 async def api_referral(current_user: User = Depends(get_current_user)):
     referral_link = f"https://t.me/tuo_bot?start=ref_{current_user.wallet_address}"
     return {"referral_link": referral_link}
 
-# ----------------- ENDPOINT SHARE TASK -----------------
+# ------------------------------------------------
+# ENDPOINT SHARE TASK
+# ------------------------------------------------
 @app.post("/api/sharetask")
 async def api_sharetask(current_user: User = Depends(get_current_user)):
     video_url = "https://www.youtube.com/watch?v=AbpPYERGCXI&ab_channel=GKY-OFFICIAL"
@@ -459,7 +486,9 @@ async def api_claim_share_reward(current_user: User = Depends(get_current_user))
     finally:
         session.close()
 
-# ----------------- ENDPOINT REPORT ADMIN -----------------
+# ------------------------------------------------
+# ENDPOINT REPORT ADMIN
+# ------------------------------------------------
 @app.get("/api/giankyadmin")
 async def api_giankyadmin(current_user: User = Depends(get_current_user)):
     session = Session()
