@@ -84,17 +84,12 @@
           document.getElementById("maticBalance").innerText = data.matic;
           document.getElementById("tokenBalance").innerText = data.gky;
         }
-      } catch (error) {
-        console.error("Errore nei saldi:", error);
-      }
+      } catch (error) { console.error("Errore nei saldi:", error); }
     }
     window.addEventListener("load", updateBalances);
 
-    // Contatore dei giri gratuiti
+    // Contatore dei giri gratuiti: il free spin viene concesso dal back‑end, qui mostriamo il totale (1 + extra)
     function getFreeSpins() {
-      // Nel nostro caso, il free spin viene concesso solo dal back-end;
-      // qui usiamo il valore memorizzato in locale per mostrare il contatore.
-      // Assicurati che venga aggiornato in base alla risposta del back-end.
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       document.getElementById("freeSpinsCount").innerText = total;
@@ -102,7 +97,7 @@
     }
     window.addEventListener("load", getFreeSpins);
 
-    // Configurazione della ruota: Usa ESATTAMENTE 8 segmenti nell'ordine richiesto
+    // Configurazione della ruota: 8 segmenti nell'ordine esatto
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -113,7 +108,7 @@
       { text: '1000 GKY', color: '#1ABC9C' },
       { text: 'NO PRIZE', color: '#C0392B' }
     ];
-
+    
     const segments = prizeData.map(item => ({
       fillStyle: item.color,
       text: item.text

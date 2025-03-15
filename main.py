@@ -235,9 +235,9 @@ async def api_spin(req: SpinRequest):
                 last_play = italy.localize(user.last_play_date)
             else:
                 last_play = user.last_play_date.astimezone(italy)
-        # Concedi free spin solo se non hai mai giocato o sono trascorse almeno 24 ore
+        # Concedi free spin solo se non ha mai giocato o sono trascorse almeno 24 ore
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now
+            user.last_play_date = now  # Registra il free spin
             session.commit()
             free_spin = True
             available = user.extra_spins  # Free spin concesso: non decrementa gli extra
@@ -309,6 +309,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
+        # Non resettiamo last_play_date per mantenere il free spin concesso solo dopo 24 ore
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
@@ -327,10 +328,8 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
 # ------------------ ENDPOINT DISTRIBUTE ------------------
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
-    """
-    Poiché la distribuzione dei token avviene già in /api/spin,
-    questo endpoint restituisce semplicemente una conferma.
-    """
+    # Poiché la distribuzione dei token avviene già in /api/spin,
+    # questo endpoint restituisce semplicemente una conferma.
     if req.prize.strip().upper() == "NO PRIZE":
         return {"message": "Nessun premio da distribuire."}
     else:
