@@ -6,20 +6,25 @@
   <title>GiankyCoin Web App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    /* Imposta lo sfondo con l'immagine sfondo.png */
+    /* Usa lo sfondo con sfondo.png */
     body {
       background: url('/static/sfondo.png') no-repeat center center fixed;
       background-size: cover;
       padding-top: 20px;
       margin: 0;
     }
-    /* Lascia il layout originale */
-    .header { background-color: #343a40; color: white; padding: 1rem; text-align: center; }
+    /* Header ora trasparente per integrarsi con lo sfondo */
+    .header {
+      background-color: rgba(52, 58, 64, 0.5); /* semi trasparente */
+      color: white;
+      padding: 1rem;
+      text-align: center;
+    }
     .content { padding: 2rem; }
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
-    .footer { background-color: #343a40; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
+    .footer { background-color: transparent; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
-    #wheelCanvas { border: 1px solid #000; display: block; margin: 20px auto; }
+    #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
     /* Splash screen iniziale */
     #splash {
@@ -92,11 +97,11 @@
   </footer>
   
   <script>
-    // Rimuovi la splash screen quando il DOM è pronto
+    // Rimuovi la splash screen 2 secondi dopo che il DOM è pronto
     document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         document.getElementById("splash").style.display = "none";
-      }, 1000);
+      }, 2000);
     });
     
     // Navigazione
@@ -122,7 +127,7 @@
     }
     window.addEventListener("load", updateBalances);
 
-    // Contatore dei giri: il free spin viene concesso dal back-end (1 gratis + extra)
+    // Contatore dei giri: free spin (1 gratis) + extra (gestiti dal back-end)
     function getFreeSpins() {
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
@@ -131,7 +136,7 @@
     }
     window.addEventListener("load", getFreeSpins);
 
-    // Array dei premi: 8 segmenti in ordine
+    // Array dei premi: 8 segmenti in ordine esatto
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
