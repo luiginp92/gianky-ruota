@@ -18,6 +18,7 @@
   <button id="spinButton">Gira la ruota</button>
   
   <script>
+    // L'array dei segmenti è esattamente allineato con il back-end
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -26,9 +27,7 @@
       { text: '250 GKY', color: '#9B59B6' },
       { text: '500 GKY', color: '#3498DB' },
       { text: '1000 GKY', color: '#1ABC9C' },
-      { text: 'NO PRIZE', color: '#C0392B' },
-      { text: 'NO PRIZE', color: '#BDC3C7' },
-      { text: 'NO PRIZE', color: '#BDC3C7' }
+      { text: 'NO PRIZE', color: '#C0392B' }
     ];
     
     const segments = prizeData.map(item => ({
@@ -47,16 +46,48 @@
         spins: 8,
         callbackFinished: function(indicatedSegment) {
           alert("Hai vinto: " + indicatedSegment.text);
-          theWheel.rotationAngle = 0;
-          theWheel.draw();
           document.getElementById("spinButton").disabled = false;
         }
       }
     });
     
+    function spinToPrize(prize) {
+      // Trova l'indice del premio nell'array prizeData
+      let index = prizeData.findIndex(item => item.text.trim().toUpperCase() === prize.trim().toUpperCase());
+      if (index === -1) {
+        index = prizeData.length - 1;
+      }
+      const segmentAngle = 360 / prizeData.length;
+      const segmentCenter = index * segmentAngle + segmentAngle / 2;
+      const extraSpins = 360 * 5;
+      const stopAngle = extraSpins + (360 - segmentCenter);
+      theWheel.animation.stopAngle = stopAngle;
+      theWheel.startAnimation();
+    }
+    
     document.getElementById("spinButton").addEventListener("click", () => {
       document.getElementById("spinButton").disabled = true;
-      theWheel.startAnimation();
+      // Supponiamo che il wallet sia salvato in localStorage (altrimenti modificalo)
+      const wallet = localStorage.getItem("walletAddress");
+      if (!wallet) {
+        alert("Wallet non connesso.");
+        document.getElementById("spinButton").disabled = false;
+        return;
+      }
+      fetch("/api/spin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet_address: wallet })
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log("Risposta backend:", data);
+        spinToPrize(data.prize);
+      })
+      .catch(err => {
+        console.error("Errore durante lo spin:", err);
+        document.getElementById("spinButton").disabled = false;
+      });
     });
   </script>
 </body>

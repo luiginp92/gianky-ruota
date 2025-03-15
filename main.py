@@ -69,18 +69,12 @@ def get_dynamic_gas_price():
 
 # ------------------ VERIFICA TX ------------------
 def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool:
-    """
-    Funzione minima per verificare che la transazione esista,
-    sia indirizzata al contratto token e che l'importo trasferito sia sufficiente.
-    (Questa implementazione è semplificata; adattala secondo le tue necessità.)
-    """
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
         if tx.get("to", "").lower() != TOKEN_ADDRESS.lower():
             logging.error("La TX non è indirizzata al contratto token.")
             return False
-        # Qui potresti aggiungere ulteriori controlli sul contenuto di tx.input
-        # Per ora, se la TX viene recuperata, la consideriamo valida.
+        # (Implementazione minima: ulteriori controlli possono essere aggiunti)
         return True
     except Exception as e:
         logging.error(f"Errore verifica TX: {e}")
@@ -233,16 +227,16 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se last_play_date esiste, assicuriamoci che sia aware.
+        # Se last_play_date esiste, assicurarsi che sia aware
         last_play = user.last_play_date
         if last_play is not None and last_play.tzinfo is None:
-            last_play = last_play.replace(tzinfo=italy)
-        # Concedi free spin solo se l'utente non ha mai giocato o sono trascorse almeno 24 ore.
+            last_play = italy.localize(last_play)
+        # Concedi free spin solo se l'utente non ha mai giocato o sono trascorse almeno 24 ore
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
             user.last_play_date = now
             session.commit()
             free_spin = True
-            available = user.extra_spins  # Il free spin è concesso, non influisce su extra_spin
+            available = user.extra_spins  # Free spin concesso, non tocca gli extra
         else:
             free_spin = False
             if user.extra_spins <= 0:
@@ -251,6 +245,7 @@ async def api_spin(req: SpinRequest):
             session.commit()
             available = user.extra_spins
         premio = get_prize()
+        # Qui il premio calcolato deve essere esattamente quello distribuito
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
@@ -311,7 +306,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
-        # NON resettiamo last_play_date per mantenere il free spin concesso solo dopo 24 ore
+        # NON resettiamo last_play_date: il free spin resta concesso solo 24 ore dopo l'ultimo spin
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
