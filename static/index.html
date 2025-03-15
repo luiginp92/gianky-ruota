@@ -12,7 +12,7 @@
       padding-top: 20px;
       margin: 0;
     }
-    /* Rimuove il header (titolo) e lo sfondo grigio */
+    /* Nascondiamo il header (titolo) e rimuoviamo sfondi grigi */
     header { display: none; }
     .content { padding: 2rem; }
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
@@ -20,7 +20,7 @@
     .balance-info { text-align: right; font-size: 0.9rem; }
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen */
+    /* Splash screen iniziale */
     #splash {
       position: fixed;
       top: 0; left: 0;
@@ -42,26 +42,24 @@
     <img src="/static/prepagina.png" alt="Caricamento..." style="max-width: 100%; height: auto;">
   </div>
 
-  <div class="container content">
-    <!-- Sezione saldi e giri (puoi anche visualizzarla in una parte fissa in alto a destra) -->
-    <div class="balance-info" id="balances"></div>
-    <div id="freeSpins" class="mb-3"></div>
+  <!-- Sezione saldi e giri (posizionata in alto a destra) -->
+  <div class="balance-info" id="balances" style="position: absolute; top: 10px; right: 10px; color: #fff;"></div>
+  <div id="freeSpins" style="position: absolute; top: 50px; right: 10px; color: #fff;"></div>
 
-    <!-- Ruota -->
+  <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
+        <!-- La ruota è visibile all'avvio -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
-
     <!-- Pulsante centrale per "Gira la ruota" -->
     <div class="row mb-3">
       <div class="col text-center">
         <button id="btnSpin" class="btn btn-primary btn-custom">Gira la ruota</button>
       </div>
     </div>
-
-    <!-- Altri 4 pulsanti disposti in due colonne: sinistra e destra -->
+    <!-- Altri 4 pulsanti disposti in due colonne -->
     <div class="row">
       <div class="col-md-6">
         <div class="d-grid gap-2">
@@ -76,7 +74,6 @@
         </div>
       </div>
     </div>
-
     <div class="row mt-4">
       <div class="col">
         <div id="result" class="alert alert-info" style="display:none;"></div>
@@ -89,13 +86,13 @@
   </footer>
   
   <script>
-    // Rimuove la splash screen al caricamento completo
-    window.addEventListener("load", () => {
+    // Rimuovi la splash screen al DOMContentLoaded (non aspetta il caricamento completo di tutte le immagini)
+    document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         document.getElementById("splash").style.display = "none";
       }, 1000);
     });
-
+    
     // Navigazione
     document.getElementById("btnConnect").addEventListener("click", () => window.location.href = "/static/connectwallet.html");
     document.getElementById("btnBuySpins").addEventListener("click", () => window.location.href = "/static/buyspins.html");
@@ -181,4 +178,76 @@
             if (wallet) wallet = wallet.trim();
             if (!wallet || wallet.length !== 42) {
               alert("Wallet non valido o non connesso.");
-              res
+              resetWheel();
+              return;
+            }
+            try {
+              const res = await fetch("/api/distribute", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ wallet_address: wallet, prize: indicatedSegment.text })
+              });
+              if (!res.ok) throw new Error("Distribuzione fallita: " + res.status);
+              const data = await res.json();
+              alert(data.message);
+              updateBalances();
+            } catch (error) {
+              console.error("Errore nella distribuzione:", error);
+              alert("Errore nella distribuzione. Contatta l'assistenza.");
+            }
+            resetWheel();
+          }
+        }
+      });
+    }
+
+    function resetWheel() {
+      theWheel.stopAnimation(false);
+      theWheel.rotationAngle = 0;
+      theWheel.draw();
+      document.getElementById("btnSpin").disabled = false;
+    }
+
+    document.getElementById("btnSpin").addEventListener("click", async () => {
+      if (getFreeSpins() <= 0) {
+        alert("Non hai giri disponibili. Acquista extra tiri.");
+        return;
+      }
+      const wallet = localStorage.getItem("walletAddress");
+      if (!wallet) {
+        alert("Wallet non collegato.");
+        document.getElementById("btnSpin").disabled = false;
+        return;
+      }
+      try {
+        const spinRes = await fetch("/api/spin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: wallet })
+        });
+        if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
+        const spinData = await spinRes.json();
+        console.log("Risultato spin:", spinData);
+        const prize = spinData.prize;
+        let chosenIndex = findPrizeIndex(prize);
+        if (chosenIndex === -1) {
+          alert("Premio non riconosciuto: " + prize);
+          document.getElementById("btnSpin").disabled = false;
+          return;
+        }
+        const segmentAngle = 360 / segments.length;
+        const centerAngle = chosenIndex * segmentAngle + 22.5;
+        const extraSpins = 360 * 5;
+        const finalAngle = extraSpins + centerAngle;
+        console.log("Angolo finale calcolato:", finalAngle);
+        theWheel = createWheel(finalAngle);
+        theWheel.startAnimation();
+      } catch (error) {
+        console.error("Errore nello spin:", error);
+        alert("Errore nello spin. Contatta l'assistenza.");
+        document.getElementById("btnSpin").disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
