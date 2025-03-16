@@ -4,7 +4,7 @@ from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMar
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.request import HTTPXRequest
 
-# Importa la sessione e la funzione di inizializzazione del database
+# Importa la sessione e le funzioni per il database
 from database import Session, GlobalCounter, init_db
 
 # Inizializza il database (crea le tabelle se non esistono)
@@ -28,23 +28,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Mostra il report globale delle entrate e uscite dal wallet di distribuzione.
+    Comando per mostrare il report globale delle entrate e uscite del wallet di distribuzione.
+    Se non esiste ancora un record, vengono mostrati tutti 0.
     """
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
-        if counter:
+        if counter is None:
+            # Se non esiste un record, restituisci 0 per tutti i valori.
+            total_in = 0.0
+            total_out = 0.0
+        else:
             total_in = counter.total_in
             total_out = counter.total_out
-            balance = total_in - total_out
-            message = (
-                f"📊 **Report GiankyCoin** 📊\n\n"
-                f"**Entrate Totali:** {total_in} GKY\n"
-                f"**Uscite Totali:** {total_out} GKY\n"
-                f"**Bilancio:** {balance} GKY"
-            )
-        else:
-            message = "Nessun dato disponibile al momento."
+        balance = total_in - total_out
+        message = (
+            f"📊 **Report GiankyCoin** 📊\n\n"
+            f"**Entrate Totali:** {total_in} GKY\n"
+            f"**Uscite Totali:** {total_out} GKY\n"
+            f"**Bilancio:** {balance} GKY"
+        )
         await update.message.reply_text(message, parse_mode="Markdown")
     except Exception as e:
         logging.error(f"Errore in giankyadmin: {e}")
