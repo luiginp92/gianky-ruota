@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Acquista Extra Tiri - GiankyCoin</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
     body { padding: 20px; }
     .container { max-width: 600px; margin: auto; }
@@ -22,48 +22,49 @@
       </select>
     </div>
     <button id="requestPurchase" class="btn btn-primary">Richiedi Acquisto</button>
-    <hr/>
+    <hr>
     <div id="instructions" style="display:none;">
       <h3>Istruzioni per l'acquisto</h3>
       <p id="instructionMessage"></p>
       <p>
-        <strong>Come procedere:</strong><br/>
-        1. Effettua un trasferimento dell'importo indicato al seguente wallet di distribuzione:<br/>
-        <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code><br/>
-        2. Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo qui.
+        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio di distribuzione:
+        <br>
+        <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
+        <br>
+        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo nel campo sottostante per confermare l'acquisto.
       </p>
       <div class="mb-3">
-        <label for="txHash" class="form-label">TxHash della transazione</label>
-        <input type="text" id="txHash" class="form-control" placeholder="Inserisci TxHash" />
+        <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
+        <input type="text" id="txHash" class="form-control" placeholder="TxHash della transazione">
       </div>
       <button id="confirmPurchase" class="btn btn-success">Conferma Acquisto</button>
     </div>
     <br>
-    <!-- Pulsante per tornare alla Home -->
+    <!-- Pulsante Torna alla Home -->
     <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Torna alla Home</button>
   </div>
-
+  
   <script>
-    // Modifica: Se non è presente access_token, usa walletAddress come fallback.
-    function getToken() {
-      return localStorage.getItem("access_token") || localStorage.getItem("walletAddress");
+    // Funzione per recuperare il token di accesso da localStorage
+    function getAccessToken() {
+      return localStorage.getItem("access_token");
     }
 
     document.getElementById("requestPurchase").addEventListener("click", async () => {
-      const token = getToken();
+      const token = getAccessToken();
       if (!token) {
-        alert("Effettua l'autenticazione (Connetti Wallet) prima di acquistare.");
+        alert("Token di accesso mancante. Effettua l'autenticazione.");
         return;
       }
-      const numSpins = parseInt(document.getElementById("numSpins").value);
+      const numSpins = document.getElementById("numSpins").value;
       try {
         const res = await fetch("/api/buyspins", {
           method: "POST",
           headers: { 
-            "Content-Type": "application/json", 
-            "Authorization": "Bearer " + token 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}` 
           },
-          body: JSON.stringify({ num_spins: numSpins })
+          body: JSON.stringify({ num_spins: parseInt(numSpins) })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
@@ -71,17 +72,17 @@
         document.getElementById("instructions").style.display = "block";
       } catch (error) {
         console.error("Errore nella richiesta di acquisto:", error);
-        alert("Errore nella richiesta: " + error.message);
+        alert("Errore nella richiesta di acquisto.");
       }
     });
-
+  
     document.getElementById("confirmPurchase").addEventListener("click", async () => {
-      const token = getToken();
+      const token = getAccessToken();
       if (!token) {
-        alert("Effettua l'autenticazione (Connetti Wallet) prima di confermare.");
+        alert("Token di accesso mancante. Effettua l'autenticazione.");
         return;
       }
-      const numSpins = parseInt(document.getElementById("numSpins").value);
+      const numSpins = document.getElementById("numSpins").value;
       const txHash = document.getElementById("txHash").value.trim();
       if (!txHash) {
         alert("Inserisci il txHash della transazione.");
@@ -91,18 +92,18 @@
         const res = await fetch("/api/confirmbuy", {
           method: "POST",
           headers: { 
-            "Content-Type": "application/json", 
-            "Authorization": "Bearer " + token 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}` 
           },
-          body: JSON.stringify({ tx_hash: txHash, num_spins: numSpins })
+          body: JSON.stringify({ tx_hash: txHash, num_spins: parseInt(numSpins) })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
         alert(data.message);
         window.location.href = "/static/index.html";
       } catch (error) {
-        console.error("Errore nella conferma d'acquisto:", error);
-        alert("Errore: " + error.message);
+        console.error("Errore nella conferma dell'acquisto:", error);
+        alert("Errore nella conferma dell'acquisto.");
       }
     });
   </script>
