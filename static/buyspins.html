@@ -13,37 +13,97 @@
 <body>
   <div class="container">
     <h1>Acquista Extra Tiri</h1>
-    <p>Seleziona il numero di giri extra da acquistare:</p>
-    <select id="numSpins" class="form-select mb-3">
-      <option value="1">1 Tiro (50 GKY)</option>
-      <option value="3">3 Tiri (125 GKY)</option>
-      <option value="10">10 Tiri (300 GKY)</option>
-    </select>
-    <button id="requestButton" class="btn btn-primary">Richiedi Acquisto</button>
-    <div id="instructions" class="mt-3"></div>
+    <p>Seleziona il numero di tiri extra da acquistare:</p>
+    <div class="mb-3">
+      <label for="numSpins" class="form-label">Numero di tiri extra</label>
+      <select id="numSpins" class="form-select">
+        <option value="1">1 Tiro (50 GKY)</option>
+        <option value="3">3 Tiri (125 GKY)</option>
+        <option value="10">10 Tiri (300 GKY)</option>
+      </select>
+    </div>
+    <button id="requestPurchase" class="btn btn-primary">Richiedi Acquisto</button>
+    <hr>
+    <div id="instructions" style="display:none;">
+      <h3>Istruzioni per l'acquisto</h3>
+      <p id="instructionMessage"></p>
+      <p>
+        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente portafoglio di distribuzione:
+        <br>
+        <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
+        <br>
+        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo nel campo sottostante per confermare l'acquisto.
+      </p>
+      <div class="mb-3">
+        <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
+        <input type="text" id="txHash" class="form-control" placeholder="TxHash della transazione">
+      </div>
+      <button id="confirmPurchase" class="btn btn-success">Conferma Acquisto</button>
+    </div>
     <br>
-    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary mt-3">Torna alla Home</button>
+    <!-- Pulsante per tornare alla Home -->
+    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Torna alla Home</button>
   </div>
+  
   <script>
-    document.getElementById("requestButton").addEventListener("click", async () => {
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) {
-        alert("Collega il wallet prima.");
+    function getAccessToken() {
+      return localStorage.getItem("access_token");
+    }
+
+    document.getElementById("requestPurchase").addEventListener("click", async () => {
+      const token = getAccessToken();
+      if (!token) {
+        alert("Token di accesso mancante. Effettua l'autenticazione.");
         return;
       }
-      const numSpins = parseInt(document.getElementById("numSpins").value, 10);
+      const numSpins = document.getElementById("numSpins").value;
       try {
         const res = await fetch("/api/buyspins", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: wallet, num_spins: numSpins })
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}` 
+          },
+          body: JSON.stringify({ num_spins: parseInt(numSpins) })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
         const data = await res.json();
-        document.getElementById("instructions").innerText = data.message;
+        document.getElementById("instructionMessage").innerText = data.message;
+        document.getElementById("instructions").style.display = "block";
       } catch (error) {
-        console.error("Errore in richiesta d'acquisto:", error);
+        console.error("Errore nella richiesta d'acquisto:", error);
         alert("Errore nella richiesta d'acquisto.");
+      }
+    });
+  
+    document.getElementById("confirmPurchase").addEventListener("click", async () => {
+      const token = getAccessToken();
+      if (!token) {
+        alert("Token di accesso mancante. Effettua l'autenticazione.");
+        return;
+      }
+      const numSpins = document.getElementById("numSpins").value;
+      const txHash = document.getElementById("txHash").value.trim();
+      if (!txHash) {
+        alert("Inserisci il txHash.");
+        return;
+      }
+      try {
+        const res = await fetch("/api/confirmbuy", {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}` 
+          },
+          body: JSON.stringify({ tx_hash: txHash, num_spins: parseInt(numSpins) })
+        });
+        if (!res.ok) throw new Error("Errore: " + res.status);
+        const data = await res.json();
+        alert(data.message);
+        window.location.href = "/static/index.html";
+      } catch (error) {
+        console.error("Errore nella conferma dell'acquisto:", error);
+        alert("Errore nella conferma dell'acquisto.");
       }
     });
   </script>
