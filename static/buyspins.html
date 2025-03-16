@@ -38,11 +38,15 @@
       </div>
       <button id="confirmPurchase" class="btn btn-success">Conferma Acquisto</button>
     </div>
+    <br>
+    <!-- Pulsante per tornare alla Home -->
+    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Torna alla Home</button>
   </div>
 
   <script>
+    // Modifica: Se non è presente access_token, usa walletAddress come fallback.
     function getToken() {
-      return localStorage.getItem("access_token");
+      return localStorage.getItem("access_token") || localStorage.getItem("walletAddress");
     }
 
     document.getElementById("requestPurchase").addEventListener("click", async () => {
@@ -55,7 +59,10 @@
       try {
         const res = await fetch("/api/buyspins", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+          headers: { 
+            "Content-Type": "application/json", 
+            "Authorization": "Bearer " + token 
+          },
           body: JSON.stringify({ num_spins: numSpins })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
@@ -83,7 +90,10 @@
       try {
         const res = await fetch("/api/confirmbuy", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+          headers: { 
+            "Content-Type": "application/json", 
+            "Authorization": "Bearer " + token 
+          },
           body: JSON.stringify({ tx_hash: txHash, num_spins: numSpins })
         });
         if (!res.ok) throw new Error("Errore: " + res.status);
