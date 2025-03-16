@@ -4,7 +4,7 @@ from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMar
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.request import HTTPXRequest
 
-# Importa la sessione e le funzioni per il database
+# Importa la sessione e il modello GlobalCounter dal database
 from database import Session, GlobalCounter, init_db
 
 # Inizializza il database (crea le tabelle se non esistono)
@@ -28,30 +28,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Comando per mostrare il report globale delle entrate e uscite del wallet di distribuzione.
-    Se non esiste ancora un record, vengono mostrati tutti 0.
+    Comando che mostra il report globale delle entrate e uscite del wallet di distribuzione.
+    Se non esiste ancora un record, restituisce 0 per tutti i valori.
     """
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
         if counter is None:
-            # Se non esiste un record, restituisci 0 per tutti i valori.
-            total_in = 0.0
-            total_out = 0.0
+            report_text = "Nessun dato disponibile ancora."
         else:
             total_in = counter.total_in
             total_out = counter.total_out
-        balance = total_in - total_out
-        message = (
-            f"📊 **Report GiankyCoin** 📊\n\n"
-            f"**Entrate Totali:** {total_in} GKY\n"
-            f"**Uscite Totali:** {total_out} GKY\n"
-            f"**Bilancio:** {balance} GKY"
-        )
-        await update.message.reply_text(message, parse_mode="Markdown")
+            balance = total_in - total_out
+            report_text = (
+                f"📊 **Report Globali GKY** 📊\n\n"
+                f"**Entrate Totali:** {total_in} GKY\n"
+                f"**Uscite Totali:** {total_out} GKY\n"
+                f"**Bilancio:** {balance} GKY"
+            )
+        await update.message.reply_text(report_text, parse_mode="Markdown")
     except Exception as e:
         logging.error(f"Errore in giankyadmin: {e}")
-        await update.message.reply_text("Errore nel recupero dei dati.")
+        await update.message.reply_text("Errore nel recupero del report.")
     finally:
         session.close()
 
