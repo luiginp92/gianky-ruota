@@ -15,24 +15,36 @@
 <body>
   <div class="container">
     <h1>Completa le Task</h1>
-    <p>Completa le seguenti azioni per ricevere 2 giri gratuiti. Nota: il controllo della task potrebbe richiedere fino a 10 minuti.</p>
+    <p>Completa una delle seguenti azioni per ricevere 2 giri gratuiti. Nota: il controllo della task potrebbe richiedere fino a 10 minuti.</p>
     
-    <!-- Task 1 -->
+    <!-- Task 1: YouTube -->
     <div class="task">
       <h4>Task 1: YouTube</h4>
-      <p>Metti mi piace, condividi e iscriviti al canale: <a href="https://www.youtube.com/watch?v=l5w8G3lsQm8" target="_blank">Guarda il video</a></p>
+      <p>Metti mi piace, condividi e iscriviti al canale YouTube: 
+         <a href="https://www.youtube.com/watch?v=l5w8G3lsQm8" target="_blank">Guarda il video</a></p>
       <button class="btn btn-primary btn-complete-task" data-task="task1">Ho completato la Task</button>
       <div class="mt-2 task-message" id="task1Message"></div>
     </div>
     
-    <!-- Task 2: Esempio di task aggiuntiva -->
+    <!-- Task 2: Follow TikTok -->
     <div class="task">
-      <h4>Task 2: Social Share</h4>
-      <p>Condividi la pagina sui social media.</p>
+      <h4>Task 2: TikTok</h4>
+      <p>Segui GiankyCoin su TikTok: 
+         <a href="https://www.tiktok.com/@gky_official?_t=ZN-8uhuKOZi3La&_r=1" target="_blank">Segui qui</a></p>
       <button class="btn btn-primary btn-complete-task" data-task="task2">Ho completato la Task</button>
       <div class="mt-2 task-message" id="task2Message"></div>
     </div>
     
+    <!-- Task 3: Follow Telegram -->
+    <div class="task">
+      <h4>Task 3: Telegram</h4>
+      <p>Segui GiankyCoin su Telegram: 
+         <a href="https://t.me/giankycoin" target="_blank">Segui qui</a></p>
+      <button class="btn btn-primary btn-complete-task" data-task="task3">Ho completato la Task</button>
+      <div class="mt-2 task-message" id="task3Message"></div>
+    </div>
+    
+    <br>
     <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Torna alla Home</button>
   </div>
 
@@ -44,19 +56,21 @@
         return;
       }
       try {
+        // Chiamata all'endpoint /api/claim_task, che gestisce la logica di accredito
         const res = await fetch("/api/claim_task", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ wallet_address: wallet })
         });
         const data = await res.json();
-        document.getElementById(taskId + "Message").innerText = data.message;
+        document.getElementById(taskId + "Message").innerText = data.message || "Operazione completata.";
       } catch (error) {
         console.error("Errore nel completamento della task:", error);
         document.getElementById(taskId + "Message").innerText = "Errore nel completamento della task. Contatta l'assistenza.";
       }
     }
-    
+
+    // Aggiungi listener a tutti i pulsanti di task
     const buttons = document.querySelectorAll(".btn-complete-task");
     buttons.forEach(btn => {
       btn.addEventListener("click", () => {
