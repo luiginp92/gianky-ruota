@@ -25,7 +25,8 @@
     const wallet = localStorage.getItem("walletAddress");
     const referralInput = document.getElementById("referralLink");
     if (wallet && wallet.length === 42) {
-      const referralLink = "https://t.me/tuo_bot?start=ref_" + wallet;
+      // Usa il nome corretto del bot: giankytestbot
+      const referralLink = "https://t.me/giankytestbot?start=ref_" + wallet;
       referralInput.value = referralLink;
     } else {
       referralInput.value = "Wallet non trovato. Collega il wallet prima.";
