@@ -13,15 +13,15 @@
 <body>
   <div class="container">
     <h1>Il tuo Link Referral</h1>
-    <p>Condividi questo link con i tuoi amici: quando un nuovo utente si collega tramite questo link, TU e il nuovo utente riceverete 2 giri gratuiti.</p>
+    <p>Condividi questo link con i tuoi amici. Quando un nuovo utente utilizzerà questo link per collegarsi, TU e il nuovo utente riceverete 2 giri gratuiti.</p>
     <div class="mb-3">
       <input type="text" id="referralLink" class="form-control" readonly>
     </div>
     <button id="copyButton" class="btn btn-primary">Copia Link</button>
+    <br><br>
+    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Torna alla Home</button>
   </div>
-
   <script>
-    // Recupera il wallet salvato in localStorage
     const wallet = localStorage.getItem("walletAddress");
     const referralInput = document.getElementById("referralLink");
     if (wallet && wallet.length === 42) {
