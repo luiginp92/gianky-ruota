@@ -3,7 +3,12 @@ import logging
 from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.request import HTTPXRequest
-from database import Session, GlobalCounter  # Importa il modello per il conteggio
+
+# Importa la sessione e la funzione di inizializzazione del database
+from database import Session, GlobalCounter, init_db
+
+# Inizializza il database (crea le tabelle se non esistono)
+init_db()
 
 # Usa il token esatto (senza spazi o modifiche)
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
