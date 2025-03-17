@@ -4,6 +4,7 @@ from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMar
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.request import HTTPXRequest
 
+# Importa la sessione e i modelli per il database
 from database import Session, GlobalCounter, init_db
 
 # Inizializza il database (crea le tabelle se non esistono)
@@ -11,10 +12,12 @@ init_db()
 
 # Usa il token esatto (senza spazi o modifiche)
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
-# URL della mini app
+# URL della mini app (modifica se necessario)
 WEB_APP_URL = "https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html"
 
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -24,6 +27,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Clicca qui per aprire la mini app:", reply_markup=reply_markup)
 
 async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Comando per mostrare il report globale delle entrate e uscite.
+    """
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()

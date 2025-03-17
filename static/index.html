@@ -13,9 +13,9 @@
       padding-top: 20px;
       margin: 0;
     }
-    /* Header ora trasparente per integrarsi con lo sfondo */
+    /* Header trasparente per integrarsi con lo sfondo */
     .header {
-      background-color: rgba(52, 58, 64, 0.5); /* semi trasparente */
+      background-color: rgba(52, 58, 64, 0.5);
       color: white;
       padding: 1rem;
       text-align: center;
@@ -127,8 +127,9 @@
     }
     window.addEventListener("load", updateBalances);
 
-    // Contatore dei giri: free spin (1 gratis) + extra (gestiti dal back-end)
+    // Contatore dei giri: free spin (1 gratis) + extra (dal back-end)
     function getFreeSpins() {
+      // Il valore visualizzato è gestito dal back-end; qui usiamo il valore salvato nel front-end solo come fallback
       let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
       let total = 1 + extra;
       document.getElementById("freeSpinsCount").innerText = total;

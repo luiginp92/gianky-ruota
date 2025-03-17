@@ -21,12 +21,13 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(String, nullable=True)
     wallet_address = Column(String, unique=True, index=True, nullable=False)
-    extra_spins = Column(Integer, default=0)
-    referred_by = Column(String, nullable=True)
-    last_play_date = Column(DateTime, nullable=True)
-    last_share_task = Column(DateTime, nullable=True)
-    nonce = Column(String, nullable=True)
+    extra_spins = Column(Integer, default=0)         # giri extra acquistati/non ancora usati
+    referred_by = Column(String, nullable=True)      # indirizzo wallet di chi lo ha referenziato (se applicabile)
+    last_play_date = Column(DateTime, nullable=True)   # data ultimo giro (per calcolo free daily spin)
+    last_share_task = Column(DateTime, nullable=True)  # data ultima completione task condivisione
+    nonce = Column(String, nullable=True)              # nonce temporaneo per login (una volta)
 
+# Modello Premio Vinto
 class PremioVinto(Base):
     __tablename__ = "premi_vinti"
     id = Column(Integer, primary_key=True, index=True)
@@ -36,11 +37,25 @@ class PremioVinto(Base):
     user_id = Column(Integer, nullable=False)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
+# Modello Global Counter
 class GlobalCounter(Base):
     __tablename__ = "global_counter"
     id = Column(Integer, primary_key=True, index=True)
-    total_in = Column(Float, default=0.0)
-    total_out = Column(Float, default=0.0)
+    total_in = Column(Float, default=0.0)   # totale GKY ricevuti (acquisti)
+    total_out = Column(Float, default=0.0)  # totale GKY inviati (premi)
 
 def init_db():
+    # Crea le tabelle nel database se non esistono
     Base.metadata.create_all(bind=engine)
+    # Inizializza GlobalCounter se non esiste
+    session = Session()
+    try:
+        if session.query(GlobalCounter).first() is None:
+            counter = GlobalCounter(total_in=0.0, total_out=0.0)
+            session.add(counter)
+            session.commit()
+    except Exception as e:
+        session.rollback()
+        print(f"Errore nell'inizializzazione di GlobalCounter: {e}")
+    finally:
+        session.close()
