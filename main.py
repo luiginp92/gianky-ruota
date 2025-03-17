@@ -238,7 +238,8 @@ async def api_spin(req: SpinRequest):
             user.last_play_date = now  # Registra il free spin
             session.commit()
             free_spin = True
-            available = user.extra_spins  # Free spin concesso: non decrementa gli extra
+            # In questo caso, l'utente ha utilizzato il free spin; il contatore disponibile è pari agli extra spin
+            available = user.extra_spins
         else:
             free_spin = False
             if user.extra_spins <= 0:
@@ -311,6 +312,21 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
+        # Aggiorna il GlobalCounter per le entrate (cost)
+        session_gc = Session()
+        try:
+            counter = session_gc.query(GlobalCounter).first()
+            if counter is None:
+                counter = GlobalCounter(total_in=cost, total_out=0.0)
+                session_gc.add(counter)
+            else:
+                counter.total_in += cost
+            session_gc.commit()
+        except Exception as gc_e:
+            logging.error(f"Errore aggiornamento total_in: {gc_e}")
+            session_gc.rollback()
+        finally:
+            session_gc.close()
         available = user.extra_spins
         return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
@@ -326,8 +342,6 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
 # ------------------ ENDPOINT DISTRIBUTE ------------------
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
-    # Questo endpoint restituisce una conferma della distribuzione,
-    # dato che il trasferimento dei token è già avvenuto in /api/spin.
     if req.prize.strip().upper() == "NO PRIZE":
         return {"message": "Nessun premio da distribuire."}
     else:
@@ -336,7 +350,7 @@ async def api_distribute(req: DistributePrizeRequest):
 # ------------------ ENDPOINT REFERRAL ------------------
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
-    referral_link = f"https://t.me/tuo_bot?start=ref_{wallet_address}"
+    referral_link = f"https://t.me/giankytestbot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
 
 # ------------------ ROOT ------------------
