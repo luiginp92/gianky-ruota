@@ -32,15 +32,12 @@ init_db()
 
 # Assicuriamoci che esista un record in GlobalCounter
 def ensure_global_counter():
-    session = Session()
-    try:
+    with Session() as session:
         counter = session.query(GlobalCounter).first()
         if counter is None:
             counter = GlobalCounter(total_in=0.0, total_out=0.0)
             session.add(counter)
             session.commit()
-    finally:
-        session.close()
 
 ensure_global_counter()
 
@@ -176,8 +173,8 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     except Exception as e:
         logging.error(f"Errore nell'invio dei token: {e}")
         return False
-    session_db = Session()
-    try:
+    # Aggiorna GlobalCounter in un nuovo contesto
+    with Session() as session_db:
         counter = session_db.query(GlobalCounter).first()
         if counter is None:
             counter = GlobalCounter(total_in=0.0, total_out=quantita)
@@ -185,11 +182,6 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         else:
             counter.total_out += quantita
         session_db.commit()
-    except Exception as e:
-        logging.error(f"Errore aggiornamento total_out: {e}")
-        session_db.rollback()
-    finally:
-        session_db.close()
     return True
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
@@ -198,10 +190,10 @@ def get_prize() -> str:
         ("10 GKY", 30),
         ("20 GKY", 15),
         ("50 GKY", 10),
-        ("100 GKY", 3),
-        ("250 GKY", 1),
-        ("500 GKY", 1),
-        ("1000 GKY", 1),
+        ("100 GKY", 3),    # dimezzato da 5
+        ("250 GKY", 1),    # dimezzato da 3
+        ("500 GKY", 1),    # dimezzato da 2
+        ("1000 GKY", 1),   # minimo 1
         ("NO PRIZE", 44)
     ]
     total = sum(weight for _, weight in prizes)
@@ -217,8 +209,7 @@ def get_prize() -> str:
 
 # ------------------ OTTENIMENTO UTENTE ------------------
 def get_user(wallet_address: str):
-    session = Session()
-    try:
+    with Session() as session:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
             user = User(wallet_address=wallet_address, extra_spins=0)
@@ -227,16 +218,18 @@ def get_user(wallet_address: str):
             session.refresh(user)
         logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}, last_play_date: {user.last_play_date}")
         return user
-    finally:
-        session.close()
 
 # ------------------ ENDPOINT SPIN ------------------
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
-    user = get_user(req.wallet_address)
-    session = Session()
-    try:
-        user = session.merge(user)
+    # Usa una sessione dedicata per l'endpoint spin
+    with Session() as session:
+        user = session.query(User).filter(User.wallet_address.ilike(req.wallet_address)).first()
+        if not user:
+            user = User(wallet_address=req.wallet_address, extra_spins=0)
+            session.add(user)
+            session.commit()
+            session.refresh(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
         if user.last_play_date is None:
@@ -246,13 +239,12 @@ async def api_spin(req: SpinRequest):
                 last_play = italy.localize(user.last_play_date)
             else:
                 last_play = user.last_play_date.astimezone(italy)
+        # Concedi free spin se non ha mai giocato o se sono trascorse almeno 24 ore
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now
+            user.last_play_date = now  # Registra il free spin
             session.commit()
-            free_spin = True
             available = 1 + user.extra_spins
         else:
-            free_spin = False
             if user.extra_spins <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
             user.extra_spins -= 1
@@ -278,35 +270,30 @@ async def api_spin(req: SpinRequest):
             session.add(record)
             session.commit()
         logging.info(f"Spin per {req.wallet_address}: premio {premio}")
-        remaining = user.extra_spins
-        return {"message": result_text, "prize": premio, "available_spins": remaining}
-    except Exception as e:
-        logging.error(f"Errore nello spin: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante lo spin.")
-    finally:
-        session.close()
+        return {"message": result_text, "prize": premio, "available_spins": user.extra_spins}
 
 # ------------------ ENDPOINT BUY SPINS ------------------
 @app.post("/api/buyspins")
 async def api_buyspins(req: BuySpinsRequest):
-    user = get_user(req.wallet_address)
-    try:
+    with Session() as session:
+        user = session.query(User).filter(User.wallet_address.ilike(req.wallet_address)).first()
+        if not user:
+            user = User(wallet_address=req.wallet_address, extra_spins=0)
+            session.add(user)
+            session.commit()
+            session.refresh(user)
         if req.num_spins not in (1, 3, 10):
             raise HTTPException(status_code=400, detail="Puoi acquistare solo 1, 3 o 10 giri extra.")
         cost = 50 if req.num_spins == 1 else 125 if req.num_spins == 3 else 300
         msg = f"Per acquistare {req.num_spins} giri extra, trasferisci {cost} GKY a {WALLET_DISTRIBUZIONE} e poi conferma tramite /api/confirmbuy."
         logging.info(f"Richiesta buyspins per {req.wallet_address} con num_spins: {req.num_spins}")
         return {"message": msg}
-    except Exception as e:
-        logging.error(f"Errore in buyspins: {e}")
-        raise HTTPException(status_code=500, detail="Errore nella richiesta d'acquisto.")
 
 # ------------------ ENDPOINT CONFIRM BUY ------------------
 @app.post("/api/confirmbuy")
 async def api_confirmbuy(req: ConfirmBuyRequest):
-    user = get_user(req.wallet_address)
-    session = Session()
-    try:
+    with Session() as session:
+        user = session.query(User).filter(User.wallet_address.ilike(req.wallet_address)).first()
         if req.tx_hash in USED_TX:
             raise HTTPException(status_code=400, detail="Tx già usata per un acquisto.")
         if req.num_spins not in (1, 3, 10):
@@ -317,11 +304,11 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         if not verifica_transazione_gky(user.wallet_address, req.tx_hash, cost):
             raise HTTPException(status_code=400, detail="Tx non valida o importo insufficiente.")
         USED_TX.add(req.tx_hash)
-        user = session.merge(user)
         user.extra_spins += req.num_spins
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
+        # Aggiorna GlobalCounter nell'ambito della stessa sessione
         counter = session.query(GlobalCounter).first()
         if counter is None:
             counter = GlobalCounter(total_in=cost, total_out=0.0)
@@ -329,17 +316,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         else:
             counter.total_in += cost
         session.commit()
-        available = user.extra_spins
-        return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
-    except HTTPException as he:
-        session.rollback()
-        raise he
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Errore in confirmbuy: {e}")
-        raise HTTPException(status_code=500, detail="Errore nella conferma degli extra giri.")
-    finally:
-        session.close()
+        return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": user.extra_spins}
 
 # ------------------ ENDPOINT DISTRIBUTE ------------------
 @app.post("/api/distribute")
