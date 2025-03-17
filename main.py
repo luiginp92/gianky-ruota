@@ -49,7 +49,6 @@ w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# Funzioni helper per conversione
 def to_wei(val, unit):
     return Web3.to_wei(val, unit)
 
@@ -162,23 +161,24 @@ def invia_token(destinatario: str, quantita: int) -> bool:
     except Exception as e:
         logging.error(f"Errore nell'invio dei token: {e}")
         return False
-    with Session() as session_db:
-        try:
-            counter = session_db.query(GlobalCounter).first()
-            if counter is None:
-                counter = GlobalCounter(total_in=0.0, total_out=quantita)
-                session_db.add(counter)
-            else:
-                counter.total_out += quantita
-            session_db.commit()
-        except Exception as e:
-            logging.error(f"Errore aggiornamento total_out: {e}")
-            session_db.rollback()
+    session_db = Session()
+    try:
+        counter = session_db.query(GlobalCounter).first()
+        if counter is None:
+            counter = GlobalCounter(total_in=0.0, total_out=quantita)
+            session_db.add(counter)
+        else:
+            counter.total_out += quantita
+        session_db.commit()
+    except Exception as e:
+        logging.error(f"Errore aggiornamento total_out: {e}")
+        session_db.rollback()
+    finally:
+        session_db.close()
     return True
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali (per premi superiori a 50 GKY le percentuali sono dimezzate)
     prizes = [
         ("10 GKY", 30),
         ("20 GKY", 15),
@@ -202,7 +202,8 @@ def get_prize() -> str:
 
 # ------------------ OTTENIMENTO UTENTE ------------------
 def get_user(wallet_address: str):
-    with Session() as session:
+    session = Session()
+    try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
             user = User(wallet_address=wallet_address, extra_spins=0)
@@ -211,12 +212,15 @@ def get_user(wallet_address: str):
             session.refresh(user)
         logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}, last_play_date: {user.last_play_date}")
         return user
+    finally:
+        session.close()
 
 # ------------------ ENDPOINT SPIN ------------------
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
     user = get_user(req.wallet_address)
-    with Session() as session:
+    session = Session()
+    try:
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
@@ -227,9 +231,8 @@ async def api_spin(req: SpinRequest):
                 last_play = italy.localize(user.last_play_date)
             else:
                 last_play = user.last_play_date.astimezone(italy)
-        # Concedi free spin se non ha mai giocato o se sono trascorse almeno 24 ore
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now  # Registra il free spin
+            user.last_play_date = now
             session.commit()
             free_spin = True
             available = 1 + user.extra_spins
@@ -262,6 +265,11 @@ async def api_spin(req: SpinRequest):
         logging.info(f"Spin per {req.wallet_address}: premio {premio}")
         remaining = user.extra_spins
         return {"message": result_text, "prize": premio, "available_spins": remaining}
+    except Exception as e:
+        logging.error(f"Errore nello spin: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante lo spin.")
+    finally:
+        session.close()
 
 # ------------------ ENDPOINT BUY SPINS ------------------
 @app.post("/api/buyspins")
@@ -282,7 +290,8 @@ async def api_buyspins(req: BuySpinsRequest):
 @app.post("/api/confirmbuy")
 async def api_confirmbuy(req: ConfirmBuyRequest):
     user = get_user(req.wallet_address)
-    with Session() as session:
+    session = Session()
+    try:
         if req.tx_hash in USED_TX:
             raise HTTPException(status_code=400, detail="Tx già usata per un acquisto.")
         if req.num_spins not in (1, 3, 10):
@@ -298,8 +307,8 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
-    # Aggiorna GlobalCounter per le entrate
-    with Session() as session_gc:
+        # Aggiorna il GlobalCounter per le entrate
+        session_gc = Session()
         try:
             counter = session_gc.query(GlobalCounter).first()
             if counter is None:
@@ -311,7 +320,19 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         except Exception as gc_e:
             logging.error(f"Errore aggiornamento total_in: {gc_e}")
             session_gc.rollback()
-    return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": user.extra_spins}
+        finally:
+            session_gc.close()
+        available = user.extra_spins
+        return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
+    except HTTPException as he:
+        session.rollback()
+        raise he
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Errore in confirmbuy: {e}")
+        raise HTTPException(status_code=500, detail="Errore nella conferma degli extra giri.")
+    finally:
+        session.close()
 
 # ------------------ ENDPOINT DISTRIBUTE ------------------
 @app.post("/api/distribute")
@@ -326,6 +347,31 @@ async def api_distribute(req: DistributePrizeRequest):
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/giankytestbot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
+
+# ------------------ ENDPOINT GIANKYADMIN ------------------
+@app.get("/api/giankyadmin")
+async def api_giankyadmin():
+    session = Session()
+    try:
+        counter = session.query(GlobalCounter).first()
+        if counter is None:
+            report_text = "Nessun dato disponibile ancora."
+        else:
+            total_in = counter.total_in
+            total_out = counter.total_out
+            balance = total_in - total_out
+            report_text = (
+                f"📊 Report Globali GiankyCoin:\n\n"
+                f"Entrate Totali: {total_in} GKY\n"
+                f"Uscite Totali: {total_out} GKY\n"
+                f"Bilancio: {balance} GKY"
+            )
+        return {"report": report_text}
+    except Exception as e:
+        logging.error(f"Errore in giankyadmin: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante la generazione del report.")
+    finally:
+        session.close()
 
 # ------------------ ROOT ------------------
 @app.get("/", response_class=HTMLResponse)
