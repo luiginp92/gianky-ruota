@@ -224,29 +224,11 @@ async def api_spin(req: SpinRequest):
     session = Session()
     try:
         user = session.merge(user)
-        italy = pytz.timezone("Europe/Rome")
-        now = datetime.datetime.now(italy)
-        if user.last_play_date is None:
-            last_play = None
-        else:
-            if user.last_play_date.tzinfo is None:
-                last_play = italy.localize(user.last_play_date)
-            else:
-                last_play = user.last_play_date.astimezone(italy)
-        # Concedi free spin solo se non ha mai giocato o sono trascorse almeno 24 ore
-        if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now  # Registra il free spin
-            session.commit()
-            free_spin = True
-            # In questo caso, l'utente ha utilizzato il free spin; il contatore disponibile è pari agli extra spin
-            available = user.extra_spins
-        else:
-            free_spin = False
-            if user.extra_spins <= 0:
-                raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
-            user.extra_spins -= 1
-            session.commit()
-            available = user.extra_spins
+        # Rimuoviamo il free spin automatico: l'utente può girare solo se ha extra_spins > 0.
+        if user.extra_spins <= 0:
+            raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
+        user.extra_spins -= 1
+        session.commit()
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
