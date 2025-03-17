@@ -6,16 +6,14 @@
   <title>GiankyCoin Web App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    /* Sfondo con immagine trasparente */
     body {
       background: url('/static/sfondo.png') no-repeat center center fixed;
       background-size: cover;
       padding-top: 20px;
       margin: 0;
     }
-    /* Header trasparente per integrarsi con lo sfondo */
     .header {
-      background-color: rgba(52, 58, 64, 0.5);
+      background-color: rgba(52,58,64,0.5);
       color: white;
       padding: 1rem;
       text-align: center;
@@ -25,13 +23,10 @@
     .footer { background-color: transparent; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
-    /* Il contatore dei giri mostra il valore esatto */
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen */
     #splash {
       position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
+      top: 0; left: 0; width: 100%; height: 100%;
       background: #fff;
       display: flex;
       align-items: center;
@@ -46,11 +41,11 @@
 <body>
   <!-- Splash screen con prepagina.png -->
   <div id="splash">
-    <img src="/static/prepagina.png" alt="Caricamento..." style="max-width:100%; height:auto;">
+    <img src="/static/prepagina.png" alt="Caricamento..." style="max-width: 100%; height: auto;">
   </div>
   
-  <!-- Audio di sottofondo: pianobar.mp3 -->
-  <audio id="bgMusic" src="/static/pianobar.mp3" autoplay loop></audio>
+  <!-- Elemento audio per la musica di sottofondo -->
+  <audio id="bgMusic" src="/static/pianobar.mp3" loop></audio>
   
   <header class="header">
     <h1>GiankyCoin App</h1>
@@ -58,9 +53,9 @@
       <div>MATIC: <span id="maticBalance">0</span></div>
       <div>GiankyCoin: <span id="tokenBalance">0</span></div>
     </div>
-    <!-- Contatore dei giri disponibili: free spin + extra -->
     <div id="freeSpins">Giri disponibili: <span id="freeSpinsCount">0</span></div>
   </header>
+  
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
@@ -94,23 +89,27 @@
       </div>
     </div>
   </div>
+  
   <footer class="footer">
     <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
   </footer>
   
   <script>
-    // Quando il DOM è pronto, rimuove lo splash screen dopo 2 secondi
+    // Rimuovi la splash screen 2 secondi dopo il caricamento
     document.addEventListener("DOMContentLoaded", () => {
-      setTimeout(() => {
-        document.getElementById("splash").style.display = "none";
-      }, 2000);
-      // Se non esiste la chiave "availableSpins", impostala a 1 (free spin iniziale)
+      setTimeout(() => { document.getElementById("splash").style.display = "none"; }, 2000);
+      // Se non è presente la chiave "availableSpins", impostala a "1" (free spin iniziale)
       if (!localStorage.getItem("availableSpins")) {
         localStorage.setItem("availableSpins", "1");
       }
       updateFreeSpinsDisplay(localStorage.getItem("availableSpins"));
     });
-
+    
+    // Funzione per aggiornare il contatore dei giri disponibili
+    function updateFreeSpinsDisplay(val) {
+      document.getElementById("freeSpinsCount").innerText = val;
+    }
+    
     // Aggiorna i saldi del wallet
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
@@ -127,12 +126,12 @@
       }
     }
     window.addEventListener("load", updateBalances);
-
-    // Funzione per aggiornare il contatore dei giri disponibili
-    function updateFreeSpinsDisplay(newVal) {
-      document.getElementById("freeSpinsCount").innerText = newVal;
+    
+    // Restituisce il numero di giri disponibili da localStorage (free spin + extra)
+    function getFreeSpins() {
+      return parseInt(localStorage.getItem("availableSpins") || "0", 10);
     }
-
+    
     // Configurazione della ruota: 8 segmenti
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
@@ -148,7 +147,7 @@
       fillStyle: item.color,
       text: item.text
     }));
-
+    
     // Crea la ruota con startAngle=22.5 per centrare il primo segmento
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
@@ -158,8 +157,8 @@
       segments: segments,
       animation: { type: 'spinToStop', duration: 5, spins: 8 }
     });
-
-    // Restituisce l'indice del premio nell'array prizeData
+    
+    // Restituisce l'indice del premio in prizeData
     function findPrizeIndex(prizeText) {
       prizeText = prizeText.trim().toUpperCase();
       for (let i = 0; i < prizeData.length; i++) {
@@ -167,7 +166,7 @@
       }
       return -1;
     }
-
+    
     function createWheel(finalAngle) {
       return new Winwheel({
         canvasId: 'wheelCanvas',
@@ -208,16 +207,22 @@
         }
       });
     }
-
+    
     function resetWheel() {
       theWheel.stopAnimation(false);
       theWheel.rotationAngle = 0;
       theWheel.draw();
       document.getElementById("btnSpin").disabled = false;
     }
-
+    
     document.getElementById("btnSpin").addEventListener("click", async () => {
-      let spins = parseInt(localStorage.getItem("availableSpins") || "0", 10);
+      // Avvia la musica (in caso non stia già suonando)
+      const bgMusic = document.getElementById("bgMusic");
+      if (bgMusic.paused) {
+        bgMusic.play().catch(e => console.log("Impossibile avviare l'autoplay:", e));
+      }
+      
+      let spins = getFreeSpins();
       if (spins <= 0) {
         alert("Non hai giri disponibili. Acquista extra tiri.");
         return;
