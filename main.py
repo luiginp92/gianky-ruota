@@ -25,9 +25,7 @@ from database import Session, User, PremioVinto, GlobalCounter, init_db
 from dotenv import load_dotenv
 load_dotenv()
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
@@ -238,8 +236,7 @@ async def api_spin(req: SpinRequest):
             user.last_play_date = now  # Registra il free spin
             session.commit()
             free_spin = True
-            # Se free spin è disponibile, l'utente ha 1 free spin in più
-            available = 1 + user.extra_spins
+            available = 1 + user.extra_spins  # Free spin concesso: free spin + extra
         else:
             free_spin = False
             if user.extra_spins <= 0:
@@ -312,7 +309,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
-        # Aggiorna il GlobalCounter per le entrate (cost)
+        # Aggiorna GlobalCounter per le entrate
         session_gc = Session()
         try:
             counter = session_gc.query(GlobalCounter).first()
