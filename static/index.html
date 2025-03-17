@@ -13,7 +13,7 @@
       padding-top: 20px;
       margin: 0;
     }
-    /* Header trasparente */
+    /* Header ora trasparente per integrarsi con lo sfondo */
     .header {
       background-color: rgba(52, 58, 64, 0.5);
       color: white;
@@ -49,6 +49,9 @@
   <div id="splash">
     <img src="/static/prepagina.png" alt="Caricamento..." style="max-width: 100%; height: auto;">
   </div>
+
+  <!-- Elemento audio per il sottofondo musicale -->
+  <audio id="backgroundMusic" src="/static/pianobar.mp3" loop></audio>
   
   <header class="header">
     <h1>GiankyCoin App</h1>
@@ -61,6 +64,7 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
+        <!-- La ruota è visibile all'avvio -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -96,7 +100,15 @@
   </footer>
   
   <script>
-    // Rimuovi la splash screen 2 secondi dopo il DOM
+    // Avvia la musica di sottofondo al primo click dell'utente (auto play spesso non è consentito)
+    document.addEventListener("click", () => {
+      const audio = document.getElementById("backgroundMusic");
+      if (audio.paused) {
+        audio.play().catch(err => console.error("Impossibile riprodurre l'audio:", err));
+      }
+    }, { once: true });
+    
+    // Rimuovi la splash screen 2 secondi dopo che il DOM è pronto
     document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         document.getElementById("splash").style.display = "none";
@@ -108,8 +120,8 @@
     document.getElementById("btnBuySpins").addEventListener("click", () => window.location.href = "/static/buyspins.html");
     document.getElementById("btnReferral").addEventListener("click", () => window.location.href = "/static/referral.html");
     document.getElementById("btnTask").addEventListener("click", () => window.location.href = "/static/task.html");
-
-    // Aggiorna saldi
+    
+    // Aggiorna saldi e contatore
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -120,25 +132,22 @@
           document.getElementById("maticBalance").innerText = data.matic;
           document.getElementById("tokenBalance").innerText = data.gky;
         }
-      } catch (error) { console.error("Errore nei saldi:", error); }
+      } catch (error) {
+        console.error("Errore nei saldi:", error);
+      }
     }
     window.addEventListener("load", updateBalances);
-
-    // Aggiorna contatore giri extra usando l'endpoint dedicato
-    async function updateFreeSpins() {
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) return;
-      try {
-        const res = await fetch(`/api/freespins/${wallet}`);
-        if (res.ok) {
-          const data = await res.json();
-          document.getElementById("freeSpinsCount").innerText = data.available_spins;
-        }
-      } catch (error) { console.error("Errore nel contatore giri:", error); }
+    
+    // Contatore dei giri: free spin (1 gratis) + extra (gestiti dal back‑end)
+    function getFreeSpins() {
+      let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
+      let total = 1 + extra;
+      document.getElementById("freeSpinsCount").innerText = total;
+      return total;
     }
-    window.addEventListener("load", updateFreeSpins);
-
-    // Ruota: 8 segmenti in ordine esatto
+    window.addEventListener("load", getFreeSpins);
+    
+    // Array dei premi: 8 segmenti in ordine esatto
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -153,7 +162,7 @@
       fillStyle: item.color,
       text: item.text
     }));
-
+    
     // Crea la ruota con startAngle=22.5 per centrare il primo segmento
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
@@ -163,7 +172,7 @@
       segments: segments,
       animation: { type: 'spinToStop', duration: 5, spins: 8 }
     });
-
+    
     function findPrizeIndex(prizeText) {
       prizeText = prizeText.trim().toUpperCase();
       for (let i = 0; i < prizeData.length; i++) {
@@ -171,7 +180,7 @@
       }
       return -1;
     }
-
+    
     function createWheel(finalAngle) {
       return new Winwheel({
         canvasId: 'wheelCanvas',
@@ -203,7 +212,6 @@
               const data = await res.json();
               alert(data.message);
               updateBalances();
-              updateFreeSpins();
             } catch (error) {
               console.error("Errore nella distribuzione:", error);
               alert("Errore nella distribuzione. Contatta l'assistenza.");
@@ -213,15 +221,19 @@
         }
       });
     }
-
+    
     function resetWheel() {
       theWheel.stopAnimation(false);
       theWheel.rotationAngle = 0;
       theWheel.draw();
       document.getElementById("btnSpin").disabled = false;
     }
-
+    
     document.getElementById("btnSpin").addEventListener("click", async () => {
+      if (getFreeSpins() <= 0) {
+        alert("Non hai giri disponibili. Acquista extra tiri.");
+        return;
+      }
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
         alert("Wallet non collegato.");

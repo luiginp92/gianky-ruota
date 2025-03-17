@@ -5,13 +5,13 @@ Gianky Coin Web App – main.py
 Gestisce:
  • Lo spin della ruota, la scelta del premio e il trasferimento automatico dei token
  • L'acquisto e la conferma degli extra giri
- • Gli endpoint per il saldo e per il contatore dei giri disponibili
+ • Gli endpoint per il saldo, per i giri extra e per il bonus referral/task
 """
 
-import os, random, datetime, pytz, logging
+import os, random, datetime, pytz, logging, asyncio
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -49,7 +49,7 @@ w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# Funzioni helper per conversione
+# ------------------ FUNZIONI HELPER ------------------
 def to_wei(val, unit):
     return Web3.to_wei(val, unit)
 
@@ -137,6 +137,7 @@ async def get_balance(wallet_address: str):
 async def get_free_spins(wallet_address: str):
     try:
         user = get_user(wallet_address)
+        # Il free spin giornaliero non viene aggiunto qui: qui mostriamo solo gli extra spin acquistati
         return {"available_spins": user.extra_spins}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -189,7 +190,6 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali (per premi superiori a 50 GKY le percentuali sono dimezzate)
     prizes = [
         ("10 GKY", 30),
         ("20 GKY", 15),
@@ -233,7 +233,6 @@ async def api_spin(req: SpinRequest):
     session = Session()
     try:
         user = session.merge(user)
-        # Non c'è free spin automatico: l'utente deve avere extra_spins > 0 per girare
         if user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
         user.extra_spins -= 1
@@ -299,11 +298,10 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
-        # Non resettiamo last_play_date per mantenere il free spin concesso solo dopo 24 ore
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
-        # Aggiorna il GlobalCounter per le entrate (cost)
+        # Aggiorna GlobalCounter per le entrate
         session_gc = Session()
         try:
             counter = session_gc.query(GlobalCounter).first()
@@ -343,6 +341,40 @@ async def api_distribute(req: DistributePrizeRequest):
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/giankytestbot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
+
+# ------------------ NUOVO ENDPOINT PER CLAIM TASK ------------------
+COMPLETED_TASKS = {}  # Dizionario per tracciare i task completati per ogni wallet
+
+async def process_task(wallet: str, task_id: str):
+    # Simula la verifica con attesa di 10 minuti (600 secondi)
+    await asyncio.sleep(600)
+    session = Session()
+    try:
+        user = session.query(User).filter(User.wallet_address.ilike(wallet)).first()
+        if user:
+            user.extra_spins += 2
+            session.commit()
+            logging.info(f"Task {task_id} completata per {wallet}: bonus di 2 giri accreditato.")
+        else:
+            logging.error(f"Utente {wallet} non trovato per il task {task_id}.")
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Errore nel processamento del task {task_id} per {wallet}: {e}")
+    finally:
+        session.close()
+
+@app.post("/api/claim_task")
+async def claim_task(req: dict, background_tasks: BackgroundTasks):
+    wallet = req.get("wallet_address")
+    task_id = req.get("task_id")
+    if not wallet or not task_id or len(wallet) != 42:
+        raise HTTPException(status_code=400, detail="Dati mancanti o wallet non valido.")
+    # Controlla se il task è già stato completato per questo wallet
+    if wallet in COMPLETED_TASKS and task_id in COMPLETED_TASKS[wallet]:
+        return {"message": "Task già completata."}
+    COMPLETED_TASKS.setdefault(wallet, set()).add(task_id)
+    background_tasks.add_task(process_task, wallet, task_id)
+    return {"message": "Task in attesa di verifica. Riceverai 2 giri extra entro 10 minuti."}
 
 # ------------------ ROOT ------------------
 @app.get("/", response_class=HTMLResponse)
