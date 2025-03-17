@@ -6,16 +6,15 @@ from telegram.request import HTTPXRequest
 
 from database import Session, GlobalCounter, init_db
 
-# Inizializza il database
+# Inizializza il database (crea le tabelle se non esistono)
 init_db()
 
-# Token del bot e URL della mini app
+# Usa il token esatto (senza spazi o modifiche)
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
+# URL della mini app
 WEB_APP_URL = "https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html"
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -29,18 +28,19 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         counter = session.query(GlobalCounter).first()
         if counter is None:
-            report_text = "Nessun dato disponibile ancora."
+            total_in = 0.0
+            total_out = 0.0
         else:
             total_in = counter.total_in
             total_out = counter.total_out
-            balance = total_in - total_out
-            report_text = (
-                f"📊 **Report GiankyCoin** 📊\n\n"
-                f"**Entrate Totali:** {total_in} GKY\n"
-                f"**Uscite Totali:** {total_out} GKY\n"
-                f"**Bilancio:** {balance} GKY"
-            )
-        await update.message.reply_text(report_text, parse_mode="Markdown")
+        balance = total_in - total_out
+        message = (
+            f"📊 **Report GiankyCoin** 📊\n\n"
+            f"**Entrate Totali:** {total_in} GKY\n"
+            f"**Uscite Totali:** {total_out} GKY\n"
+            f"**Bilancio:** {balance} GKY"
+        )
+        await update.message.reply_text(message, parse_mode="Markdown")
     except Exception as e:
         logging.error(f"Errore in giankyadmin: {e}")
         await update.message.reply_text("Errore nel recupero dei dati.")
