@@ -25,7 +25,9 @@ from database import Session, User, PremioVinto, GlobalCounter, init_db
 from dotenv import load_dotenv
 load_dotenv()
 
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
@@ -309,21 +311,14 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
-        # Aggiorna GlobalCounter per le entrate
-        session_gc = Session()
-        try:
-            counter = session_gc.query(GlobalCounter).first()
-            if counter is None:
-                counter = GlobalCounter(total_in=cost, total_out=0.0)
-                session_gc.add(counter)
-            else:
-                counter.total_in += cost
-            session_gc.commit()
-        except Exception as gc_e:
-            logging.error(f"Errore aggiornamento total_in: {gc_e}")
-            session_gc.rollback()
-        finally:
-            session_gc.close()
+        # Aggiorna GlobalCounter per le entrate all'interno della stessa sessione
+        counter = session.query(GlobalCounter).first()
+        if counter is None:
+            counter = GlobalCounter(total_in=cost, total_out=0.0)
+            session.add(counter)
+        else:
+            counter.total_in += cost
+        session.commit()
         available = user.extra_spins
         return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
