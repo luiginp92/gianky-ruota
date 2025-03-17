@@ -4,7 +4,7 @@ from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMar
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.request import HTTPXRequest
 
-# Importa la sessione e il modello GlobalCounter dal database
+# Importa la sessione e le funzioni per il database
 from database import Session, GlobalCounter, init_db
 
 # Inizializza il database (crea le tabelle se non esistono)
@@ -28,8 +28,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Comando che mostra il report globale delle entrate e uscite del wallet di distribuzione.
-    Se non esiste ancora un record, restituisce 0 per tutti i valori.
+    Comando per mostrare il report globale delle entrate (buy spins) e uscite (premi vinti)
+    del wallet di distribuzione. Il report è aggiornato in tempo reale.
     """
     session = Session()
     try:
@@ -41,15 +41,15 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             total_out = counter.total_out
             balance = total_in - total_out
             report_text = (
-                f"📊 **Report Globali GKY** 📊\n\n"
-                f"**Entrate Totali:** {total_in} GKY\n"
-                f"**Uscite Totali:** {total_out} GKY\n"
-                f"**Bilancio:** {balance} GKY"
+                f"📊 *Report Globali GiankyCoin:*\n\n"
+                f"*Entrate totali:* {total_in:.2f} GKY\n"
+                f"*Uscite totali:* {total_out:.2f} GKY\n"
+                f"*Bilancio:* {balance:.2f} GKY"
             )
         await update.message.reply_text(report_text, parse_mode="Markdown")
     except Exception as e:
         logging.error(f"Errore in giankyadmin: {e}")
-        await update.message.reply_text("Errore nel recupero del report.")
+        await update.message.reply_text("Errore durante la generazione del report.")
     finally:
         session.close()
 
