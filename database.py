@@ -48,14 +48,8 @@ def init_db():
     # Crea le tabelle nel database se non esistono
     Base.metadata.create_all(bind=engine)
     # Inizializza GlobalCounter se non esiste
-    session = Session()
-    try:
+    with Session() as session:
         if session.query(GlobalCounter).first() is None:
             counter = GlobalCounter(total_in=0.0, total_out=0.0)
             session.add(counter)
             session.commit()
-    except Exception as e:
-        session.rollback()
-        print(f"Errore nell'inizializzazione di GlobalCounter: {e}")
-    finally:
-        session.close()
