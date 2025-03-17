@@ -6,14 +6,16 @@
   <title>GiankyCoin Web App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
+    /* Sfondo che usa sfondo.png, adattato e trasparente */
     body {
       background: url('/static/sfondo.png') no-repeat center center fixed;
       background-size: cover;
       padding-top: 20px;
       margin: 0;
     }
+    /* Header trasparente */
     .header {
-      background-color: rgba(52,58,64,0.5);
+      background-color: rgba(52, 58, 64, 0.5);
       color: white;
       padding: 1rem;
       text-align: center;
@@ -22,11 +24,16 @@
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: transparent; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
+    /* Rimuove il bordo della ruota */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
+    /* Splash screen: visualizza prepagina.png */
     #splash {
       position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
       background: #fff;
       display: flex;
       align-items: center;
@@ -43,10 +50,10 @@
   <div id="splash">
     <img src="/static/prepagina.png" alt="Caricamento..." style="max-width: 100%; height: auto;">
   </div>
-
-  <!-- Elemento audio per la musica di sottofondo -->
-  <audio id="bgMusic" src="/static/pianobar.mp3" loop></audio>
-
+  
+  <!-- Audio: pianobar.mp3 in loop; senza controlli visibili -->
+  <audio id="backgroundMusic" src="/static/pianobar.mp3" autoplay loop></audio>
+  
   <header class="header">
     <h1>GiankyCoin App</h1>
     <div class="balance-info">
@@ -55,10 +62,10 @@
     </div>
     <div id="freeSpins">Giri disponibili: <span id="freeSpinsCount">0</span></div>
   </header>
-
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
+        <!-- La ruota -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -89,35 +96,19 @@
       </div>
     </div>
   </div>
-
   <footer class="footer">
     <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
   </footer>
-
+  
   <script>
-    // Rimuovi la splash screen 2 secondi dopo il caricamento
+    // Nascondi splash screen dopo 2 secondi
     document.addEventListener("DOMContentLoaded", () => {
-      setTimeout(() => { document.getElementById("splash").style.display = "none"; }, 2000);
-      // Al caricamento, aggiorna il contatore dei giri disponibili dal server
-      updateFreeSpins();
+      setTimeout(() => {
+        document.getElementById("splash").style.display = "none";
+      }, 2000);
     });
     
-    // Funzione per aggiornare il contatore dei giri disponibili chiamando l'endpoint dedicato
-    async function updateFreeSpins() {
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) return;
-      try {
-        const res = await fetch(`/api/free_spins/${wallet}`);
-        if (res.ok) {
-          const data = await res.json();
-          document.getElementById("freeSpinsCount").innerText = data.available_spins;
-        }
-      } catch (error) {
-        console.error("Errore nell'aggiornamento dei giri:", error);
-      }
-    }
-    
-    // Aggiorna i saldi del wallet
+    // Aggiorna saldi
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -133,8 +124,24 @@
       }
     }
     window.addEventListener("load", updateBalances);
-    
-    // Configurazione della ruota: 8 segmenti (ordine esatto)
+
+    // Aggiorna il contatore dei giri disponibili
+    async function updateSpinsStatus() {
+      const wallet = localStorage.getItem("walletAddress");
+      if (!wallet) return;
+      try {
+        const res = await fetch(`/api/spins_status/${wallet}`);
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById("freeSpinsCount").innerText = data.available_spins;
+        }
+      } catch (error) {
+        console.error("Errore nello status dei giri:", error);
+      }
+    }
+    window.addEventListener("load", updateSpinsStatus);
+
+    // Configurazione della ruota: 8 segmenti in ordine esatto
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -149,7 +156,7 @@
       fillStyle: item.color,
       text: item.text
     }));
-    
+
     // Crea la ruota con startAngle=22.5 per centrare il primo segmento
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
@@ -159,7 +166,7 @@
       segments: segments,
       animation: { type: 'spinToStop', duration: 5, spins: 8 }
     });
-    
+
     function findPrizeIndex(prizeText) {
       prizeText = prizeText.trim().toUpperCase();
       for (let i = 0; i < prizeData.length; i++) {
@@ -167,7 +174,7 @@
       }
       return -1;
     }
-    
+
     function createWheel(finalAngle) {
       return new Winwheel({
         canvasId: 'wheelCanvas',
@@ -182,54 +189,22 @@
           stopAngle: finalAngle,
           callbackFinished: async function(indicatedSegment) {
             alert("Hai vinto: " + indicatedSegment.text);
-            let wallet = localStorage.getItem("walletAddress");
-            if (wallet) wallet = wallet.trim();
-            if (!wallet || wallet.length !== 42) {
-              alert("Wallet non valido o non connesso.");
-              resetWheel();
-              return;
-            }
-            try {
-              const res = await fetch("/api/distribute", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ wallet_address: wallet, prize: indicatedSegment.text })
-              });
-              if (!res.ok) throw new Error("Distribuzione fallita: " + res.status);
-              const data = await res.json();
-              alert(data.message);
-              updateBalances();
-            } catch (error) {
-              console.error("Errore nella distribuzione:", error);
-              alert("Errore nella distribuzione. Contatta l'assistenza.");
-            }
+            updateBalances();
+            updateSpinsStatus();
             resetWheel();
-            // Aggiorna anche il contatore dei giri dopo lo spin
-            updateFreeSpins();
           }
         }
       });
     }
-    
+
     function resetWheel() {
       theWheel.stopAnimation(false);
       theWheel.rotationAngle = 0;
       theWheel.draw();
       document.getElementById("btnSpin").disabled = false;
     }
-    
+
     document.getElementById("btnSpin").addEventListener("click", async () => {
-      // Avvia la musica (se non è già in riproduzione)
-      const bgMusic = document.getElementById("bgMusic");
-      if (bgMusic.paused) {
-        bgMusic.play().catch(e => console.log("Impossibile avviare l'autoplay:", e));
-      }
-      
-      let spins = parseInt(document.getElementById("freeSpinsCount").innerText);
-      if (spins <= 0) {
-        alert("Non hai giri disponibili. Acquista extra tiri.");
-        return;
-      }
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
         alert("Wallet non collegato.");
@@ -245,8 +220,6 @@
         if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
         const spinData = await spinRes.json();
         console.log("Risultato spin:", spinData);
-        // Aggiorna il contatore dei giri con il valore restituito dal backend
-        updateFreeSpins();
         const prize = spinData.prize;
         let chosenIndex = findPrizeIndex(prize);
         if (chosenIndex === -1) {
