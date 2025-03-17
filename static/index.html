@@ -6,16 +6,14 @@
   <title>GiankyCoin Web App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    /* Usa lo sfondo con sfondo.png */
     body {
       background: url('/static/sfondo.png') no-repeat center center fixed;
       background-size: cover;
-      padding-top: 20px;
       margin: 0;
+      padding-top: 20px;
     }
-    /* Header ora trasparente per integrarsi con lo sfondo */
     .header {
-      background-color: rgba(52, 58, 64, 0.5); /* semi trasparente */
+      background-color: rgba(52, 58, 64, 0.5);
       color: white;
       padding: 1rem;
       text-align: center;
@@ -26,7 +24,7 @@
     .balance-info { text-align: right; font-size: 0.9rem; }
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen iniziale */
+    /* Splash screen */
     #splash {
       position: fixed;
       top: 0;
@@ -39,23 +37,24 @@
       justify-content: center;
       z-index: 1000;
     }
+    #splash img { max-width: 100%; height: auto; }
+    /* Audio nascosto */
+    audio { display: none; }
   </style>
   <!-- Carica TweenMax e Winwheel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
 <body>
-  <!-- Splash screen: prepagina.png -->
+  <!-- Splash screen con prepagina.png -->
   <div id="splash">
-    <img src="/static/prepagina.png" alt="Caricamento..." style="max-width: 100%; height: auto;">
+    <img src="/static/prepagina.png" alt="Caricamento...">
   </div>
-
-  <!-- Elemento audio per la musica di sottofondo -->
-  <audio id="backgroundMusic" loop>
+  <!-- Audio di sottofondo: pianobar.mp3 -->
+  <audio id="backgroundMusic" autoplay loop>
     <source src="/static/pianobar.mp3" type="audio/mpeg">
-    Il tuo browser non supporta l'elemento audio.
+    Il tuo browser non supporta l'audio.
   </audio>
-
   <header class="header">
     <h1>GiankyCoin App</h1>
     <div class="balance-info">
@@ -67,7 +66,6 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- La ruota è visibile all'avvio -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -103,11 +101,9 @@
   </footer>
   
   <script>
-    // Rimuovi la splash screen 2 secondi dopo il caricamento del DOM
+    // Rimuovi la splash screen dopo 2 secondi
     document.addEventListener("DOMContentLoaded", () => {
-      setTimeout(() => {
-        document.getElementById("splash").style.display = "none";
-      }, 2000);
+      setTimeout(() => { document.getElementById("splash").style.display = "none"; }, 2000);
     });
     
     // Navigazione
@@ -115,8 +111,8 @@
     document.getElementById("btnBuySpins").addEventListener("click", () => window.location.href = "/static/buyspins.html");
     document.getElementById("btnReferral").addEventListener("click", () => window.location.href = "/static/referral.html");
     document.getElementById("btnTask").addEventListener("click", () => window.location.href = "/static/task.html");
-
-    // Aggiorna saldi e contatore
+    
+    // Aggiorna saldi
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -130,17 +126,22 @@
       } catch (error) { console.error("Errore nei saldi:", error); }
     }
     window.addEventListener("load", updateBalances);
-
-    // Contatore dei giri: free spin (1 gratis) + extra spin (gestiti dal back-end)
-    function getFreeSpins() {
-      let extra = parseInt(localStorage.getItem("purchasedExtraSpins") || "0", 10);
-      let total = 1 + extra;
-      document.getElementById("freeSpinsCount").innerText = total;
-      return total;
+    
+    // Aggiorna il contatore dei giri disponibili chiamando l'endpoint
+    async function updateSpinCount() {
+      const wallet = localStorage.getItem("walletAddress");
+      if (!wallet) return;
+      try {
+        const res = await fetch(`/api/spins_status/${wallet}`);
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById("freeSpinsCount").innerText = data.available_spins;
+        }
+      } catch (error) { console.error("Errore nel conteggio dei giri:", error); }
     }
-    window.addEventListener("load", getFreeSpins);
-
-    // Array dei premi: 8 segmenti in ordine esatto
+    window.addEventListener("load", updateSpinCount);
+    
+    // Configura la ruota (8 segmenti in ordine fisso)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -155,8 +156,7 @@
       fillStyle: item.color,
       text: item.text
     }));
-
-    // Crea la ruota con startAngle=22.5 per centrare il primo segmento
+    
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       startAngle: 22.5,
@@ -165,7 +165,7 @@
       segments: segments,
       animation: { type: 'spinToStop', duration: 5, spins: 8 }
     });
-
+    
     function findPrizeIndex(prizeText) {
       prizeText = prizeText.trim().toUpperCase();
       for (let i = 0; i < prizeData.length; i++) {
@@ -173,7 +173,7 @@
       }
       return -1;
     }
-
+    
     function createWheel(finalAngle) {
       return new Winwheel({
         canvasId: 'wheelCanvas',
@@ -205,6 +205,7 @@
               const data = await res.json();
               alert(data.message);
               updateBalances();
+              updateSpinCount();
             } catch (error) {
               console.error("Errore nella distribuzione:", error);
               alert("Errore nella distribuzione. Contatta l'assistenza.");
@@ -214,31 +215,22 @@
         }
       });
     }
-
+    
     function resetWheel() {
       theWheel.stopAnimation(false);
       theWheel.rotationAngle = 0;
       theWheel.draw();
       document.getElementById("btnSpin").disabled = false;
     }
-
+    
     document.getElementById("btnSpin").addEventListener("click", async () => {
-      if (getFreeSpins() <= 0) {
-        alert("Non hai giri disponibili. Acquista extra tiri.");
-        return;
-      }
-      // Avvia la musica di sottofondo al click se non è già in riproduzione
-      const audio = document.getElementById("backgroundMusic");
-      if (audio.paused) {
-        audio.play().catch(err => console.error("Errore nel play della musica:", err));
-      }
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet) {
-        alert("Wallet non collegato.");
-        document.getElementById("btnSpin").disabled = false;
-        return;
-      }
       try {
+        const wallet = localStorage.getItem("walletAddress");
+        if (!wallet) {
+          alert("Wallet non collegato.");
+          document.getElementById("btnSpin").disabled = false;
+          return;
+        }
         const spinRes = await fetch("/api/spin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
