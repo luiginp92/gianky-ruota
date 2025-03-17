@@ -6,10 +6,10 @@ from telegram.request import HTTPXRequest
 
 from database import Session, GlobalCounter, init_db
 
-# Inizializza il database (se necessario)
+# Inizializza il database (crea le tabelle se non esistono)
 init_db()
 
-# Usa il token esatto (senza spazi o modifiche)
+# Token del bot
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
 # URL della mini app
 WEB_APP_URL = "https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html"
