@@ -8,6 +8,7 @@ from database import Session, GlobalCounter, init_db
 
 init_db()
 
+# Token e URL della mini app
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
 WEB_APP_URL = "https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html"
 

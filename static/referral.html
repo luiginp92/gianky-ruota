@@ -20,12 +20,15 @@
     <button id="copyButton" class="btn btn-primary">Copia Link</button>
     <br><br>
     <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Torna alla Home</button>
+    <br><br>
+    <!-- Pulsante per reclamare il referral -->
+    <button id="claimReferral" class="btn btn-success">Reclama Referral</button>
+    <div id="referralMessage" class="mt-2"></div>
   </div>
   <script>
     const wallet = localStorage.getItem("walletAddress");
     const referralInput = document.getElementById("referralLink");
     if (wallet && wallet.length === 42) {
-      // Usa il nome corretto del bot: giankytestbot
       const referralLink = "https://t.me/giankytestbot?start=ref_" + wallet;
       referralInput.value = referralLink;
     } else {
@@ -37,6 +40,34 @@
       referralInput.setSelectionRange(0, 99999);
       document.execCommand("copy");
       alert("Link copiato negli appunti!");
+    });
+    
+    // Funzione per reclamare il referral
+    document.getElementById("claimReferral").addEventListener("click", async () => {
+      if (!wallet || wallet.length !== 42) {
+        alert("Wallet non collegato.");
+        return;
+      }
+      // Nel link referral, la parte dopo "ref_" è il wallet del referrer.
+      // Supponiamo che questo valore sia passato come query parameter "ref" (puoi modificarlo in base al tuo flusso)
+      const urlParams = new URLSearchParams(window.location.search);
+      const referrer = urlParams.get("start")?.split("_")[1];
+      if (!referrer) {
+        document.getElementById("referralMessage").innerText = "Nessun referral rilevato.";
+        return;
+      }
+      try {
+        const res = await fetch("/api/claim_referral", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: wallet, referrer: referrer })
+        });
+        const data = await res.json();
+        document.getElementById("referralMessage").innerText = data.message;
+      } catch (error) {
+        console.error("Errore nel reclamare il referral:", error);
+        document.getElementById("referralMessage").innerText = "Errore nel reclamare il referral.";
+      }
     });
   </script>
 </body>

@@ -3,29 +3,30 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Gestisce:
- • Lo spin della ruota, la scelta del premio e il trasferimento automatico dei token
- • L'acquisto e la conferma degli extra giri
- • Gli endpoint per il saldo, il conteggio dei giri disponibili, referral e task
+ • Spin della ruota e distribuzione dei premi
+ • Acquisto e conferma degli extra giri
+ • Endpoint per il saldo del wallet e status dei giri
+ • Endpoint per reclamare referral e task (con accredito ritardato)
 """
 
-import os, random, datetime, pytz, logging
+import os, random, datetime, pytz, logging, asyncio
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
 from web3 import Web3
-from jose import jwt
+from eth_account.messages import encode_defunct
+from jose import JWTError, jwt
+
 from database import Session, User, PremioVinto, GlobalCounter, init_db
 from dotenv import load_dotenv
 load_dotenv()
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
@@ -66,6 +67,7 @@ def get_dynamic_gas_price():
         logging.error(f"Errore nel gas price: {e}")
         return to_wei(50, 'gwei')
 
+# ------------------ VERIFICA TX ------------------
 def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool:
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
@@ -106,16 +108,27 @@ class DistributePrizeRequest(BaseModel):
     prize: str
 
 class ReferralRequest(BaseModel):
-    referrer_wallet: str
-    new_wallet: str
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
+    referrer: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
 
-class ClaimTaskRequest(BaseModel):
-    wallet_address: str
+class TaskClaimRequest(BaseModel):
+    wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     task_id: str
+
+# ------------------ ENDPOINT SPINS STATUS ------------------
+@app.get("/api/spins_status/{wallet_address}")
+async def spins_status(wallet_address: str):
+    user = get_user(wallet_address)
+    italy = pytz.timezone("Europe/Rome")
+    now = datetime.datetime.now(italy)
+    # Free spin disponibile se l'utente non ha girato oggi
+    free_spin = 1 if (user.last_play_date is None or user.last_play_date.date() < now.date()) else 0
+    available = user.extra_spins + free_spin
+    return {"available_spins": available}
 
 # ------------------ ENDPOINT PER IL SALDO ------------------
 @app.get("/api/balance/{wallet_address}")
-async def get_balance_endpoint(wallet_address: str):
+async def get_balance(wallet_address: str):
     try:
         provider = Web3(Web3.HTTPProvider(PROVIDER_URL))
         matic_balance = provider.eth.get_balance(wallet_address)
@@ -211,7 +224,7 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
-            user = User(wallet_address=wallet_address, extra_spins=0, last_play_date=None)
+            user = User(wallet_address=wallet_address, extra_spins=0)
             session.add(user)
             session.commit()
             session.refresh(user)
@@ -229,26 +242,26 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Se l'utente non ha girato oggi, free spin è disponibile
-        free_spin_available = (user.last_play_date is None) or (user.last_play_date.date() < now.date())
-        if free_spin_available:
-            spin_type = "free"
-            user.last_play_date = now  # Registra che il free spin è stato usato
+        # Determina se il free spin è disponibile: se last_play_date è None o se non è la stessa data
+        free_spin_available = 1 if (user.last_play_date is None or user.last_play_date.date() < now.date()) else 0
+        if free_spin_available == 0 and user.extra_spins <= 0:
+            raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
+        if free_spin_available == 1:
+            # Usa il free spin, ma non decrementa extra_spins
+            user.last_play_date = now
+            session.commit()
+            used_spin = 0  # free spin usato, extra non decrementati
         else:
-            spin_type = "purchased"
-            if user.extra_spins <= 0:
-                raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
             user.extra_spins -= 1
-        session.commit()
-        # Calcola il numero di giri disponibili: se free spin era disponibile e usato, ora disponi di extra_spins (senza +1)
-        available = user.extra_spins
+            session.commit()
+            used_spin = 1
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
             amount = int(premio.split(" ")[0])
             if invia_token(req.wallet_address, amount):
-                result_text = f"Hai vinto {premio}! (spin usato: {spin_type})"
+                result_text = f"Hai vinto {premio}!"
             else:
                 result_text = "Errore nel trasferimento dei token."
         else:
@@ -261,23 +274,16 @@ async def api_spin(req: SpinRequest):
             )
             session.add(record)
             session.commit()
-        logging.info(f"Spin per {req.wallet_address}: premio {premio}, spin usato: {spin_type}")
+        logging.info(f"Spin per {req.wallet_address}: premio {premio}")
+        # Calcola i giri disponibili: free spin (se non usato oggi) + extra spins
+        current_free_spin = 1 if (user.last_play_date is None or user.last_play_date.date() < now.date()) else 0
+        available = user.extra_spins + current_free_spin
         return {"message": result_text, "prize": premio, "available_spins": available}
     except Exception as e:
         logging.error(f"Errore nello spin: {e}")
         raise HTTPException(status_code=500, detail="Errore durante lo spin.")
     finally:
         session.close()
-
-# ------------------ ENDPOINT SPINS STATUS ------------------
-@app.get("/api/spins_status/{wallet_address}")
-async def spins_status(wallet_address: str):
-    user = get_user(wallet_address)
-    italy = pytz.timezone("Europe/Rome")
-    now = datetime.datetime.now(italy)
-    free_spin = 1 if (user.last_play_date is None or user.last_play_date.date() < now.date()) else 0
-    available = user.extra_spins + free_spin
-    return {"available_spins": available}
 
 # ------------------ ENDPOINT BUY SPINS ------------------
 @app.post("/api/buyspins")
@@ -330,7 +336,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             session_gc.rollback()
         finally:
             session_gc.close()
-        available = user.extra_spins
+        available = user.extra_spins + (1 if (user.last_play_date is None or user.last_play_date.date() < datetime.datetime.now(pytz.timezone("Europe/Rome")).date()) else 0)
         return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
         session.rollback()
@@ -339,6 +345,92 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         session.rollback()
         logging.error(f"Errore in confirmbuy: {e}")
         raise HTTPException(status_code=500, detail="Errore nella conferma degli extra giri.")
+    finally:
+        session.close()
+
+# ------------------ ENDPOINT CLAIM REFERRAL ------------------
+@app.post("/api/claim_referral")
+async def claim_referral(req: ReferralRequest):
+    """
+    Se un nuovo utente si collega tramite un link referral,
+    accredita 2 extra giri a entrambi (nuovo utente e referrer)
+    Solo se il nuovo utente non aveva già un referral impostato.
+    """
+    new_user = get_user(req.wallet_address)
+    session = Session()
+    try:
+        # Se il nuovo utente non è già stato referenziato
+        if not new_user.referred_by:
+            new_user.referred_by = req.referrer
+            new_user.extra_spins += 2  # accredita 2 giri al nuovo utente
+            session.commit()
+            # Accreditare 2 giri anche al referrer (se esiste)
+            ref_user = get_user(req.referrer)
+            ref_session = Session()
+            try:
+                ref_user = ref_session.merge(ref_user)
+                ref_user.extra_spins += 2
+                ref_session.commit()
+            except Exception as e:
+                ref_session.rollback()
+                logging.error(f"Errore nel credito al referrer: {e}")
+            finally:
+                ref_session.close()
+            return {"message": "Referral accreditato! Tu e il tuo referrer avete ricevuto 2 giri extra."}
+        else:
+            return {"message": "Referral già reclamato per questo utente."}
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Errore in claim_referral: {e}")
+        raise HTTPException(status_code=500, detail="Errore nel reclamare il referral.")
+    finally:
+        session.close()
+
+# ------------------ ENDPOINT CLAIM TASK ------------------
+@app.post("/api/claim_task")
+async def claim_task(req: TaskClaimRequest, background_tasks: BackgroundTasks):
+    """
+    Simula il controllo della task: dopo 10 minuti, accredita 2 extra giri.
+    Per evitare ripetizioni, utilizza il campo last_claimed_tasks in User (salvando i task già reclamati come stringa separata da virgola).
+    """
+    user = get_user(req.wallet_address)
+    session = Session()
+    try:
+        user = session.merge(user)
+        # Controlla se il task è già stato reclamato
+        claimed = user.last_claimed_tasks.split(",") if user.last_claimed_tasks else []
+        if req.task_id in claimed:
+            raise HTTPException(status_code=400, detail="Task già reclamata.")
+        # Aggiungi il task alla lista dei reclamati
+        claimed.append(req.task_id)
+        user.last_claimed_tasks = ",".join(claimed)
+        session.commit()
+        # Pianifica un background task che, dopo 10 minuti, accredita 2 extra giri
+        background_tasks.add_task(process_task_claim, req.wallet_address)
+        return {"message": "Task completata! Riceverai 2 extra giri entro 10 minuti."}
+    except HTTPException as he:
+        session.rollback()
+        raise he
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Errore in claim_task: {e}")
+        raise HTTPException(status_code=500, detail="Errore nel reclamare la task.")
+    finally:
+        session.close()
+
+async def process_task_claim(wallet_address: str):
+    await asyncio.sleep(600)  # 10 minuti
+    session = Session()
+    try:
+        user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
+        if user:
+            user.extra_spins += 2
+            session.commit()
+            logging.info(f"Task claim process: 2 extra giri accreditati per {wallet_address}")
+            # Qui, se hai un sistema di notifiche (ad esempio via bot Telegram), potresti inviare un messaggio
+    except Exception as e:
+        session.rollback()
+        logging.error(f"Errore in process_task_claim: {e}")
     finally:
         session.close()
 
@@ -355,85 +447,6 @@ async def api_distribute(req: DistributePrizeRequest):
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/giankytestbot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
-
-# ------------------ ENDPOINT SPINS ADMIN ------------------
-@app.get("/api/giankyadmin")
-async def api_giankyadmin():
-    session = Session()
-    try:
-        counter = session.query(GlobalCounter).first()
-        if counter is None:
-            report_text = "Nessun dato disponibile."
-        else:
-            total_in = counter.total_in
-            total_out = counter.total_out
-            balance = total_in - total_out
-            report_text = (
-                f"📊 **Report GiankyCoin** 📊\n\n"
-                f"**Entrate Totali:** {total_in} GKY\n"
-                f"**Uscite Totali:** {total_out} GKY\n"
-                f"**Bilancio:** {balance} GKY"
-            )
-        return {"report": report_text}
-    except Exception as e:
-        logging.error(f"Errore in giankyadmin: {e}")
-        raise HTTPException(status_code=500, detail="Errore nel recupero dei dati.")
-    finally:
-        session.close()
-
-# ------------------ ENDPOINT CLAIM TASK ------------------
-@app.post("/api/claim_task")
-async def claim_task(req: ClaimTaskRequest):
-    session = Session()
-    try:
-        user = session.query(User).filter(User.wallet_address.ilike(req.wallet_address)).first()
-        if user is None:
-            raise HTTPException(status_code=400, detail="Utente non trovato.")
-        now = datetime.datetime.now(pytz.timezone("Europe/Rome"))
-        if user.last_share_task is not None:
-            diff = now - user.last_share_task
-            if diff < datetime.timedelta(minutes=10):
-                raise HTTPException(status_code=400, detail="Task già completata di recente. Riprova più tardi.")
-        user.extra_spins += 2
-        user.last_share_task = now
-        session.commit()
-        return {"message": "Task completata! 2 giri extra accreditati."}
-    except HTTPException as he:
-        session.rollback()
-        raise he
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Errore nel claim_task: {e}")
-        raise HTTPException(status_code=500, detail="Errore nel completamento della task.")
-    finally:
-        session.close()
-
-# ------------------ ENDPOINT USE REFERRAL ------------------
-@app.post("/api/use_referral")
-async def use_referral(req: ReferralRequest):
-    session = Session()
-    try:
-        new_user = session.query(User).filter(User.wallet_address.ilike(req.new_wallet)).first()
-        if new_user is None:
-            new_user = User(wallet_address=req.new_wallet, extra_spins=0, referred_by=req.referrer_wallet)
-            session.add(new_user)
-        else:
-            if new_user.referred_by is None:
-                new_user.referred_by = req.referrer_wallet
-        referrer = session.query(User).filter(User.wallet_address.ilike(req.referrer_wallet)).first()
-        if referrer is None:
-            referrer = User(wallet_address=req.referrer_wallet, extra_spins=0)
-            session.add(referrer)
-        new_user.extra_spins += 2
-        referrer.extra_spins += 2
-        session.commit()
-        return {"message": "Referral bonus accreditato: 2 giri extra per entrambi."}
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Errore in use_referral: {e}")
-        raise HTTPException(status_code=500, detail="Errore nel processamento del referral.")
-    finally:
-        session.close()
 
 # ------------------ ROOT ------------------
 @app.get("/", response_class=HTMLResponse)

@@ -56,11 +56,10 @@
         return;
       }
       try {
-        // Chiamata all'endpoint /api/claim_task, che gestisce la logica di accredito
         const res = await fetch("/api/claim_task", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: wallet })
+          body: JSON.stringify({ wallet_address: wallet, task_id: taskId })
         });
         const data = await res.json();
         document.getElementById(taskId + "Message").innerText = data.message || "Operazione completata.";
@@ -70,7 +69,6 @@
       }
     }
 
-    // Aggiungi listener a tutti i pulsanti di task
     const buttons = document.querySelectorAll(".btn-complete-task");
     buttons.forEach(btn => {
       btn.addEventListener("click", () => {
