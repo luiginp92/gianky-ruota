@@ -208,7 +208,7 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
-            # Alla prima connessione, l'utente riceve anche il free spin
+            # Alla prima connessione, l'utente riceve 0 extra (ma il free spin è gestito nel /api/spin)
             user = User(wallet_address=wallet_address, extra_spins=0, last_play_date=None)
             session.add(user)
             session.commit()
@@ -227,29 +227,28 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        # Determina se è disponibile il free spin: se l'utente non ha giocato oggi
+        # Determina se l'utente non ha ancora usato il free spin oggi
         free_spin_available = (user.last_play_date is None or user.last_play_date.date() < now.date())
         if free_spin_available:
-            # Se è disponibile il free spin, il conteggio disponibile è extra_spins + 1
-            available = user.extra_spins + 1
-            # Usa il free spin e aggiorna last_play_date
+            available = user.extra_spins + 1  # free spin + extra spin
+            # Registra l'uso del free spin (solo la prima volta al giorno)
             user.last_play_date = now
             session.commit()
-            used_spin_type = "free"
+            used_spin = "free"
         else:
             if user.extra_spins <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
             user.extra_spins -= 1
             session.commit()
             available = user.extra_spins
-            used_spin_type = "extra"
+            used_spin = "extra"
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
             amount = int(premio.split(" ")[0])
             if invia_token(req.wallet_address, amount):
-                result_text = f"Hai vinto {premio}! (spin usato: {used_spin_type})"
+                result_text = f"Hai vinto {premio}! (spin usato: {used_spin})"
             else:
                 result_text = "Errore nel trasferimento dei token."
         else:
@@ -303,11 +302,10 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
-        # Non resettiamo last_play_date per mantenere il free spin concesso solo una volta al giorno
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
-        # Aggiorna il GlobalCounter per le entrate
+        # Aggiorna GlobalCounter per le entrate
         session_gc = Session()
         try:
             counter = session_gc.query(GlobalCounter).first()
@@ -347,6 +345,31 @@ async def api_distribute(req: DistributePrizeRequest):
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/giankytestbot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
+
+# ------------------ ENDPOINT GIANKYADMIN (REPORT) ------------------
+@app.get("/api/giankyadmin")
+async def api_giankyadmin():
+    session = Session()
+    try:
+        counter = session.query(GlobalCounter).first()
+        if counter is None:
+            report_text = "Nessun dato disponibile."
+        else:
+            total_in = counter.total_in
+            total_out = counter.total_out
+            balance = total_in - total_out
+            report_text = (
+                f"📊 **Report GiankyCoin** 📊\n\n"
+                f"**Entrate Totali:** {total_in} GKY\n"
+                f"**Uscite Totali:** {total_out} GKY\n"
+                f"**Bilancio:** {balance} GKY"
+            )
+        return {"report": report_text}
+    except Exception as e:
+        logging.error(f"Errore in giankyadmin: {e}")
+        raise HTTPException(status_code=500, detail="Errore nel recupero dei dati.")
+    finally:
+        session.close()
 
 # ------------------ ROOT ------------------
 @app.get("/", response_class=HTMLResponse)
