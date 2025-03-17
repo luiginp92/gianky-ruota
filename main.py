@@ -231,11 +231,12 @@ async def api_spin(req: SpinRequest):
                 last_play = italy.localize(user.last_play_date)
             else:
                 last_play = user.last_play_date.astimezone(italy)
+        # Se l'utente non ha mai giocato oggi (free spin disponibile)
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now
+            user.last_play_date = now  # registra il free spin (consentito una volta per 24 ore)
             session.commit()
             free_spin = True
-            available = 1 + user.extra_spins
+            available = user.extra_spins  # NON aggiungiamo +1
         else:
             free_spin = False
             if user.extra_spins <= 0:
