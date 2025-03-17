@@ -186,7 +186,7 @@ def get_prize() -> str:
         ("100 GKY", 3),    # dimezzato da 5
         ("250 GKY", 1),    # dimezzato da 3
         ("500 GKY", 1),    # dimezzato da 2
-        ("1000 GKY", 1),   # minimo 1
+        ("1000 GKY", 1),
         ("NO PRIZE", 44)
     ]
     total = sum(weight for _, weight in prizes)
@@ -224,18 +224,12 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        if user.last_play_date is None:
-            last_play = None
-        else:
-            if user.last_play_date.tzinfo is None:
-                last_play = italy.localize(user.last_play_date)
-            else:
-                last_play = user.last_play_date.astimezone(italy)
-        # Se non ha giocato nelle ultime 24 ore, free spin disponibile
-        if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now  # registra il free spin
+        # Se l'utente non ha mai giocato oppure sono trascorse almeno 24 ore dal free spin,
+        # allora non decrementiamo extra_spins e restituiamo il valore corrente (senza aggiungere +1)
+        if user.last_play_date is None or (now - user.last_play_date) >= datetime.timedelta(hours=24):
+            user.last_play_date = now  # Registra il free spin
             session.commit()
-            available = user.extra_spins  # il free spin non viene aggiunto al contatore visuale
+            available = user.extra_spins  # available = extra_spin (free spin è concesso ma non incrementa il contatore visuale)
         else:
             if user.extra_spins <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
