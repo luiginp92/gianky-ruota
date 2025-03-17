@@ -49,7 +49,7 @@ w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
 USED_TX = set()
 
-# Funzioni helper per conversione
+# ------------------ FUNZIONI HELPER ------------------
 def to_wei(val, unit):
     return Web3.to_wei(val, unit)
 
@@ -180,19 +180,16 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali:
-    # - Per i premi 50, 100, 250, 500 e 1000 GKY le percentuali sono dimezzate
-    #   (50 GKY: da 10 a 5, 100 GKY: da 3 a 1.5, 250 GKY: da 1 a 0.5, 500 GKY: da 1 a 0.5, 1000 GKY: da 1 a 0.5)
-    # - La quota "persa" (8 punti totali) viene distribuita equamente (8/3 ≈ 2.67 ciascuno) ai premi 10 GKY, 20 GKY e NO PRIZE.
+    # Premi e percentuali (per premi superiori a 50 GKY le percentuali sono dimezzate)
     prizes = [
-        ("10 GKY", 30 + 2.67),     # diventa ≈ 32.67
-        ("20 GKY", 15 + 2.67),     # diventa ≈ 17.67
-        ("50 GKY", 10 / 2),        # 5
-        ("100 GKY", 3 / 2),        # 1.5
-        ("250 GKY", 1 / 2),        # 0.5
-        ("500 GKY", 1 / 2),        # 0.5
-        ("1000 GKY", 1 / 2),       # 0.5
-        ("NO PRIZE", 44 + 2.67)      # ≈ 46.67
+        ("10 GKY", 30),
+        ("20 GKY", 15),
+        ("50 GKY", 10),
+        ("100 GKY", 3),    # dimezzato da 5
+        ("250 GKY", 1),    # dimezzato da 3
+        ("500 GKY", 1),    # dimezzato da 2
+        ("1000 GKY", 1),   # minimo 1
+        ("NO PRIZE", 44)
     ]
     total = sum(weight for _, weight in prizes)
     r = random.uniform(0, total)
@@ -211,7 +208,7 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
-            # Alla prima connessione, assegna 1 free spin (free spin giornaliero)
+            # Alla prima connessione, l'utente riceve anche il free spin
             user = User(wallet_address=wallet_address, extra_spins=0, last_play_date=None)
             session.add(user)
             session.commit()
@@ -230,27 +227,29 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
-        today = now.date()
-        # Se l'utente non ha ancora usato il free spin oggi, concedi 1 free spin (free_spin = available extra + 1)
-        if user.last_play_date is None or user.last_play_date.date() < today:
-            free_spin = True
+        # Determina se è disponibile il free spin: se l'utente non ha giocato oggi
+        free_spin_available = (user.last_play_date is None or user.last_play_date.date() < now.date())
+        if free_spin_available:
+            # Se è disponibile il free spin, il conteggio disponibile è extra_spins + 1
             available = user.extra_spins + 1
+            # Usa il free spin e aggiorna last_play_date
             user.last_play_date = now
             session.commit()
+            used_spin_type = "free"
         else:
-            free_spin = False
             if user.extra_spins <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
             user.extra_spins -= 1
             session.commit()
             available = user.extra_spins
+            used_spin_type = "extra"
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
         elif "GKY" in premio:
             amount = int(premio.split(" ")[0])
             if invia_token(req.wallet_address, amount):
-                result_text = f"Hai vinto {premio}!"
+                result_text = f"Hai vinto {premio}! (spin usato: {used_spin_type})"
             else:
                 result_text = "Errore nel trasferimento dei token."
         else:
@@ -264,8 +263,7 @@ async def api_spin(req: SpinRequest):
             session.add(record)
             session.commit()
         logging.info(f"Spin per {req.wallet_address}: premio {premio}")
-        remaining = available
-        return {"message": result_text, "prize": premio, "available_spins": remaining}
+        return {"message": result_text, "prize": premio, "available_spins": available}
     except Exception as e:
         logging.error(f"Errore nello spin: {e}")
         raise HTTPException(status_code=500, detail="Errore durante lo spin.")
