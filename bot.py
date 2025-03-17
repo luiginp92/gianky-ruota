@@ -23,26 +23,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Clicca qui per aprire la mini app:", reply_markup=reply_markup)
 
 async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    with Session() as session:
-        try:
-            counter = session.query(GlobalCounter).first()
-            if counter is None:
-                total_in = 0.0
-                total_out = 0.0
-            else:
-                total_in = counter.total_in
-                total_out = counter.total_out
+    session = Session()
+    try:
+        counter = session.query(GlobalCounter).first()
+        if counter is None:
+            report_text = "Nessun dato disponibile ancora."
+        else:
+            total_in = counter.total_in
+            total_out = counter.total_out
             balance = total_in - total_out
-            message = (
-                f"📊 **Report GiankyCoin** 📊\n\n"
-                f"**Entrate Totali:** {total_in} GKY\n"
-                f"**Uscite Totali:** {total_out} GKY\n"
-                f"**Bilancio:** {balance} GKY"
+            report_text = (
+                f"📊 Report Globali GiankyCoin:\n\n"
+                f"Entrate Totali: {total_in} GKY\n"
+                f"Uscite Totali: {total_out} GKY\n"
+                f"Bilancio: {balance} GKY"
             )
-            await update.message.reply_text(message, parse_mode="Markdown")
-        except Exception as e:
-            logging.error(f"Errore in giankyadmin: {e}")
-            await update.message.reply_text("Errore nel recupero dei dati.")
+        await update.message.reply_text(report_text, parse_mode="Markdown")
+    except Exception as e:
+        logging.error(f"Errore in giankyadmin: {e}")
+        await update.message.reply_text("Errore nel recupero dei dati.")
+    finally:
+        session.close()
 
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)

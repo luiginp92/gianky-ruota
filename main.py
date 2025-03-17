@@ -231,14 +231,12 @@ async def api_spin(req: SpinRequest):
                 last_play = italy.localize(user.last_play_date)
             else:
                 last_play = user.last_play_date.astimezone(italy)
-        # Se l'utente non ha mai giocato oggi (free spin disponibile)
+        # Se non ha giocato nelle ultime 24 ore, free spin disponibile
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now  # registra il free spin (consentito una volta per 24 ore)
+            user.last_play_date = now  # registra il free spin
             session.commit()
-            free_spin = True
-            available = user.extra_spins  # NON aggiungiamo +1
+            available = user.extra_spins  # il free spin non viene aggiunto al contatore visuale
         else:
-            free_spin = False
             if user.extra_spins <= 0:
                 raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
             user.extra_spins -= 1
@@ -308,7 +306,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
-        # Aggiorna il GlobalCounter per le entrate
+        # Aggiorna GlobalCounter per le entrate
         session_gc = Session()
         try:
             counter = session_gc.query(GlobalCounter).first()
