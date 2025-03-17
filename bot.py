@@ -4,15 +4,14 @@ from telegram import Update, WebAppInfo, InlineKeyboardButton, InlineKeyboardMar
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.request import HTTPXRequest
 
-# Importa la sessione e le funzioni per il database
 from database import Session, GlobalCounter, init_db
 
-# Inizializza il database (crea le tabelle se non esistono)
+# Inizializza il database (se necessario)
 init_db()
 
 # Usa il token esatto (senza spazi o modifiche)
 TOKEN = "8097932093:AAHpO7TnynwowBQHAoDVpG9e0oxGm7z9gFE"
-# URL della mini app (modifica se necessario)
+# URL della mini app
 WEB_APP_URL = "https://gianky-bot-test-f275065c7d33.herokuapp.com/static/index.html"
 
 logging.basicConfig(
@@ -27,10 +26,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Clicca qui per aprire la mini app:", reply_markup=reply_markup)
 
 async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Comando per mostrare il report globale delle entrate (buy spins) e uscite (premi vinti)
-    del wallet di distribuzione. Il report è aggiornato in tempo reale.
-    """
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
@@ -41,15 +36,15 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             total_out = counter.total_out
             balance = total_in - total_out
             report_text = (
-                f"📊 *Report Globali GiankyCoin:*\n\n"
-                f"*Entrate totali:* {total_in:.2f} GKY\n"
-                f"*Uscite totali:* {total_out:.2f} GKY\n"
-                f"*Bilancio:* {balance:.2f} GKY"
+                f"📊 **Report GiankyCoin** 📊\n\n"
+                f"**Entrate Totali:** {total_in} GKY\n"
+                f"**Uscite Totali:** {total_out} GKY\n"
+                f"**Bilancio:** {balance} GKY"
             )
         await update.message.reply_text(report_text, parse_mode="Markdown")
     except Exception as e:
         logging.error(f"Errore in giankyadmin: {e}")
-        await update.message.reply_text("Errore durante la generazione del report.")
+        await update.message.reply_text("Errore nel recupero dei dati.")
     finally:
         session.close()
 

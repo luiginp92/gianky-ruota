@@ -30,6 +30,20 @@ logging.basicConfig(
 )
 init_db()
 
+# Assicuriamoci che esista un record in GlobalCounter
+def ensure_global_counter():
+    session = Session()
+    try:
+        counter = session.query(GlobalCounter).first()
+        if counter is None:
+            counter = GlobalCounter(total_in=0.0, total_out=0.0)
+            session.add(counter)
+            session.commit()
+    finally:
+        session.close()
+
+ensure_global_counter()
+
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -180,15 +194,14 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali (per premi superiori a 50 GKY le percentuali sono dimezzate)
     prizes = [
         ("10 GKY", 30),
         ("20 GKY", 15),
         ("50 GKY", 10),
-        ("100 GKY", 3),    # dimezzato da 5
-        ("250 GKY", 1),    # dimezzato da 3
-        ("500 GKY", 1),    # dimezzato da 2
-        ("1000 GKY", 1),   # minimo 1
+        ("100 GKY", 3),
+        ("250 GKY", 1),
+        ("500 GKY", 1),
+        ("1000 GKY", 1),
         ("NO PRIZE", 44)
     ]
     total = sum(weight for _, weight in prizes)
@@ -233,12 +246,11 @@ async def api_spin(req: SpinRequest):
                 last_play = italy.localize(user.last_play_date)
             else:
                 last_play = user.last_play_date.astimezone(italy)
-        # Concedi free spin solo se non ha mai giocato o sono trascorse almeno 24 ore
         if last_play is None or (now - last_play) >= datetime.timedelta(hours=24):
-            user.last_play_date = now  # Registra il free spin
+            user.last_play_date = now
             session.commit()
             free_spin = True
-            available = 1 + user.extra_spins  # Free spin concesso: free spin + extra
+            available = 1 + user.extra_spins
         else:
             free_spin = False
             if user.extra_spins <= 0:
@@ -307,11 +319,9 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
-        # Non resettiamo last_play_date per mantenere il free spin concesso solo dopo 24 ore
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
-        # Aggiorna GlobalCounter per le entrate all'interno della stessa sessione
         counter = session.query(GlobalCounter).first()
         if counter is None:
             counter = GlobalCounter(total_in=cost, total_out=0.0)

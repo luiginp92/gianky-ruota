@@ -12,7 +12,8 @@ engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
 )
-Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Aggiunto expire_on_commit=False per evitare la scadenza degli oggetti dopo commit
+Session = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
 Base = declarative_base()
 
 # Modello Utente
@@ -27,6 +28,7 @@ class User(Base):
     last_share_task = Column(DateTime, nullable=True)# data ultima completione task condivisione
     nonce = Column(String, nullable=True)            # nonce temporaneo per login (una volta)
 
+# Modello PremioVinto
 class PremioVinto(Base):
     __tablename__ = "premi_vinti"
     id = Column(Integer, primary_key=True, index=True)
@@ -36,6 +38,7 @@ class PremioVinto(Base):
     user_id = Column(Integer, nullable=False)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
+# Modello GlobalCounter
 class GlobalCounter(Base):
     __tablename__ = "global_counter"
     id = Column(Integer, primary_key=True, index=True)
