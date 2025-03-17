@@ -180,16 +180,19 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 
 # ------------------ ASSEGNAZIONE PREMIO (DISTRIBUZIONE PESATA) ------------------
 def get_prize() -> str:
-    # Premi e percentuali (per premi superiori a 50 GKY le percentuali sono dimezzate)
+    # Premi e percentuali:
+    # - Per i premi 50, 100, 250, 500 e 1000 GKY le percentuali sono dimezzate
+    #   (50 GKY: da 10 a 5, 100 GKY: da 3 a 1.5, 250 GKY: da 1 a 0.5, 500 GKY: da 1 a 0.5, 1000 GKY: da 1 a 0.5)
+    # - La quota "persa" (8 punti totali) viene distribuita equamente (8/3 ≈ 2.67 ciascuno) ai premi 10 GKY, 20 GKY e NO PRIZE.
     prizes = [
-        ("10 GKY", 30),
-        ("20 GKY", 15),
-        ("50 GKY", 10),
-        ("100 GKY", 3),    # dimezzato da 5
-        ("250 GKY", 1),    # dimezzato da 3
-        ("500 GKY", 1),    # dimezzato da 2
-        ("1000 GKY", 1),   # minimo 1
-        ("NO PRIZE", 44)
+        ("10 GKY", 30 + 2.67),     # diventa ≈ 32.67
+        ("20 GKY", 15 + 2.67),     # diventa ≈ 17.67
+        ("50 GKY", 10 / 2),        # 5
+        ("100 GKY", 3 / 2),        # 1.5
+        ("250 GKY", 1 / 2),        # 0.5
+        ("500 GKY", 1 / 2),        # 0.5
+        ("1000 GKY", 1 / 2),       # 0.5
+        ("NO PRIZE", 44 + 2.67)      # ≈ 46.67
     ]
     total = sum(weight for _, weight in prizes)
     r = random.uniform(0, total)
@@ -208,7 +211,7 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
-            # Alla prima connessione, assegna 1 free spin
+            # Alla prima connessione, assegna 1 free spin (free spin giornaliero)
             user = User(wallet_address=wallet_address, extra_spins=0, last_play_date=None)
             session.add(user)
             session.commit()
@@ -228,11 +231,10 @@ async def api_spin(req: SpinRequest):
         italy = pytz.timezone("Europe/Rome")
         now = datetime.datetime.now(italy)
         today = now.date()
-        # Se l'utente non ha ancora usato il free spin oggi, allora è disponibile 1 free spin
+        # Se l'utente non ha ancora usato il free spin oggi, concedi 1 free spin (free_spin = available extra + 1)
         if user.last_play_date is None or user.last_play_date.date() < today:
             free_spin = True
-            available = user.extra_spins + 1  # 1 free spin + extra spins
-            # Registra che il free spin di oggi è stato usato
+            available = user.extra_spins + 1
             user.last_play_date = now
             session.commit()
         else:
@@ -262,7 +264,7 @@ async def api_spin(req: SpinRequest):
             session.add(record)
             session.commit()
         logging.info(f"Spin per {req.wallet_address}: premio {premio}")
-        remaining = available  # Restituisce il numero di giri disponibili dopo lo spin
+        remaining = available
         return {"message": result_text, "prize": premio, "available_spins": remaining}
     except Exception as e:
         logging.error(f"Errore nello spin: {e}")
