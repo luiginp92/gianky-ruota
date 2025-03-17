@@ -30,18 +30,15 @@ async def giankyadmin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session = Session()
     try:
         counter = session.query(GlobalCounter).first()
-        if counter is None:
-            report_text = "Nessun dato disponibile."
-        else:
-            total_in = counter.total_in
-            total_out = counter.total_out
-            balance = total_in - total_out
-            report_text = (
-                f"📊 **Report GiankyCoin** 📊\n\n"
-                f"**Entrate Totali:** {total_in} GKY\n"
-                f"**Uscite Totali:** {total_out} GKY\n"
-                f"**Bilancio:** {balance} GKY"
-            )
+        total_in = counter.total_in if counter is not None else 0.0
+        total_out = counter.total_out if counter is not None else 0.0
+        balance = total_in - total_out
+        report_text = (
+            f"📊 **Report GiankyCoin** 📊\n\n"
+            f"**Entrate Totali:** {total_in} GKY\n"
+            f"**Uscite Totali:** {total_out} GKY\n"
+            f"**Bilancio:** {balance} GKY"
+        )
         await update.message.reply_text(report_text, parse_mode="Markdown")
     except Exception as e:
         logging.error(f"Errore in giankyadmin: {e}")

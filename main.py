@@ -5,7 +5,7 @@ Gianky Coin Web App – main.py
 Gestisce:
  • Lo spin della ruota, la scelta del premio e il trasferimento automatico dei token
  • L'acquisto e la conferma degli extra giri
- • L'endpoint per il saldo del wallet
+ • Gli endpoint per il saldo e per il contatore dei giri disponibili
 """
 
 import os, random, datetime, pytz, logging
@@ -132,6 +132,15 @@ async def get_balance(wallet_address: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ------------------ ENDPOINT PER I GIRI DISPONIBILI ------------------
+@app.get("/api/freespins/{wallet_address}")
+async def get_free_spins(wallet_address: str):
+    try:
+        user = get_user(wallet_address)
+        return {"available_spins": user.extra_spins}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ------------------ INVIO TOKEN ------------------
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
@@ -224,7 +233,7 @@ async def api_spin(req: SpinRequest):
     session = Session()
     try:
         user = session.merge(user)
-        # Rimuoviamo il free spin automatico: l'utente può girare solo se ha extra_spins > 0.
+        # Non c'è free spin automatico: l'utente deve avere extra_spins > 0 per girare
         if user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
         user.extra_spins -= 1
