@@ -106,12 +106,15 @@
       setTimeout(() => {
         document.getElementById("splash").style.display = "none";
       }, 2000);
-      
-      // Controlla se l'URL contiene il parametro "ref"
+
+      // Processa il referral solo se presente nell'URL e non già processato
       const urlParams = new URLSearchParams(window.location.search);
       const refParam = urlParams.get("ref");
-      if (refParam) {
+      if (refParam && !localStorage.getItem("refProcessed")) {
         alert("CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!");
+        localStorage.setItem("refProcessed", "true");
+        // Rimuove il parametro dalla URL
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     });
     
