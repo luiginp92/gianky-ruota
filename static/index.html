@@ -106,9 +106,16 @@
       setTimeout(() => {
         document.getElementById("splash").style.display = "none";
       }, 2000);
+      
+      // Controlla se l'URL contiene il parametro "ref"
+      const urlParams = new URLSearchParams(window.location.search);
+      const refParam = urlParams.get("ref");
+      if (refParam) {
+        alert("CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!");
+      }
     });
     
-    // Avvia la musica al primo click (necessario per le restrizioni di autoplay)
+    // Avvia la musica al primo click (necessario per superare le restrizioni di autoplay)
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
@@ -134,7 +141,7 @@
     }
     window.addEventListener("load", updateBalances);
 
-    // Aggiorna il contatore dei giri disponibili
+    // Aggiorna il contatore dei giri disponibili chiamando l'endpoint /api/spins_status
     async function updateSpinsStatus() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -149,36 +156,6 @@
       }
     }
     window.addEventListener("load", updateSpinsStatus);
-
-    // PROCESSAMENTO AUTOMATICO DEL REFERRAL:
-    // Se l'URL contiene il parametro "ref" e non è già stato processato, invoca l'endpoint di claim_referral.
-    function getQueryParam(param) {
-      let params = new URLSearchParams(window.location.search);
-      return params.get(param);
-    }
-    window.addEventListener("load", () => {
-      const referrer = getQueryParam("ref");
-      if (referrer && !localStorage.getItem("refProcessed")) {
-        const wallet = localStorage.getItem("walletAddress");
-        // Evita il self-referral
-        if (wallet && wallet.length === 42 && wallet.toLowerCase() !== referrer.toLowerCase()) {
-          fetch("/api/claim_referral", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet_address: wallet, referrer: referrer })
-          })
-          .then(response => response.json())
-          .then(data => {
-            alert(data.message);
-            updateSpinsStatus();
-            localStorage.setItem("refProcessed", "true");
-            // Rimuove i parametri dalla URL
-            window.history.replaceState({}, document.title, window.location.pathname);
-          })
-          .catch(err => console.error("Errore nel claim referral:", err));
-        }
-      }
-    });
 
     // Configurazione della ruota (8 segmenti, ordinati esattamente)
     const prizeData = [
