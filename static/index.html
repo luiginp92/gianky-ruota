@@ -108,7 +108,7 @@
       }, 2000);
     });
     
-    // Avvia la musica al primo click
+    // Avvia la musica al primo click (necessario per le restrizioni di autoplay)
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
@@ -150,8 +150,8 @@
     }
     window.addEventListener("load", updateSpinsStatus);
 
-    // Funzione per ottenere il referral dal parametro "start"
-    function getReferral() {
+    // --- Gestione Referral ---
+    function getReferralFromURL() {
       const params = new URLSearchParams(window.location.search);
       let start = params.get("start");
       if (start && start.startsWith("ref_")) {
@@ -160,34 +160,39 @@
       return null;
     }
 
-    // PROCESSAMENTO DEL REFERRAL:
-    // Se viene rilevato un referral, chiama l'endpoint /api/claim_referral.
+    // Se c'è un referral nell'URL, lo salva in localStorage come pending_referral
     window.addEventListener("load", () => {
-      const ref = getReferral();
-      console.log("Referral rilevato:", ref);
-      if (ref && !localStorage.getItem("refProcessed")) {
+      const ref = getReferralFromURL();
+      if (ref) {
+        localStorage.setItem("pending_referral", ref);
+        // Rimuove i parametri dall'URL per evitare ripetizioni
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      // Controlla ogni 2 secondi se il wallet è collegato e se c'è un pending_referral da processare
+      const checkReferral = () => {
         const wallet = localStorage.getItem("walletAddress");
-        console.log("Wallet in locale:", wallet);
-        if (wallet && wallet.length === 42 && wallet.toLowerCase() !== ref.toLowerCase()) {
+        const pendingRef = localStorage.getItem("pending_referral");
+        if (wallet && pendingRef && wallet.length === 42 && wallet.toLowerCase() !== pendingRef.toLowerCase() && !localStorage.getItem("refProcessed")) {
           fetch("/api/claim_referral", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet_address: wallet, referrer: ref })
+            body: JSON.stringify({ wallet_address: wallet, referrer: pendingRef })
           })
           .then(response => response.json())
           .then(data => {
-            console.log("Risposta claim_referral:", data);
             alert(data.message);
             updateSpinsStatus();
             localStorage.setItem("refProcessed", "true");
-            window.history.replaceState({}, document.title, window.location.pathname);
+            localStorage.removeItem("pending_referral");
           })
           .catch(err => console.error("Errore nel claim referral:", err));
         }
-      }
+      };
+      checkReferral();
+      setInterval(checkReferral, 2000);
     });
 
-    // Configurazione della ruota
+    // Configurazione della ruota (8 segmenti, ordinati esattamente)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -203,6 +208,7 @@
       text: item.text
     }));
 
+    // Crea la ruota con startAngle=22.5 per centrare il primo segmento
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       startAngle: 22.5,
