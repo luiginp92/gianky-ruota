@@ -108,7 +108,7 @@
       }, 2000);
     });
     
-    // Avvia la musica al primo click (necessario per le restrizioni di autoplay)
+    // Avvia la musica al primo click (necessario per superare le restrizioni di autoplay)
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
@@ -150,7 +150,8 @@
     }
     window.addEventListener("load", updateSpinsStatus);
 
-    // --- Gestione Referral ---
+    // ----- Gestione Referral -----
+    // Estrae il referral dall'URL (si aspetta che l'URL contenga ?start=ref_0x...)
     function getReferralFromURL() {
       const params = new URLSearchParams(window.location.search);
       let start = params.get("start");
@@ -160,7 +161,6 @@
       return null;
     }
 
-    // Se c'è un referral nell'URL, lo salva in localStorage come pending_referral
     window.addEventListener("load", () => {
       const ref = getReferralFromURL();
       if (ref) {
@@ -168,10 +168,11 @@
         // Rimuove i parametri dall'URL per evitare ripetizioni
         window.history.replaceState({}, document.title, window.location.pathname);
       }
-      // Controlla ogni 2 secondi se il wallet è collegato e se c'è un pending_referral da processare
+      // Controlla ogni 2 secondi se il wallet è collegato e se c'è un referral pendente da processare
       const checkReferral = () => {
         const wallet = localStorage.getItem("walletAddress");
         const pendingRef = localStorage.getItem("pending_referral");
+        // Processa il referral se esiste e se il wallet è collegato e non è un self-referral
         if (wallet && pendingRef && wallet.length === 42 && wallet.toLowerCase() !== pendingRef.toLowerCase() && !localStorage.getItem("refProcessed")) {
           fetch("/api/claim_referral", {
             method: "POST",
@@ -180,7 +181,8 @@
           })
           .then(response => response.json())
           .then(data => {
-            alert(data.message);
+            // Mostra il messaggio richiesto
+            alert("CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!");
             updateSpinsStatus();
             localStorage.setItem("refProcessed", "true");
             localStorage.removeItem("pending_referral");
@@ -191,6 +193,7 @@
       checkReferral();
       setInterval(checkReferral, 2000);
     });
+    // -------------------------------
 
     // Configurazione della ruota (8 segmenti, ordinati esattamente)
     const prizeData = [
