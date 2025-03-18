@@ -1,6 +1,6 @@
 import os
 import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Date
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -13,16 +13,18 @@ engine = create_engine(
 Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Modello Utente aggiornato con due nuovi campi:
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(String, nullable=True)
     wallet_address = Column(String, unique=True, index=True, nullable=False)
-    extra_spins = Column(Integer, default=0)
-    referred_by = Column(String, nullable=True)
-    last_play_date = Column(DateTime, nullable=True)
-    last_share_task = Column(DateTime, nullable=True)
-    nonce = Column(String, nullable=True)
+    extra_spins = Column(Integer, default=0)         # giri extra acquistati/non ancora usati
+    referred_by = Column(String, nullable=True)      # indirizzo wallet di chi lo ha referenziato (se applicabile)
+    last_play_date = Column(DateTime, nullable=True)   # usato per altri scopi se necessario
+    last_free_spin_date = Column(Date, nullable=True)  # data in cui è stato usato il free spin giornaliero
+    last_claimed_tasks = Column(String, nullable=True) # task già reclamati (separati da virgola)
+    nonce = Column(String, nullable=True)              # nonce temporaneo per login (una volta)
 
 class PremioVinto(Base):
     __tablename__ = "premi_vinti"
@@ -36,8 +38,8 @@ class PremioVinto(Base):
 class GlobalCounter(Base):
     __tablename__ = "global_counter"
     id = Column(Integer, primary_key=True, index=True)
-    total_in = Column(Float, default=0.0)
-    total_out = Column(Float, default=0.0)
+    total_in = Column(Float, default=0.0)   # totale GKY ricevuti (acquisti)
+    total_out = Column(Float, default=0.0)  # totale GKY inviati (premi)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
