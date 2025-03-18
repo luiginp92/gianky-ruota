@@ -15,7 +15,7 @@
     }
     /* Header semi trasparente */
     .header {
-      background-color: rgba(52, 58, 64, 0.5); /* semi trasparente */
+      background-color: rgba(52, 58, 64, 0.5);
       color: white;
       padding: 1rem;
       text-align: center;
@@ -27,7 +27,7 @@
     /* La ruota non avrà bordo */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen: mostra prepagina.png */
+    /* Splash screen */
     #splash {
       position: fixed;
       top: 0;
@@ -108,7 +108,7 @@
       }, 2000);
     });
     
-    // Per far partire la musica al primo click (necessario per superare le restrizioni di autoplay)
+    // Avvia la musica al primo click (necessario per le restrizioni di autoplay)
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
@@ -151,13 +151,18 @@
     window.addEventListener("load", updateSpinsStatus);
 
     // PROCESSAMENTO DEL REFERRAL:
-    // Se l'URL contiene il parametro "start" che inizia con "ref_", processa il referral
+    // Se l'URL contiene il parametro "ref" ed il referral non è già stato processato,
+    // chiama l'endpoint /api/claim_referral e mostra il messaggio.
+    function getQueryParam(param) {
+      let params = new URLSearchParams(window.location.search);
+      return params.get(param);
+    }
     window.addEventListener("load", () => {
-      const params = new URLSearchParams(window.location.search);
-      const startParam = params.get("start");
-      if (startParam && startParam.startsWith("ref_") && !localStorage.getItem("refProcessed")) {
-        const ref = startParam.substring(4); // rimuove "ref_"
+      const ref = getQueryParam("ref");
+      console.log("Parametro ref rilevato:", ref);
+      if (ref && !localStorage.getItem("refProcessed")) {
         const wallet = localStorage.getItem("walletAddress");
+        console.log("Wallet in locale:", wallet);
         if (wallet && wallet.length === 42 && wallet.toLowerCase() !== ref.toLowerCase()) {
           fetch("/api/claim_referral", {
             method: "POST",
@@ -166,11 +171,10 @@
           })
           .then(response => response.json())
           .then(data => {
-            // Mostra il messaggio richiesto
-            alert("CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!");
+            console.log("Risposta claim_referral:", data);
+            alert(data.message);
             updateSpinsStatus();
             localStorage.setItem("refProcessed", "true");
-            // Rimuove i parametri dalla URL
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch(err => console.error("Errore nel claim referral:", err));
