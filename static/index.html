@@ -15,7 +15,7 @@
     }
     /* Header semi trasparente */
     .header {
-      background-color: rgba(52, 58, 64, 0.5);
+      background-color: rgba(52, 58, 64, 0.5); /* semi trasparente */
       color: white;
       padding: 1rem;
       text-align: center;
@@ -27,7 +27,7 @@
     /* La ruota non avrà bordo */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen */
+    /* Splash screen: mostra prepagina.png */
     #splash {
       position: fixed;
       top: 0;
@@ -108,7 +108,7 @@
       }, 2000);
     });
     
-    // Avvia la musica al primo click (necessario per superare le restrizioni di autoplay)
+    // Per far partire la musica al primo click (necessario per superare le restrizioni di autoplay)
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
@@ -150,34 +150,19 @@
     }
     window.addEventListener("load", updateSpinsStatus);
 
-    // ----- Gestione Referral -----
-    // Estrae il referral dall'URL (si aspetta che l'URL contenga ?start=ref_0x...)
-    function getReferralFromURL() {
-      const params = new URLSearchParams(window.location.search);
-      let start = params.get("start");
-      if (start && start.startsWith("ref_")) {
-        return start.substring(4);
-      }
-      return null;
-    }
-
+    // PROCESSAMENTO DEL REFERRAL:
+    // Se l'URL contiene il parametro "start" che inizia con "ref_", processa il referral
     window.addEventListener("load", () => {
-      const ref = getReferralFromURL();
-      if (ref) {
-        localStorage.setItem("pending_referral", ref);
-        // Rimuove i parametri dall'URL per evitare ripetizioni
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-      // Controlla ogni 2 secondi se il wallet è collegato e se c'è un referral pendente da processare
-      const checkReferral = () => {
+      const params = new URLSearchParams(window.location.search);
+      const startParam = params.get("start");
+      if (startParam && startParam.startsWith("ref_") && !localStorage.getItem("refProcessed")) {
+        const ref = startParam.substring(4); // rimuove "ref_"
         const wallet = localStorage.getItem("walletAddress");
-        const pendingRef = localStorage.getItem("pending_referral");
-        // Processa il referral se esiste e se il wallet è collegato e non è un self-referral
-        if (wallet && pendingRef && wallet.length === 42 && wallet.toLowerCase() !== pendingRef.toLowerCase() && !localStorage.getItem("refProcessed")) {
+        if (wallet && wallet.length === 42 && wallet.toLowerCase() !== ref.toLowerCase()) {
           fetch("/api/claim_referral", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet_address: wallet, referrer: pendingRef })
+            body: JSON.stringify({ wallet_address: wallet, referrer: ref })
           })
           .then(response => response.json())
           .then(data => {
@@ -185,15 +170,13 @@
             alert("CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!");
             updateSpinsStatus();
             localStorage.setItem("refProcessed", "true");
-            localStorage.removeItem("pending_referral");
+            // Rimuove i parametri dalla URL
+            window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch(err => console.error("Errore nel claim referral:", err));
         }
-      };
-      checkReferral();
-      setInterval(checkReferral, 2000);
+      }
     });
-    // -------------------------------
 
     // Configurazione della ruota (8 segmenti, ordinati esattamente)
     const prizeData = [
