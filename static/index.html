@@ -108,7 +108,7 @@
       }, 2000);
     });
     
-    // Avvia la musica al primo click (necessario per le restrizioni di autoplay)
+    // Avvia la musica al primo click
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
@@ -150,16 +150,21 @@
     }
     window.addEventListener("load", updateSpinsStatus);
 
-    // PROCESSAMENTO DEL REFERRAL:
-    // Se l'URL contiene il parametro "ref" ed il referral non è stato processato,
-    // chiama l'endpoint /api/claim_referral.
-    function getQueryParam(param) {
-      let params = new URLSearchParams(window.location.search);
-      return params.get(param);
+    // Funzione per ottenere il referral dal parametro "start"
+    function getReferral() {
+      const params = new URLSearchParams(window.location.search);
+      let start = params.get("start");
+      if (start && start.startsWith("ref_")) {
+        return start.substring(4);
+      }
+      return null;
     }
+
+    // PROCESSAMENTO DEL REFERRAL:
+    // Se viene rilevato un referral, chiama l'endpoint /api/claim_referral.
     window.addEventListener("load", () => {
-      const ref = getQueryParam("ref");
-      console.log("Parametro ref rilevato:", ref);
+      const ref = getReferral();
+      console.log("Referral rilevato:", ref);
       if (ref && !localStorage.getItem("refProcessed")) {
         const wallet = localStorage.getItem("walletAddress");
         console.log("Wallet in locale:", wallet);
