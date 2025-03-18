@@ -352,18 +352,22 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
 # ------------------ ENDPOINT CLAIM REFERRAL ------------------
 @app.post("/api/claim_referral")
 async def claim_referral(req: ReferralRequest):
+    """
+    Se un nuovo utente si collega tramite un link referral,
+    accredita 2 extra giri a entrambi (nuovo utente e referrer) solo se il nuovo utente non ha già un referral registrato.
+    """
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
         # Impedisci il self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"message": "Non puoi auto-referenziarti."}
-        # Se il nuovo utente non ha già un referral (campo vuoto o None)
-        if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
+        # Se il nuovo utente non ha ancora un referral registrato (None o stringa vuota)
+        if not new_user.referred_by:
             new_user.referred_by = req.referrer
             new_user.extra_spins += 2  # accredita 2 giri al nuovo utente
             session.commit()
-            # Accredita 2 giri anche al referrer, se esiste
+            # Accredita 2 giri anche al referrer (solo se il referrer esiste)
             ref_user = get_user(req.referrer)
             ref_session = Session()
             try:
@@ -375,7 +379,7 @@ async def claim_referral(req: ReferralRequest):
                 logging.error(f"Errore nel credito al referrer: {e}")
             finally:
                 ref_session.close()
-            return {"message": "Referral accreditato! Tu e il tuo referrer avete ricevuto 2 giri extra."}
+            return {"message": "Referral accreditato! Tu e chi ti ha invitato avete ricevuto 2 giri extra."}
         else:
             return {"message": "Referral già reclamato per questo utente."}
     except Exception as e:
