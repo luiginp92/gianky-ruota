@@ -15,7 +15,7 @@
     }
     /* Header semi trasparente */
     .header {
-      background-color: rgba(52, 58, 64, 0.5);
+      background-color: rgba(52, 58, 64, 0.5); /* semi trasparente */
       color: white;
       padding: 1rem;
       text-align: center;
@@ -27,7 +27,7 @@
     /* La ruota non avrà bordo */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen */
+    /* Splash screen: mostra prepagina.png */
     #splash {
       position: fixed;
       top: 0;
@@ -106,24 +106,15 @@
       setTimeout(() => {
         document.getElementById("splash").style.display = "none";
       }, 2000);
-
-      // Processa il referral solo se presente nell'URL e non già processato
-      const urlParams = new URLSearchParams(window.location.search);
-      const refParam = urlParams.get("ref");
-      if (refParam && !localStorage.getItem("refProcessed")) {
-        alert("CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!");
-        localStorage.setItem("refProcessed", "true");
-        // Rimuove il parametro dalla URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
     });
     
-    // Avvia la musica al primo click (necessario per superare le restrizioni di autoplay)
+    // Per far partire la musica al primo click (necessario per superare le restrizioni di autoplay)
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
           audio.play().catch((err) => console.error("Errore nell'avvio della musica:", err));
       }
+      // Rimuove il listener dopo il primo clic
       document.removeEventListener('click', enableAudio);
     });
 
