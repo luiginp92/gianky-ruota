@@ -15,7 +15,7 @@
     }
     /* Header semi trasparente */
     .header {
-      background-color: rgba(52, 58, 64, 0.5); /* semi trasparente */
+      background-color: rgba(52, 58, 64, 0.5);
       color: white;
       padding: 1rem;
       text-align: center;
@@ -27,7 +27,7 @@
     /* La ruota non avrà bordo */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen: mostra prepagina.png */
+    /* Splash screen */
     #splash {
       position: fixed;
       top: 0;
@@ -108,7 +108,7 @@
       }, 2000);
     });
     
-    // Per far partire la musica al primo click (necessario per superare le restrizioni di autoplay)
+    // Per far partire la musica al primo click (necessario per le restrizioni di autoplay)
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
@@ -151,15 +151,31 @@
     window.addEventListener("load", updateSpinsStatus);
 
     // PROCESSAMENTO DEL REFERRAL:
-    // Se l'URL contiene il parametro "ref", mostra il messaggio desiderato
+    // Se l'URL contiene il parametro "ref" e non è già stato processato, chiama l'endpoint claim_referral
     function getQueryParam(param) {
       let params = new URLSearchParams(window.location.search);
       return params.get(param);
     }
     window.addEventListener("load", () => {
       const ref = getQueryParam("ref");
-      if (ref) {
-        alert("CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!");
+      if (ref && !localStorage.getItem("refProcessed")) {
+        const wallet = localStorage.getItem("walletAddress");
+        if (wallet && wallet.length === 42 && wallet.toLowerCase() !== ref.toLowerCase()) {
+          fetch("/api/claim_referral", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet_address: wallet, referrer: ref })
+          })
+          .then(response => response.json())
+          .then(data => {
+            alert("CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!");
+            updateSpinsStatus();
+            localStorage.setItem("refProcessed", "true");
+            // Rimuove i parametri dall'URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          })
+          .catch(err => console.error("Errore nel claim referral:", err));
+        }
       }
     });
 
