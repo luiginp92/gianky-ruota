@@ -121,7 +121,7 @@ async def spins_status(wallet_address: str):
     user = get_user(wallet_address)
     italy = pytz.timezone("Europe/Rome")
     now_date = datetime.datetime.now(italy).date()
-    free_spin = 1 if (user.last_free_spin_date is None or user.last_free_spin_date < now_date) else 0
+    free_spin = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
     available = user.extra_spins + free_spin
     return {"available_spins": available}
 
@@ -223,7 +223,7 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
-            # Se il campo last_free_spin_date non esiste, lo aggiungiamo nel modello dinamicamente (usato solo a runtime)
+            # Se il campo last_free_spin_date non esiste, lo gestiamo a runtime
             user = User(wallet_address=wallet_address, extra_spins=0)
             session.add(user)
             session.commit()
@@ -242,7 +242,7 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
-        # Verifica se il free spin è disponibile: controlla se il campo last_free_spin_date è None o precedente alla data odierna
+        # Verifica se il free spin è disponibile
         free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
@@ -351,21 +351,21 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
 async def claim_referral(req: ReferralRequest):
     """
     Se un nuovo utente si collega tramite un link referral,
-    accredita 2 extra giri solo al referrer (cioè chi ha inviato il link),
-    e imposta il campo 'referred_by' nel nuovo utente per evitare doppi accrediti.
+    accredita 2 extra giri SOLO al referrer e mostra il messaggio:
+    "il tuo refferer ha ricevuto 2 giri bonus ! invita anche tu per ricevere il tuo bonus !"
+    Il nuovo utente non riceve bonus.
     """
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
-        # Impedisci il self-referral
+        # Impedisci self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"message": "Non puoi auto-referenziarti."}
         # Se il nuovo utente non ha già un referral registrato
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
-            # Non accreditiamo bonus al nuovo utente (bonus solo al referrer)
             session.commit()
-            # Accredita 2 giri al referrer
+            # Non accreditiamo bonus al nuovo utente; solo il referrer riceve 2 giri
             ref_user = get_user(req.referrer)
             ref_session = Session()
             try:
@@ -377,7 +377,7 @@ async def claim_referral(req: ReferralRequest):
                 logging.error(f"Errore nel credito al referrer: {e}")
             finally:
                 ref_session.close()
-            return {"message": "CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!"}
+            return {"message": "il tuo refferer ha ricevuto 2 giri bonus ! invita anche tu per ricevere il tuo bonus !"}
         else:
             return {"message": "Referral già reclamato per questo utente."}
     except Exception as e:

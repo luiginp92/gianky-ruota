@@ -108,7 +108,7 @@
       }, 2000);
     });
     
-    // Avvia la musica al primo click
+    // Avvia la musica al primo click (necessario per le restrizioni di autoplay)
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
@@ -151,7 +151,8 @@
     window.addEventListener("load", updateSpinsStatus);
 
     // PROCESSAMENTO DEL REFERRAL:
-    // Se l'URL contiene il parametro "ref" ed il referral non è già stato processato, chiama /api/claim_referral.
+    // Se l'URL contiene il parametro "ref" ed il referral non è stato processato,
+    // chiama l'endpoint /api/claim_referral.
     function getQueryParam(param) {
       let params = new URLSearchParams(window.location.search);
       return params.get(param);
