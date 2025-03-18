@@ -10,38 +10,45 @@
     .container { max-width: 700px; margin: auto; }
     .task { background: #fff; border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
     .task h4 { margin-top: 0; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Completa le Task</h1>
-    <p>Completa una delle seguenti azioni per ricevere 2 giri gratuiti. Nota: il controllo della task potrebbe richiedere fino a 10 minuti.</p>
+    <p>Completa una delle seguenti azioni per ricevere 2 giri gratuiti. Nota: il controllo della task richiede 10 minuti.</p>
     
     <!-- Task 1: YouTube -->
-    <div class="task">
+    <div class="task" id="task1Container">
       <h4>Task 1: YouTube</h4>
-      <p>Metti mi piace, condividi e iscriviti al canale YouTube: 
+      <p>Metti mi piace, condividi e iscriviti al canale YouTube:
          <a href="https://www.youtube.com/watch?v=l5w8G3lsQm8" target="_blank">Guarda il video</a></p>
       <button class="btn btn-primary btn-complete-task" data-task="task1">Ho completato la Task</button>
+      <button class="btn btn-success btn-redeem-task hidden" data-task="task1">Redeem Task</button>
       <div class="mt-2 task-message" id="task1Message"></div>
+      <div class="mt-2 countdown" id="task1Countdown"></div>
     </div>
     
-    <!-- Task 2: Follow TikTok -->
-    <div class="task">
+    <!-- Task 2: TikTok -->
+    <div class="task" id="task2Container">
       <h4>Task 2: TikTok</h4>
-      <p>Segui GiankyCoin su TikTok: 
+      <p>Segui GiankyCoin su TikTok:
          <a href="https://www.tiktok.com/@gky_official?_t=ZN-8uhuKOZi3La&_r=1" target="_blank">Segui qui</a></p>
       <button class="btn btn-primary btn-complete-task" data-task="task2">Ho completato la Task</button>
+      <button class="btn btn-success btn-redeem-task hidden" data-task="task2">Redeem Task</button>
       <div class="mt-2 task-message" id="task2Message"></div>
+      <div class="mt-2 countdown" id="task2Countdown"></div>
     </div>
     
-    <!-- Task 3: Follow Telegram -->
-    <div class="task">
+    <!-- Task 3: Telegram -->
+    <div class="task" id="task3Container">
       <h4>Task 3: Telegram</h4>
-      <p>Segui GiankyCoin su Telegram: 
+      <p>Segui GiankyCoin su Telegram:
          <a href="https://t.me/giankycoin" target="_blank">Segui qui</a></p>
       <button class="btn btn-primary btn-complete-task" data-task="task3">Ho completato la Task</button>
+      <button class="btn btn-success btn-redeem-task hidden" data-task="task3">Redeem Task</button>
       <div class="mt-2 task-message" id="task3Message"></div>
+      <div class="mt-2 countdown" id="task3Countdown"></div>
     </div>
     
     <br>
@@ -49,31 +56,81 @@
   </div>
 
   <script>
-    async function claimTask(taskId) {
-      const wallet = localStorage.getItem("walletAddress");
-      if (!wallet || wallet.length !== 42) {
-        alert("Wallet non connesso. Collega il wallet prima.");
-        return;
-      }
-      try {
-        const res = await fetch("/api/claim_task", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: wallet, task_id: taskId })
-        });
-        const data = await res.json();
-        document.getElementById(taskId + "Message").innerText = data.message || "Operazione completata.";
-      } catch (error) {
-        console.error("Errore nel completamento della task:", error);
-        document.getElementById(taskId + "Message").innerText = "Errore nel completamento della task. Contatta l'assistenza.";
-      }
+    const TASK_DELAY = 600; // 600 secondi = 10 minuti
+
+    // Funzione per formattare il tempo rimanente (mm:ss)
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
-    const buttons = document.querySelectorAll(".btn-complete-task");
-    buttons.forEach(btn => {
-      btn.addEventListener("click", () => {
-        const taskId = btn.getAttribute("data-task");
-        claimTask(taskId);
+    // Handler per "Ho completato la Task"
+    document.querySelectorAll(".btn-complete-task").forEach(button => {
+      button.addEventListener("click", function() {
+        const taskId = this.getAttribute("data-task");
+        // Disabilita il pulsante e registra il timestamp in localStorage
+        this.disabled = true;
+        const now = Date.now();
+        localStorage.setItem(`task_${taskId}_claimed`, now);
+        document.getElementById(taskId + "Message").innerText = "Task completata! Attendi 10 minuti per il redeem.";
+        // Avvia il countdown
+        startCountdown(taskId);
+      });
+    });
+
+    // Avvia il countdown per il task, se già reclamato
+    function startCountdown(taskId) {
+      const countdownElem = document.getElementById(taskId + "Countdown");
+      const claimedTime = parseInt(localStorage.getItem(`task_${taskId}_claimed`), 10);
+      if (!claimedTime) return;
+      const intervalId = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - claimedTime) / 1000);
+        const remaining = TASK_DELAY - elapsed;
+        if (remaining > 0) {
+          countdownElem.innerText = "Tempo rimanente: " + formatTime(remaining);
+        } else {
+          countdownElem.innerText = "Task pronta per il redeem!";
+          document.querySelector(`.btn-redeem-task[data-task="${taskId}"]`).classList.remove("hidden");
+          clearInterval(intervalId);
+        }
+      }, 1000);
+    }
+
+    // Handler per "Redeem Task"
+    document.querySelectorAll(".btn-redeem-task").forEach(button => {
+      button.addEventListener("click", async function() {
+        const taskId = this.getAttribute("data-task");
+        const wallet = localStorage.getItem("walletAddress");
+        if (!wallet || wallet.length !== 42) {
+          alert("Wallet non connesso. Collega il wallet prima.");
+          return;
+        }
+        try {
+          const res = await fetch("/api/claim_task", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet_address: wallet, task_id: taskId })
+          });
+          if (!res.ok) throw new Error("Errore: " + res.status);
+          const data = await res.json();
+          document.getElementById(taskId + "Message").innerText = data.message;
+          // Nascondi il pulsante dopo il redeem
+          this.disabled = true;
+        } catch (error) {
+          console.error("Errore nel redeem della task:", error);
+          document.getElementById(taskId + "Message").innerText = "Errore nel redeem della task. Contatta l'assistenza.";
+        }
+      });
+    });
+
+    // Se l'utente ricarica la pagina, controlla se ci sono task in attesa e avvia il countdown
+    document.addEventListener("DOMContentLoaded", () => {
+      ["task1", "task2", "task3"].forEach(taskId => {
+        const claimedTime = localStorage.getItem(`task_${taskId}_claimed`);
+        if (claimedTime) {
+          startCountdown(taskId);
+        }
       });
     });
   </script>
