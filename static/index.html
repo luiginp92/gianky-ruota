@@ -114,7 +114,6 @@
       if (audio.paused) {
           audio.play().catch((err) => console.error("Errore nell'avvio della musica:", err));
       }
-      // Rimuove il listener dopo il primo clic
       document.removeEventListener('click', enableAudio);
     });
 
@@ -135,7 +134,7 @@
     }
     window.addEventListener("load", updateBalances);
 
-    // Aggiorna il contatore dei giri disponibili chiamando l'endpoint /api/spins_status
+    // Aggiorna il contatore dei giri disponibili
     async function updateSpinsStatus() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -150,6 +149,19 @@
       }
     }
     window.addEventListener("load", updateSpinsStatus);
+
+    // PROCESSAMENTO DEL REFERRAL:
+    // Se l'URL contiene il parametro "ref", mostra il messaggio desiderato
+    function getQueryParam(param) {
+      let params = new URLSearchParams(window.location.search);
+      return params.get(param);
+    }
+    window.addEventListener("load", () => {
+      const ref = getQueryParam("ref");
+      if (ref) {
+        alert("CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!");
+      }
+    });
 
     // Configurazione della ruota (8 segmenti, ordinati esattamente)
     const prizeData = [
