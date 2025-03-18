@@ -27,7 +27,7 @@
     /* La ruota non avrà bordo */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
-    /* Splash screen: mostra prepagina.png */
+    /* Splash screen */
     #splash {
       position: fixed;
       top: 0;
@@ -150,16 +150,18 @@
     }
     window.addEventListener("load", updateSpinsStatus);
 
-    // Referral processing: se l'URL contiene il parametro "ref", invoca l'endpoint di claim referral
+    // PROCESSAMENTO AUTOMATICO DEL REFERRAL:
+    // Se l'URL contiene il parametro "ref" e non è già stato processato, invoca l'endpoint di claim_referral.
     function getQueryParam(param) {
       let params = new URLSearchParams(window.location.search);
       return params.get(param);
     }
     window.addEventListener("load", () => {
       const referrer = getQueryParam("ref");
-      if (referrer) {
+      if (referrer && !localStorage.getItem("refProcessed")) {
         const wallet = localStorage.getItem("walletAddress");
-        if (wallet && wallet.length === 42) {
+        // Evita il self-referral
+        if (wallet && wallet.length === 42 && wallet.toLowerCase() !== referrer.toLowerCase()) {
           fetch("/api/claim_referral", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -169,6 +171,9 @@
           .then(data => {
             alert(data.message);
             updateSpinsStatus();
+            localStorage.setItem("refProcessed", "true");
+            // Rimuove i parametri dalla URL
+            window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch(err => console.error("Errore nel claim referral:", err));
         }
