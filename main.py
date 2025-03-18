@@ -120,9 +120,9 @@ class TaskClaimRequest(BaseModel):
 async def spins_status(wallet_address: str):
     user = get_user(wallet_address)
     italy = pytz.timezone("Europe/Rome")
-    now_date = datetime.datetime.now(italy).date()
-    # Il free spin giornaliero è disponibile se non è stato usato oggi
-    free_spin = 1 if (user.last_free_spin_date is None or user.last_free_spin_date < now_date) else 0
+    now = datetime.datetime.now(italy)
+    # Free spin disponibile se l'utente non ha girato oggi
+    free_spin = 1 if (user.last_play_date is None or user.last_play_date.date() < now.date()) else 0
     available = user.extra_spins + free_spin
     return {"available_spins": available}
 
@@ -228,7 +228,7 @@ def get_user(wallet_address: str):
             session.add(user)
             session.commit()
             session.refresh(user)
-        logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}, last_free_spin_date: {user.last_free_spin_date}")
+        logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}, last_play_date: {user.last_play_date}")
         return user
     finally:
         session.close()
@@ -241,17 +241,19 @@ async def api_spin(req: SpinRequest):
     try:
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
-        now_date = datetime.datetime.now(italy).date()
-        # Il free spin giornaliero è disponibile se non è stato usato oggi
-        free_spin_available = 1 if (user.last_free_spin_date is None or user.last_free_spin_date < now_date) else 0
+        now = datetime.datetime.now(italy)
+        # Determina se il free spin è disponibile: se non ha girato oggi
+        free_spin_available = 1 if (user.last_play_date is None or user.last_play_date.date() < now.date()) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
         if free_spin_available == 1:
-            user.last_free_spin_date = now_date
+            user.last_play_date = now
             session.commit()
+            used_spin = 0
         else:
             user.extra_spins -= 1
             session.commit()
+            used_spin = 1
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "Nessun premio vinto. Riprova!"
@@ -272,8 +274,7 @@ async def api_spin(req: SpinRequest):
             session.add(record)
             session.commit()
         logging.info(f"Spin per {req.wallet_address}: premio {premio}")
-        # Calcola i giri disponibili: extra spins + (free spin se non usato oggi)
-        current_free_spin = 1 if (user.last_free_spin_date is None or user.last_free_spin_date < now_date) else 0
+        current_free_spin = 1 if (user.last_play_date is None or user.last_play_date.date() < now.date()) else 0
         available = user.extra_spins + current_free_spin
         return {"message": result_text, "prize": premio, "available_spins": available}
     except Exception as e:
@@ -318,7 +319,6 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
-        # Aggiorna GlobalCounter per le entrate
         session_gc = Session()
         try:
             counter = session_gc.query(GlobalCounter).first()
@@ -333,10 +333,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             session_gc.rollback()
         finally:
             session_gc.close()
-        italy = pytz.timezone("Europe/Rome")
-        now_date = datetime.datetime.now(italy).date()
-        current_free_spin = 1 if (user.last_free_spin_date is None or user.last_free_spin_date < now_date) else 0
-        available = user.extra_spins + current_free_spin
+        available = user.extra_spins + (1 if (user.last_play_date is None or user.last_play_date.date() < datetime.datetime.now(pytz.timezone("Europe/Rome")).date()) else 0)
         return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
         session.rollback()
@@ -351,18 +348,18 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
 # ------------------ ENDPOINT CLAIM REFERRAL ------------------
 @app.post("/api/claim_referral")
 async def claim_referral(req: ReferralRequest):
-    logging.info(f"Claim referral richiesto: wallet_address={req.wallet_address}, referrer={req.referrer}")
+    """
+    Se un nuovo utente si collega tramite un link referral,
+    accredita 2 extra giri a entrambi (nuovo utente e referrer)
+    Solo se il nuovo utente non aveva già un referral impostato.
+    """
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
-        # Impedisci self-referral
-        if req.wallet_address.lower() == req.referrer.lower():
-            raise HTTPException(status_code=400, detail="Non puoi auto-referenziarti.")
         if not new_user.referred_by:
             new_user.referred_by = req.referrer
-            new_user.extra_spins += 2  # Accredita 2 giri al nuovo utente
+            new_user.extra_spins += 2  # accredita 2 giri al nuovo utente
             session.commit()
-            # Accredita 2 giri anche al referrer
             ref_user = get_user(req.referrer)
             ref_session = Session()
             try:
@@ -374,7 +371,7 @@ async def claim_referral(req: ReferralRequest):
                 logging.error(f"Errore nel credito al referrer: {e}")
             finally:
                 ref_session.close()
-            return {"message": "Referral accreditato! Tu e il tuo referrer avete ricevuto 2 giri extra."}
+            return {"message": "CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!"}
         else:
             return {"message": "Referral già reclamato per questo utente."}
     except Exception as e:
@@ -387,6 +384,10 @@ async def claim_referral(req: ReferralRequest):
 # ------------------ ENDPOINT CLAIM TASK ------------------
 @app.post("/api/claim_task")
 async def claim_task(req: TaskClaimRequest, background_tasks: BackgroundTasks):
+    """
+    Simula il controllo della task: dopo 10 minuti, accredita 2 extra giri.
+    Per evitare ripetizioni, utilizza il campo last_claimed_tasks in User.
+    """
     user = get_user(req.wallet_address)
     session = Session()
     try:
@@ -410,7 +411,7 @@ async def claim_task(req: TaskClaimRequest, background_tasks: BackgroundTasks):
         session.close()
 
 async def process_task_claim(wallet_address: str):
-    await asyncio.sleep(600)  # 10 minuti
+    await asyncio.sleep(600)
     session = Session()
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
@@ -418,7 +419,6 @@ async def process_task_claim(wallet_address: str):
             user.extra_spins += 2
             session.commit()
             logging.info(f"Task claim process: 2 extra giri accreditati per {wallet_address}")
-            # Qui si potrebbe inviare una notifica via bot Telegram, se implementato
     except Exception as e:
         session.rollback()
         logging.error(f"Errore in process_task_claim: {e}")
