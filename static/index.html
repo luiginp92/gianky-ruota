@@ -6,7 +6,7 @@
   <title>GiankyCoin Web App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    /* Sfondo: usa sfondo.png in cover */
+    /* Usa lo sfondo con sfondo.png */
     body {
       background: url('/static/sfondo.png') no-repeat center center fixed;
       background-size: cover;
@@ -15,7 +15,7 @@
     }
     /* Header semi trasparente */
     .header {
-      background-color: rgba(52, 58, 64, 0.5);
+      background-color: rgba(52, 58, 64, 0.5); /* semi trasparente */
       color: white;
       padding: 1rem;
       text-align: center;
@@ -52,7 +52,7 @@
   </div>
 
   <!-- Audio in loop: pianobar.mp3 -->
-  <audio id="backgroundMusic" src="/static/pianobar.mp3" autoplay loop></audio>
+  <audio id="backgroundMusic" src="/static/pianobar.mp3" loop></audio>
   
   <header class="header">
     <h1>GiankyCoin App</h1>
@@ -108,6 +108,16 @@
       }, 2000);
     });
     
+    // Per far partire la musica al primo click (necessario per superare le restrizioni di autoplay)
+    document.addEventListener('click', function enableAudio() {
+      var audio = document.getElementById('backgroundMusic');
+      if (audio.paused) {
+          audio.play().catch((err) => console.error("Errore nell'avvio della musica:", err));
+      }
+      // Rimuove il listener dopo il primo clic
+      document.removeEventListener('click', enableAudio);
+    });
+
     // Aggiorna saldi
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
@@ -133,7 +143,6 @@
         const res = await fetch(`/api/spins_status/${wallet}`);
         if (res.ok) {
           const data = await res.json();
-          // Il contatore riflette solo i giri extra disponibili, più 1 free spin se non usato oggi
           document.getElementById("freeSpinsCount").innerText = data.available_spins;
         }
       } catch (error) {
