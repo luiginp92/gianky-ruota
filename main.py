@@ -223,11 +223,13 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
+            # Importante: aggiungo anche il campo last_free_spin_date per gestire il free spin
+            # Se non esiste, lo inizializziamo a None
             user = User(wallet_address=wallet_address, extra_spins=0)
             session.add(user)
             session.commit()
             session.refresh(user)
-        logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}, last_free_spin_date: {user.last_free_spin_date}")
+        logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}, last_free_spin_date: {getattr(user, 'last_free_spin_date', None)}")
         return user
     finally:
         session.close()
@@ -241,7 +243,8 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
-        free_spin_available = 1 if (user.last_free_spin_date is None or user.last_free_spin_date < now_date) else 0
+        # Verifica se il free spin è disponibile: se il campo last_free_spin_date è None o è precedente alla data odierna
+        free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
         if free_spin_available == 1:
@@ -270,7 +273,8 @@ async def api_spin(req: SpinRequest):
             session.add(record)
             session.commit()
         logging.info(f"Spin per {req.wallet_address}: premio {premio}")
-        current_free_spin = 1 if (user.last_free_spin_date is None or user.last_free_spin_date < now_date) else 0
+        # Calcola i giri disponibili: free spin (se non usato oggi) + extra spins
+        current_free_spin = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         available = user.extra_spins + current_free_spin
         return {"message": result_text, "prize": premio, "available_spins": available}
     except Exception as e:
@@ -315,6 +319,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         session.commit()
         session.refresh(user)
         logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
+        # Aggiorna GlobalCounter per le entrate
         session_gc = Session()
         try:
             counter = session_gc.query(GlobalCounter).first()
@@ -331,7 +336,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
             session_gc.close()
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
-        current_free_spin = 1 if (user.last_free_spin_date is None or user.last_free_spin_date < now_date) else 0
+        current_free_spin = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         available = user.extra_spins + current_free_spin
         return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
@@ -350,10 +355,15 @@ async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
-        if not new_user.referred_by:
+        # Impedisci il self-referral
+        if new_user.wallet_address.lower() == req.referrer.lower():
+            return {"message": "Non puoi auto-referenziarti."}
+        # Se il nuovo utente non ha già un referral (campo vuoto o None)
+        if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
-            new_user.extra_spins += 2
+            new_user.extra_spins += 2  # accredita 2 giri al nuovo utente
             session.commit()
+            # Accredita 2 giri anche al referrer, se esiste
             ref_user = get_user(req.referrer)
             ref_session = Session()
             try:
@@ -382,7 +392,8 @@ async def claim_task(req: TaskClaimRequest, background_tasks: BackgroundTasks):
     session = Session()
     try:
         user = session.merge(user)
-        claimed = user.last_claimed_tasks.split(",") if user.last_claimed_tasks else []
+        # Utilizzo di un campo per tracciare i task reclamati (assicurarsi che nel modello User esista)
+        claimed = user.last_claimed_tasks.split(",") if getattr(user, "last_claimed_tasks", None) else []
         if req.task_id in claimed:
             raise HTTPException(status_code=400, detail="Task già reclamata.")
         claimed.append(req.task_id)
