@@ -106,15 +106,21 @@
       setTimeout(() => {
         document.getElementById("splash").style.display = "none";
       }, 2000);
+      // Controlla se nella URL c'è un parametro referral (ref)
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if (ref) {
+        localStorage.setItem("referrer", ref);
+        console.log("Referral rilevato:", ref);
+      }
     });
-    
+
     // Per far partire la musica al primo click (necessario per superare le restrizioni di autoplay)
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
-          audio.play().catch((err) => console.error("Errore nell'avvio della musica:", err));
+        audio.play().catch((err) => console.error("Errore nell'avvio della musica:", err));
       }
-      // Rimuove il listener dopo il primo clic
       document.removeEventListener('click', enableAudio);
     });
 
@@ -150,6 +156,30 @@
       }
     }
     window.addEventListener("load", updateSpinsStatus);
+
+    // Se un referral è memorizzato e il wallet è collegato, tenta di reclamare il bonus referral
+    async function autoClaimReferral() {
+      const wallet = localStorage.getItem("walletAddress");
+      const referrer = localStorage.getItem("referrer");
+      if (wallet && referrer && wallet.length === 42 && referrer.length === 42 && !localStorage.getItem("referralClaimed")) {
+        try {
+          const res = await fetch("/api/claim_referral", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet_address: wallet, referrer: referrer })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            alert(data.message);
+            localStorage.setItem("referralClaimed", "true");
+            updateSpinsStatus();
+          }
+        } catch (error) {
+          console.error("Errore nel claim referral:", error);
+        }
+      }
+    }
+    window.addEventListener("load", autoClaimReferral);
 
     // Configurazione della ruota (8 segmenti, ordinati esattamente)
     const prizeData = [
