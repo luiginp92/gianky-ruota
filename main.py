@@ -200,11 +200,11 @@ def get_prize() -> str:
         ("10 GKY", 30),
         ("20 GKY", 15),
         ("50 GKY", 10),
-        ("100 GKY", 3),
-        ("250 GKY", 1),
-        ("500 GKY", 1),
-        ("1000 GKY", 1),
-        ("NO PRIZE", 44)
+        ("100 GKY", 1.50),    # aggiornato da 3 a 1,50
+        ("250 GKY", 0.50),    # aggiornato da 1 a 0,50
+        ("500 GKY", 0.25),    # aggiornato da 1 a 0,25
+        ("1000 GKY", 0.25),   # aggiornato da 1 a 0,25
+        ("NO PRIZE", 47.50)   # aggiornato da 44 a 47,50
     ]
     total = sum(weight for _, weight in prizes)
     r = random.uniform(0, total)
