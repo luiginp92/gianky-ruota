@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GiankyCoin App</title>
+  <title>GiankyCoin Web App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
     /* Background using sfondo.png */
@@ -24,7 +24,6 @@
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: transparent; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
-    /* The wheel canvas without border */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
     /* Splash screen */
@@ -40,8 +39,10 @@
       justify-content: center;
       z-index: 1000;
     }
+    /* Audio per i suoni dei pulsanti */
+    #buttonSound { display: none; }
   </style>
-  <!-- Load TweenMax and Winwheel -->
+  <!-- TweenMax and Winwheel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
@@ -51,8 +52,10 @@
     <img src="/static/prepagina.png" alt="Loading..." style="max-width: 100%; height: auto;">
   </div>
 
-  <!-- Background music (pianobar.mp3) in loop -->
+  <!-- Background music -->
   <audio id="backgroundMusic" src="/static/pianobar.mp3" loop></audio>
+  <!-- Suono per i pulsanti -->
+  <audio id="buttonSound" src="/static/click.mp3" preload="auto"></audio>
   
   <header class="header">
     <h1>GiankyCoin App</h1>
@@ -65,7 +68,6 @@
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Wheel canvas -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
@@ -101,23 +103,34 @@
   </footer>
   
   <script>
-    // Hide the splash screen after 2 seconds
+    // Funzione per riprodurre il suono al click
+    function playButtonSound() {
+      var sound = document.getElementById('buttonSound');
+      if (sound) sound.play().catch(err => console.error("Errore nel suono:", err));
+    }
+
+    // Aggiungi listener per i pulsanti principali
+    document.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", playButtonSound);
+    });
+
+    // Nascondi la splash screen dopo 2 secondi
     document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         document.getElementById("splash").style.display = "none";
       }, 2000);
     });
     
-    // Start the background music on first user interaction (due to autoplay restrictions)
+    // Avvia la musica al primo click
     document.addEventListener('click', function enableAudio() {
-      const audio = document.getElementById('backgroundMusic');
+      var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
-        audio.play().catch(err => console.error("Error playing music:", err));
+          audio.play().catch((err) => console.error("Errore nell'avvio della musica:", err));
       }
       document.removeEventListener('click', enableAudio);
     });
-    
-    // Update balances from the API
+
+    // Aggiorna saldi
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -129,12 +142,12 @@
           document.getElementById("tokenBalance").innerText = data.gky;
         }
       } catch (error) {
-        console.error("Error updating balances:", error);
+        console.error("Errore nei saldi:", error);
       }
     }
     window.addEventListener("load", updateBalances);
 
-    // Update the spins status (free + extra spins) from the API
+    // Aggiorna il contatore dei giri disponibili
     async function updateSpinsStatus() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -145,24 +158,24 @@
           document.getElementById("freeSpinsCount").innerText = data.available_spins;
         }
       } catch (error) {
-        console.error("Error updating spins status:", error);
+        console.error("Errore nello status dei giri:", error);
       }
     }
     window.addEventListener("load", updateSpinsStatus);
-    // Also refresh spins status every minute
-    setInterval(updateSpinsStatus, 60000);
 
-    // Process referral if present in URL
+    // PROCESSAMENTO DEL REFERRAL:
+    // Se l'URL contiene il parametro "ref" ed il referral non è già stato processato,
+    // chiama l'endpoint /api/claim_referral e mostra il messaggio.
     function getQueryParam(param) {
-      const params = new URLSearchParams(window.location.search);
+      let params = new URLSearchParams(window.location.search);
       return params.get(param);
     }
     window.addEventListener("load", () => {
       const ref = getQueryParam("ref");
-      console.log("Referral parameter detected:", ref);
+      console.log("Parametro ref rilevato:", ref);
       if (ref && !localStorage.getItem("refProcessed")) {
         const wallet = localStorage.getItem("walletAddress");
-        console.log("Local wallet:", wallet);
+        console.log("Wallet in locale:", wallet);
         if (wallet && wallet.length === 42 && wallet.toLowerCase() !== ref.toLowerCase()) {
           fetch("/api/claim_referral", {
             method: "POST",
@@ -171,17 +184,18 @@
           })
           .then(response => response.json())
           .then(data => {
-            alert("THE PERSON WHO INVITED YOU HAS RECEIVED 2 FREE SPINS, INVITE OTHERS TO RECEIVE YOUR BONUS OF 2 FREE SPINS!");
+            console.log("Risposta claim_referral:", data);
+            alert(data.message);
             updateSpinsStatus();
             localStorage.setItem("refProcessed", "true");
             window.history.replaceState({}, document.title, window.location.pathname);
           })
-          .catch(err => console.error("Error processing referral:", err));
+          .catch(err => console.error("Errore nel claim referral:", err));
         }
       }
     });
 
-    // Wheel configuration
+    // Configurazione della ruota (8 segmenti, ordinati esattamente)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
@@ -197,7 +211,7 @@
       text: item.text
     }));
 
-    // Create the wheel with a starting angle of 22.5° to center the first segment
+    // Crea la ruota con startAngle=22.5 per centrare il primo segmento
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       startAngle: 22.5,
@@ -271,12 +285,12 @@
         const centerAngle = chosenIndex * segmentAngle + 22.5;
         const extraSpins = 360 * 5;
         const finalAngle = extraSpins + centerAngle;
-        console.log("Final angle:", finalAngle);
+        console.log("Calculated final angle:", finalAngle);
         theWheel = createWheel(finalAngle);
         theWheel.startAnimation();
       } catch (error) {
         console.error("Error during spin:", error);
-        alert("Error during spin. Please contact support.");
+        alert("Spin error. Please contact support.");
         document.getElementById("btnSpin").disabled = false;
       }
     });
