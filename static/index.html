@@ -161,7 +161,7 @@
     }
     window.addEventListener("load", updateSpinsStatus);
 
-    // Process referral: extract from the "start" query parameter if it begins with "ref_"
+    // Process referral automatically: if URL contains a "start" parameter starting with "ref_"
     function getQueryParam(param) {
       let params = new URLSearchParams(window.location.search);
       return params.get(param);
@@ -184,10 +184,11 @@
           })
           .then(response => response.json())
           .then(data => {
-            console.log("Claim referral response:", data);
+            console.log("Referral claim response:", data);
             alert(data.message);
             updateSpinsStatus();
             localStorage.setItem("refProcessed", "true");
+            // Remove query parameters from URL
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch(err => console.error("Referral claim error:", err));
@@ -221,7 +222,7 @@
       animation: { type: 'spinToStop', duration: 5, spins: 8 }
     });
 
-    // Flag to prevent multiple spins while spinning
+    // Flag to prevent multiple spins at once
     let isSpinning = false;
 
     function findPrizeIndex(prizeText) {

@@ -198,8 +198,8 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 # ------------------ NFT SENDING LOGIC ------------------
 def send_nft(destinatario: str) -> bool:
     """
-    Sends one NFT (random tokenId from 1 to 11) from the distribution wallet.
-    If a "replacement transaction underpriced" error occurs, retry with an increased gas price.
+    Sends one NFT randomly chosen (from token IDs 1 to 11) from the distribution wallet.
+    Uses the ERC721 safeTransferFrom function.
     """
     try:
         nft_contract = w3.eth.contract(
@@ -233,24 +233,6 @@ def send_nft(destinatario: str) -> bool:
         logging.info(f"NFT (tokenId {token_id}) sent to {destinatario}, txHash: {tx_hash.hex()}")
         return True
     except Exception as e:
-        if "replacement transaction underpriced" in str(e):
-            try:
-                gas_price = int(get_dynamic_gas_price() * 1.5)
-                nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
-                tx = nft_contract.functions.safeTransferFrom(WALLET_DISTRIBUZIONE, destinatario, token_id).build_transaction({
-                    'from': WALLET_DISTRIBUZIONE,
-                    'nonce': nonce,
-                    'gas': 200000,
-                    'gasPrice': gas_price,
-                })
-                signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-                raw_tx = signed_tx.raw_transaction if hasattr(signed_tx, 'raw_transaction') else signed_tx.rawTransaction
-                tx_hash = w3.eth.send_raw_transaction(raw_tx)
-                logging.info(f"NFT (tokenId {token_id}) sent to {destinatario} on retry, txHash: {tx_hash.hex()}")
-                return True
-            except Exception as e2:
-                logging.error(f"Error sending NFT on retry: {e2}")
-                return False
         logging.error(f"Error sending NFT: {e}")
         return False
 
@@ -261,7 +243,7 @@ def get_prize() -> str:
         ("20 GKY", 15),
         ("50 GKY", 10),
         ("100 GKY", 1.50),
-        ("NFT Starter", 0.025),  # NFT Starter prize with 0.025 probability
+        ("NFT Starter", 0.025),
         ("500 GKY", 0.25),
         ("1000 GKY", 0.25),
         ("NO PRIZE", 47.50)
@@ -415,13 +397,12 @@ async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
-        # Prevent self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"message": "You cannot refer yourself."}
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
+            new_user.extra_spins += 2  # Credit 2 spins to the new user
             session.commit()
-            # Credit 2 extra spins to the referrer
             ref_user = get_user(req.referrer)
             ref_session = Session()
             try:
@@ -433,7 +414,7 @@ async def claim_referral(req: ReferralRequest):
                 logging.error(f"Error crediting referrer: {e}")
             finally:
                 ref_session.close()
-            return {"message": "THE PERSON WHO INVITED YOU HAS RECEIVED 2 FREE SPINS, INVITE OTHERS TO RECEIVE YOUR BONUS OF 2 SPINS!"}
+            return {"message": "The person who invited you has received 2 free spins, invite others to receive your bonus of 2 spins!"}
         else:
             return {"message": "Referral already claimed for this user."}
     except Exception as e:
