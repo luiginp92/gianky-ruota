@@ -24,6 +24,7 @@
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: transparent; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
+    /* Wheel canvas without border */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
     /* Splash screen */
@@ -39,7 +40,7 @@
       justify-content: center;
       z-index: 1000;
     }
-    /* Audio per i suoni dei pulsanti */
+    /* Audio for button sounds */
     #buttonSound { display: none; }
   </style>
   <!-- TweenMax and Winwheel -->
@@ -54,7 +55,7 @@
 
   <!-- Background music -->
   <audio id="backgroundMusic" src="/static/pianobar.mp3" loop></audio>
-  <!-- Suono per i pulsanti -->
+  <!-- Button sound -->
   <audio id="buttonSound" src="/static/click.mp3" preload="auto"></audio>
   
   <header class="header">
@@ -103,34 +104,32 @@
   </footer>
   
   <script>
-    // Funzione per riprodurre il suono al click
+    // Function to play button sound on click
     function playButtonSound() {
       var sound = document.getElementById('buttonSound');
-      if (sound) sound.play().catch(err => console.error("Errore nel suono:", err));
+      if (sound) sound.play().catch(err => console.error("Button sound error:", err));
     }
-
-    // Aggiungi listener per i pulsanti principali
     document.querySelectorAll("button").forEach(btn => {
       btn.addEventListener("click", playButtonSound);
     });
 
-    // Nascondi la splash screen dopo 2 secondi
+    // Hide splash screen after 2 seconds
     document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
         document.getElementById("splash").style.display = "none";
       }, 2000);
     });
     
-    // Avvia la musica al primo click
+    // Start background music on first click
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
-          audio.play().catch((err) => console.error("Errore nell'avvio della musica:", err));
+          audio.play().catch((err) => console.error("Background music error:", err));
       }
       document.removeEventListener('click', enableAudio);
     });
 
-    // Aggiorna saldi
+    // Update balances
     async function updateBalances() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -142,12 +141,12 @@
           document.getElementById("tokenBalance").innerText = data.gky;
         }
       } catch (error) {
-        console.error("Errore nei saldi:", error);
+        console.error("Balance update error:", error);
       }
     }
     window.addEventListener("load", updateBalances);
 
-    // Aggiorna il contatore dei giri disponibili
+    // Update spins status
     async function updateSpinsStatus() {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) return;
@@ -158,24 +157,23 @@
           document.getElementById("freeSpinsCount").innerText = data.available_spins;
         }
       } catch (error) {
-        console.error("Errore nello status dei giri:", error);
+        console.error("Spins status error:", error);
       }
     }
     window.addEventListener("load", updateSpinsStatus);
 
-    // PROCESSAMENTO DEL REFERRAL:
-    // Se l'URL contiene il parametro "ref" ed il referral non è già stato processato,
-    // chiama l'endpoint /api/claim_referral e mostra il messaggio.
+    // Referral processing:
+    // If the URL contains the "ref" parameter and referral not yet processed, call /api/claim_referral.
     function getQueryParam(param) {
       let params = new URLSearchParams(window.location.search);
       return params.get(param);
     }
     window.addEventListener("load", () => {
       const ref = getQueryParam("ref");
-      console.log("Parametro ref rilevato:", ref);
+      console.log("Referral parameter detected:", ref);
       if (ref && !localStorage.getItem("refProcessed")) {
         const wallet = localStorage.getItem("walletAddress");
-        console.log("Wallet in locale:", wallet);
+        console.log("Local wallet:", wallet);
         if (wallet && wallet.length === 42 && wallet.toLowerCase() !== ref.toLowerCase()) {
           fetch("/api/claim_referral", {
             method: "POST",
@@ -184,24 +182,24 @@
           })
           .then(response => response.json())
           .then(data => {
-            console.log("Risposta claim_referral:", data);
+            console.log("Claim referral response:", data);
             alert(data.message);
             updateSpinsStatus();
             localStorage.setItem("refProcessed", "true");
             window.history.replaceState({}, document.title, window.location.pathname);
           })
-          .catch(err => console.error("Errore nel claim referral:", err));
+          .catch(err => console.error("Referral claim error:", err));
         }
       }
     });
 
-    // Configurazione della ruota (8 segmenti, ordinati esattamente)
+    // Wheel configuration (8 segments)
     const prizeData = [
       { text: '10 GKY', color: '#F1C40F' },
       { text: '20 GKY', color: '#FF8C00' },
       { text: '50 GKY', color: '#E67E22' },
       { text: '100 GKY', color: '#E74C3C' },
-      { text: 'NFTSTARTER', color: '#9B59B6' },
+      { text: 'NFTStarter', color: '#9B59B6' },
       { text: '500 GKY', color: '#3498DB' },
       { text: '1000 GKY', color: '#1ABC9C' },
       { text: 'NO PRIZE', color: '#C0392B' }
@@ -211,7 +209,7 @@
       text: item.text
     }));
 
-    // Crea la ruota con startAngle=22.5 per centrare il primo segmento
+    // Create the wheel with startAngle=22.5 to center the first segment
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       startAngle: 22.5,

@@ -197,14 +197,14 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 # ------------------ PRIZE ASSIGNMENT ------------------
 def get_prize() -> str:
     prizes = [
-        ("10 GKY", 30,075),
+        ("10 GKY", 30,475),
         ("20 GKY", 15),
         ("50 GKY", 10),
         ("100 GKY", 1.50),
-        ("NFT Starter", 0.025),  # Changed from "250 GKY" to "NFT Starter"
+        ("NFT Starter", 0.025),
         ("500 GKY", 0.25),
-        ("1000 GKY", 0.15),
-        ("NO PRIZE", 43)
+        ("1000 GKY", 0.25),
+        ("NO PRIZE", 47.50)
     ]
     total = sum(weight for _, weight in prizes)
     r = random.uniform(0, total)
@@ -223,6 +223,7 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
+            # Ensure new user has last_free_spin_date as None
             user = User(wallet_address=wallet_address, extra_spins=0)
             session.add(user)
             session.commit()
@@ -241,6 +242,7 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
+        # Check if free spin is available (if last_free_spin_date is None or older than today)
         free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="You have no spins left for today.")
@@ -253,19 +255,15 @@ async def api_spin(req: SpinRequest):
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "No prize won. Try again!"
-        elif "GKY" in premio or "NFT" in premio:
-            if "GKY" in premio:
-                amount = int(premio.split(" ")[0])
-                if invia_token(req.wallet_address, amount):
-                    result_text = f"You won {premio}!"
-                else:
-                    result_text = "Error transferring tokens."
+        elif "GKY" in premio:
+            amount = int(premio.split(" ")[0])
+            if invia_token(req.wallet_address, amount):
+                result_text = f"You won {premio}!"
             else:
-                # For NFT Starter, implement NFT sending logic (here we assume automatic send of one NFT)
-                result_text = "Congratulations! You won an NFT Starter! (NFT sent automatically.)"
-                # (Implement NFT transfer logic if needed)
+                result_text = "Error transferring tokens."
         else:
-            result_text = f"You won: {premio}!"
+            # NFT Starter prize
+            result_text = "Congratulations! You won an NFT Starter! (NFT sent automatically.)"
             record = PremioVinto(
                 telegram_id=user.telegram_id or "N/A",
                 wallet=user.wallet_address,
@@ -355,8 +353,10 @@ async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
+        # Prevent self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"message": "You cannot refer yourself."}
+        # If the new user has not yet been referred, assign the referral and credit 2 spins to both parties
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
             new_user.extra_spins += 2  # Credit 2 spins to the new user
