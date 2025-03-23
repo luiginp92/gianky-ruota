@@ -108,8 +108,6 @@
       var sound = document.getElementById('buttonSound');
       if (sound) sound.play().catch(err => console.error("Button sound error:", err));
     }
-
-    // Add listener to all buttons for sound
     document.querySelectorAll("button").forEach(btn => {
       btn.addEventListener("click", playButtonSound);
     });
@@ -163,13 +161,17 @@
     }
     window.addEventListener("load", updateSpinsStatus);
 
-    // Process referral if URL contains a referral parameter
+    // Process referral: extract from the "start" query parameter if it begins with "ref_"
     function getQueryParam(param) {
       let params = new URLSearchParams(window.location.search);
       return params.get(param);
     }
     window.addEventListener("load", () => {
-      const ref = getQueryParam("ref");
+      let startParam = getQueryParam("start");
+      let ref = "";
+      if (startParam && startParam.startsWith("ref_")) {
+        ref = startParam.substring(4);
+      }
       console.log("Referral parameter detected:", ref);
       if (ref && !localStorage.getItem("refProcessed")) {
         const wallet = localStorage.getItem("walletAddress");
@@ -261,7 +263,7 @@
     }
 
     document.getElementById("btnSpin").addEventListener("click", async () => {
-      if (isSpinning) return;  // Prevent multiple spins
+      if (isSpinning) return;
       isSpinning = true;
       document.getElementById("btnSpin").disabled = true;
       const wallet = localStorage.getItem("walletAddress");

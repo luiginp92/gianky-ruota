@@ -233,7 +233,6 @@ def send_nft(destinatario: str) -> bool:
         logging.info(f"NFT (tokenId {token_id}) sent to {destinatario}, txHash: {tx_hash.hex()}")
         return True
     except Exception as e:
-        # If error indicates "replacement transaction underpriced", try again with increased gas price
         if "replacement transaction underpriced" in str(e):
             try:
                 gas_price = int(get_dynamic_gas_price() * 1.5)
@@ -302,7 +301,6 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
-        # Check if free spin is available based on last_free_spin_date
         free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="You have no spins left for today.")
@@ -417,6 +415,7 @@ async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
+        # Prevent self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"message": "You cannot refer yourself."}
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
