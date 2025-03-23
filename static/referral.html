@@ -13,13 +13,13 @@
 <body>
   <div class="container">
     <h1>Your Referral Link</h1>
-    <p>Share this link with your friends. When a new user signs up using this link, your referrer will receive 2 free spins. Invite your friends to receive your bonus of 2 free spins!</p>
+    <p>Share this link with your friends. When a new user accesses this link, the person who invited you will receive 2 free spins. Invite others to receive your bonus of 2 free spins!</p>
     <div class="mb-3">
       <input type="text" id="referralLink" class="form-control" readonly>
     </div>
     <button id="copyButton" class="btn btn-primary">Copy Link</button>
     <br><br>
-    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Back to Home</button>
+    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Return to Home</button>
     <br><br>
     <div id="referralMessage" class="mt-2"></div>
   </div>
@@ -39,6 +39,29 @@
       referralInput.setSelectionRange(0, 99999);
       document.execCommand("copy");
       alert("Link copied to clipboard!");
+    });
+    
+    // Automatically process referral if "ref" parameter is present in the URL.
+    window.addEventListener("load", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const refParam = urlParams.get("ref");
+      if (refParam && wallet && wallet.length === 42 && wallet.toLowerCase() !== refParam.toLowerCase()) {
+        fetch("/api/claim_referral", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet_address: wallet, referrer: refParam })
+        })
+        .then(response => response.json())
+        .then(data => {
+          document.getElementById("referralMessage").innerText = data.message;
+          // Remove referral parameters from the URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        })
+        .catch(err => {
+          console.error("Error processing referral:", err);
+          document.getElementById("referralMessage").innerText = "Error processing referral.";
+        });
+      }
     });
   </script>
 </body>

@@ -3,10 +3,12 @@
 Gianky Coin Web App – main.py
 -----------------------------
 Manages:
- • The wheel spin and prize distribution
- • Purchasing and confirming extra spins
- • Endpoints for wallet balance and spins status
- • Endpoints for claiming referral and tasks (with delayed credit)
+ • The spin of the wheel and prize distribution (including NFT transfers)
+ • Purchase and confirmation of extra spins
+ • Endpoints for wallet balance and spin status
+ • Endpoints to claim referral and tasks (with delayed credit)
+ 
+All text is in English.
 """
 
 import os, random, datetime, pytz, logging, asyncio
@@ -32,17 +34,20 @@ init_db()
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ------------------ BLOCKCHAIN CONFIG ------------------
+# ------------------ BLOCKCHAIN CONFIGURATION ------------------
 PRIVATE_KEY = os.getenv("DISTRIBUTION_PRIVATE_KEY")
 if not PRIVATE_KEY:
-    raise RuntimeError("Error: DISTRIBUTION_PRIVATE_KEY not set.")
+    raise RuntimeError("Error: DISTRIBUTION_PRIVATE_KEY is not set.")
 
 PROVIDER_URL = os.getenv("PROVIDER_URL", "https://polygon-rpc.com/")
 TOKEN_ADDRESS = os.getenv("TOKEN_ADDRESS")
 if not TOKEN_ADDRESS:
-    raise RuntimeError("Error: TOKEN_ADDRESS not set.")
+    raise RuntimeError("Error: TOKEN_ADDRESS is not set.")
 
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
+
+# NFT contract configuration
+NFT_CONTRACT_ADDRESS = "0xdc91E2fD661E88a9a1bcB1c826B5579232fc9898"
 
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
@@ -60,11 +65,11 @@ def get_dynamic_gas_price():
             base = w3.eth.gas_price
         except AttributeError:
             base = w3.eth.get_gas_price()
-        safe = int(base * 1.2)
+        safe = int(base * 1.3)  # Increased multiplier from 1.2 to 1.3
         logging.info(f"Gas Price: {from_wei(base, 'gwei')} -> {from_wei(safe, 'gwei')}")
         return safe
     except Exception as e:
-        logging.error(f"Gas price error: {e}")
+        logging.error(f"Error in gas price: {e}")
         return to_wei(50, 'gwei')
 
 # ------------------ TX VERIFICATION ------------------
@@ -72,11 +77,11 @@ def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
         if tx.get("to", "").lower() != TOKEN_ADDRESS.lower():
-            logging.error("TX not sent to the token contract.")
+            logging.error("The TX is not directed to the token contract.")
             return False
         return True
     except Exception as e:
-        logging.error(f"TX verification error: {e}")
+        logging.error(f"Error verifying TX: {e}")
         return False
 
 # ------------------ JWT ------------------
@@ -96,12 +101,12 @@ class SpinRequest(BaseModel):
 
 class BuySpinsRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
-    num_spins: int = Field(..., description="Number of extra spins (1, 3, or 10)", gt=0)
+    num_spins: int = Field(..., description="Number of extra spins (1, 3 or 10)", gt=0)
 
 class ConfirmBuyRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     tx_hash: str
-    num_spins: int = Field(..., description="Number of extra spins (1, 3, or 10)", gt=0)
+    num_spins: int = Field(..., description="Number of extra spins (1, 3 or 10)", gt=0)
 
 class DistributePrizeRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
@@ -115,106 +120,88 @@ class TaskClaimRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     task_id: str
 
-# ------------------ ENDPOINT: SPINS STATUS ------------------
-@app.get("/api/spins_status/{wallet_address}")
-async def spins_status(wallet_address: str):
-    user = get_user(wallet_address)
-    italy = pytz.timezone("Europe/Rome")
-    now_date = datetime.datetime.now(italy).date()
-    free_spin = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
-    available = user.extra_spins + free_spin
-    return {"available_spins": available}
+# ------------------ NFT FUNCTIONS ------------------
+# Minimal ERC721Enumerable ABI for balanceOf, tokenOfOwnerByIndex, safeTransferFrom
+NFT_ABI = [
+    {
+        "constant": True,
+        "inputs": [{"name": "owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "type": "function"
+    },
+    {
+        "constant": True,
+        "inputs": [
+            {"name": "owner", "type": "address"},
+            {"name": "index", "type": "uint256"}
+        ],
+        "name": "tokenOfOwnerByIndex",
+        "outputs": [{"name": "tokenId", "type": "uint256"}],
+        "type": "function"
+    },
+    {
+        "constant": False,
+        "inputs": [
+            {"name": "from", "type": "address"},
+            {"name": "to", "type": "address"},
+            {"name": "tokenId", "type": "uint256"}
+        ],
+        "name": "safeTransferFrom",
+        "outputs": [],
+        "type": "function"
+    }
+]
 
-# ------------------ ENDPOINT: WALLET BALANCE ------------------
-@app.get("/api/balance/{wallet_address}")
-async def get_balance(wallet_address: str):
+def invia_nft(destinatario: str) -> bool:
     try:
-        provider = Web3(Web3.HTTPProvider(PROVIDER_URL))
-        matic_balance = provider.eth.get_balance(wallet_address)
-        token_contract = provider.eth.contract(
-            address=TOKEN_ADDRESS,
-            abi=[{
-                "constant": True,
-                "inputs": [{"name": "owner", "type": "address"}],
-                "name": "balanceOf",
-                "outputs": [{"name": "", "type": "uint256"}],
-                "payable": False,
-                "stateMutability": "view",
-                "type": "function"
-            }]
-        )
-        token_balance = token_contract.functions.balanceOf(wallet_address).call()
-        return {"matic": float(from_wei(matic_balance, 'ether')), "gky": float(from_wei(token_balance, 'ether'))}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ------------------ TOKEN TRANSFER ------------------
-def invia_token(destinatario: str, quantita: int) -> bool:
-    try:
+        nft_contract = w3.eth.contract(address=NFT_CONTRACT_ADDRESS, abi=NFT_ABI)
+        # Get the number of NFTs owned by the distribution wallet
+        balance = nft_contract.functions.balanceOf(WALLET_DISTRIBUZIONE).call()
+        if balance == 0:
+            logging.error("No NFTs available in the distribution wallet.")
+            return False
+        # Select a random NFT from the distribution wallet
+        random_index = random.randint(0, balance - 1)
+        token_id = nft_contract.functions.tokenOfOwnerByIndex(WALLET_DISTRIBUZIONE, random_index).call()
         gas_price = get_dynamic_gas_price()
-        token_contract = w3.eth.contract(
-            address=TOKEN_ADDRESS,
-            abi=[{
-                "constant": False,
-                "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}],
-                "name": "transfer",
-                "outputs": [{"name": "", "type": "bool"}],
-                "payable": False,
-                "stateMutability": "nonpayable",
-                "type": "function"
-            }]
-        )
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
-        tx = token_contract.functions.transfer(destinatario, quantita * 10**18).build_transaction({
+        tx = nft_contract.functions.safeTransferFrom(WALLET_DISTRIBUZIONE, destinatario, token_id).build_transaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
-            'gas': 100000,
+            'gas': 200000,  # Gas limit increased for NFT transfer
             'gasPrice': gas_price,
         })
         signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         raw_tx = signed_tx.raw_transaction if hasattr(signed_tx, 'raw_transaction') else signed_tx.rawTransaction
         tx_hash = w3.eth.send_raw_transaction(raw_tx)
-        logging.info(f"Tokens sent: {quantita} GKY, txHash: {tx_hash.hex()}")
+        logging.info(f"NFT (tokenId: {token_id}) sent to {destinatario}, txHash: {tx_hash.hex()}")
+        return True
     except Exception as e:
-        logging.error(f"Error sending tokens: {e}")
+        logging.error(f"Error sending NFT: {e}")
         return False
-    session_db = Session()
-    try:
-        counter = session_db.query(GlobalCounter).first()
-        if counter is None:
-            counter = GlobalCounter(total_in=0.0, total_out=quantita)
-            session_db.add(counter)
-        else:
-            counter.total_out += quantita
-        session_db.commit()
-    except Exception as e:
-        logging.error(f"Error updating total_out: {e}")
-        session_db.rollback()
-    finally:
-        session_db.close()
-    return True
 
 # ------------------ PRIZE ASSIGNMENT ------------------
 def get_prize() -> str:
     prizes = [
-        ("10 GKY", 30.45),
+        ("10 GKY", 30),
         ("20 GKY", 15),
-        ("50 GKY", 8),
+        ("50 GKY", 10),
         ("100 GKY", 1.50),
-        ("NFT Starter", 0.05),  # Changed from "250 GKY" to "NFT Starter"
+        ("NFT Starter", 0.025),    # Replaces "250 GKY" with 0.025 weight = 0.025% chance
         ("500 GKY", 0.25),
         ("1000 GKY", 0.25),
-        ("NO PRIZE", 44.50)
+        ("NO PRIZE", 42.975)
     ]
     total = sum(weight for _, weight in prizes)
     r = random.uniform(0, total)
     upto = 0
     for prize, weight in prizes:
         if upto + weight >= r:
-            logging.info(f"get_prize() selected: {prize}")
+            logging.info(f"get_prize() chosen: {prize}")
             return prize
         upto += weight
-    logging.info("get_prize() selected: NO PRIZE")
+    logging.info("get_prize() chosen: NO PRIZE")
     return "NO PRIZE"
 
 # ------------------ GET USER ------------------
@@ -223,6 +210,7 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
+            # Ensure new user has last_free_spin_date = None and last_claimed_tasks = ""
             user = User(wallet_address=wallet_address, extra_spins=0)
             session.add(user)
             session.commit()
@@ -232,7 +220,7 @@ def get_user(wallet_address: str):
     finally:
         session.close()
 
-# ------------------ ENDPOINT: SPIN ------------------
+# ------------------ ENDPOINT SPIN ------------------
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
     user = get_user(req.wallet_address)
@@ -243,7 +231,7 @@ async def api_spin(req: SpinRequest):
         now_date = datetime.datetime.now(italy).date()
         free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
-            raise HTTPException(status_code=400, detail="You have no spins left for today.")
+            raise HTTPException(status_code=400, detail="No spins available for today.")
         if free_spin_available == 1:
             user.last_free_spin_date = now_date
             session.commit()
@@ -253,17 +241,17 @@ async def api_spin(req: SpinRequest):
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
             result_text = "No prize won. Try again!"
-        elif "GKY" in premio or "NFT" in premio:
-            if "GKY" in premio:
-                amount = int(premio.split(" ")[0])
-                if invia_token(req.wallet_address, amount):
-                    result_text = f"You won {premio}!"
-                else:
-                    result_text = "Error transferring tokens."
+        elif premio == "NFT Starter":
+            if invia_nft(req.wallet_address):
+                result_text = "Congratulations! You won an NFT Starter!"
             else:
-                # For NFT Starter, implement NFT sending logic (here we assume automatic send of one NFT)
-                result_text = "Congratulations! You won an NFT Starter! (NFT sent automatically.)"
-                # (Implement NFT transfer logic if needed)
+                result_text = "Error transferring NFT."
+        elif "GKY" in premio:
+            amount = int(premio.split(" ")[0])
+            if invia_token(req.wallet_address, amount):
+                result_text = f"Congratulations! You won {premio}!"
+            else:
+                result_text = "Error transferring tokens."
         else:
             result_text = f"You won: {premio}!"
             record = PremioVinto(
@@ -279,18 +267,18 @@ async def api_spin(req: SpinRequest):
         available = user.extra_spins + current_free_spin
         return {"message": result_text, "prize": premio, "available_spins": available}
     except Exception as e:
-        logging.error(f"Error during spin: {e}")
+        logging.error(f"Error in spin: {e}")
         raise HTTPException(status_code=500, detail="Error during spin.")
     finally:
         session.close()
 
-# ------------------ ENDPOINT: BUY SPINS ------------------
+# ------------------ ENDPOINT BUY SPINS ------------------
 @app.post("/api/buyspins")
 async def api_buyspins(req: BuySpinsRequest):
     user = get_user(req.wallet_address)
     try:
         if req.num_spins not in (1, 3, 10):
-            raise HTTPException(status_code=400, detail="You can only buy 1, 3, or 10 extra spins.")
+            raise HTTPException(status_code=400, detail="You can purchase only 1, 3, or 10 extra spins.")
         cost = 50 if req.num_spins == 1 else 125 if req.num_spins == 3 else 300
         msg = f"To purchase {req.num_spins} extra spins, transfer {cost} GKY to {WALLET_DISTRIBUZIONE} and then confirm via /api/confirmbuy."
         logging.info(f"Buy spins request for {req.wallet_address} with num_spins: {req.num_spins}")
@@ -299,21 +287,21 @@ async def api_buyspins(req: BuySpinsRequest):
         logging.error(f"Error in buyspins: {e}")
         raise HTTPException(status_code=500, detail="Error in purchase request.")
 
-# ------------------ ENDPOINT: CONFIRM BUY ------------------
+# ------------------ ENDPOINT CONFIRM BUY ------------------
 @app.post("/api/confirmbuy")
 async def api_confirmbuy(req: ConfirmBuyRequest):
     user = get_user(req.wallet_address)
     session = Session()
     try:
         if req.tx_hash in USED_TX:
-            raise HTTPException(status_code=400, detail="TX already used for a purchase.")
+            raise HTTPException(status_code=400, detail="Transaction already used for a purchase.")
         if req.num_spins not in (1, 3, 10):
-            raise HTTPException(status_code=400, detail="You can only confirm 1, 3, or 10 extra spins.")
+            raise HTTPException(status_code=400, detail="You can confirm only 1, 3, or 10 extra spins.")
         cost = 50 if req.num_spins == 1 else 125 if req.num_spins == 3 else 300
         if not user.wallet_address:
             raise HTTPException(status_code=400, detail="Connect your wallet before confirming.")
         if not verifica_transazione_gky(user.wallet_address, req.tx_hash, cost):
-            raise HTTPException(status_code=400, detail="TX not valid or insufficient amount.")
+            raise HTTPException(status_code=400, detail="Invalid transaction or insufficient amount.")
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
@@ -349,18 +337,21 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
     finally:
         session.close()
 
-# ------------------ ENDPOINT: CLAIM REFERRAL ------------------
+# ------------------ ENDPOINT CLAIM REFERRAL ------------------
 @app.post("/api/claim_referral")
 async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
+        # Prevent self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"message": "You cannot refer yourself."}
+        # If the new user does not already have a referral set
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
             new_user.extra_spins += 2  # Credit 2 spins to the new user
             session.commit()
+            # Also credit 2 spins to the referrer
             ref_user = get_user(req.referrer)
             ref_session = Session()
             try:
@@ -372,7 +363,7 @@ async def claim_referral(req: ReferralRequest):
                 logging.error(f"Error crediting referrer: {e}")
             finally:
                 ref_session.close()
-            return {"message": "The person who invited you has received 2 free spins, invite others to receive your bonus of 2 spins!"}
+            return {"message": "Your inviter has received 2 free spins, invite others to receive your bonus of 2 free spins!"}
         else:
             return {"message": "Referral already claimed for this user."}
     except Exception as e:
@@ -382,7 +373,7 @@ async def claim_referral(req: ReferralRequest):
     finally:
         session.close()
 
-# ------------------ ENDPOINT: CLAIM TASK ------------------
+# ------------------ ENDPOINT CLAIM TASK ------------------
 @app.post("/api/claim_task")
 async def claim_task(req: TaskClaimRequest, background_tasks: BackgroundTasks):
     user = get_user(req.wallet_address)
@@ -422,15 +413,15 @@ async def process_task_claim(wallet_address: str):
     finally:
         session.close()
 
-# ------------------ ENDPOINT: DISTRIBUTE ------------------
+# ------------------ ENDPOINT DISTRIBUTE ------------------
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
     if req.prize.strip().upper() == "NO PRIZE":
         return {"message": "No prize to distribute."}
     else:
-        return {"message": f"Prize {req.prize} already distributed to wallet {req.wallet_address}."}
+        return {"message": f"Prize {req.prize} has already been distributed to wallet {req.wallet_address}."}
 
-# ------------------ ENDPOINT: REFERRAL LINK ------------------
+# ------------------ ENDPOINT REFERRAL ------------------
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/giankytestbot?start=ref_{wallet_address}"
