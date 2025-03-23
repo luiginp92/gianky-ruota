@@ -43,6 +43,7 @@ if not TOKEN_ADDRESS:
     raise RuntimeError("Error: TOKEN_ADDRESS not set.")
 
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
+NFT_CONTRACT_ADDRESS = "0xdc91E2fD661E88a9a1bcB1c826B5579232fc9898"  # Contratto NFT
 
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
@@ -194,10 +195,52 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         session_db.close()
     return True
 
+# ------------------ NFT SENDING LOGIC ------------------
+def send_nft(destinatario: str) -> bool:
+    """
+    Sends one NFT randomly chosen among token IDs 1 to 11 from the distribution wallet.
+    Uses the ERC721 safeTransferFrom function.
+    """
+    try:
+        nft_contract = w3.eth.contract(
+            address=NFT_CONTRACT_ADDRESS,
+            abi=[{
+                "constant": False,
+                "inputs": [
+                    {"name": "from", "type": "address"},
+                    {"name": "to", "type": "address"},
+                    {"name": "tokenId", "type": "uint256"}
+                ],
+                "name": "safeTransferFrom",
+                "outputs": [],
+                "payable": False,
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }]
+        )
+        # Choose a random token ID from 1 to 11
+        token_id = random.randint(1, 11)
+        gas_price = get_dynamic_gas_price()
+        nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
+        tx = nft_contract.functions.safeTransferFrom(WALLET_DISTRIBUZIONE, destinatario, token_id).build_transaction({
+            'from': WALLET_DISTRIBUZIONE,
+            'nonce': nonce,
+            'gas': 200000,
+            'gasPrice': gas_price,
+        })
+        signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+        raw_tx = signed_tx.raw_transaction if hasattr(signed_tx, 'raw_transaction') else signed_tx.rawTransaction
+        tx_hash = w3.eth.send_raw_transaction(raw_tx)
+        logging.info(f"NFT (tokenId {token_id}) sent to {destinatario}, txHash: {tx_hash.hex()}")
+        return True
+    except Exception as e:
+        logging.error(f"Error sending NFT: {e}")
+        return False
+
 # ------------------ PRIZE ASSIGNMENT ------------------
 def get_prize() -> str:
     prizes = [
-        ("10 GKY", 30,475),
+        ("10 GKY", 30.075),
         ("20 GKY", 15),
         ("50 GKY", 10),
         ("100 GKY", 1.50),
@@ -223,7 +266,7 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
-            # Ensure new user has last_free_spin_date as None
+            # New user: initialize extra_spins=0 and last_free_spin_date as None
             user = User(wallet_address=wallet_address, extra_spins=0)
             session.add(user)
             session.commit()
@@ -261,9 +304,14 @@ async def api_spin(req: SpinRequest):
                 result_text = f"You won {premio}!"
             else:
                 result_text = "Error transferring tokens."
+        elif "NFT" in premio:
+            # NFT Starter prize: send one NFT automatically
+            if send_nft(req.wallet_address):
+                result_text = "Congratulations! You won an NFT Starter! (NFT sent automatically.)"
+            else:
+                result_text = "Error sending NFT."
         else:
-            # NFT Starter prize
-            result_text = "Congratulations! You won an NFT Starter! (NFT sent automatically.)"
+            result_text = f"You won: {premio}!"
             record = PremioVinto(
                 telegram_id=user.telegram_id or "N/A",
                 wallet=user.wallet_address,
@@ -353,10 +401,8 @@ async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
-        # Prevent self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"message": "You cannot refer yourself."}
-        # If the new user has not yet been referred, assign the referral and credit 2 spins to both parties
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
             new_user.extra_spins += 2  # Credit 2 spins to the new user
