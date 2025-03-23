@@ -24,7 +24,6 @@
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: transparent; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
-    /* Wheel canvas without border */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
     /* Splash screen */
@@ -104,11 +103,13 @@
   </footer>
   
   <script>
-    // Play button sound on click
+    // Function to play button sound
     function playButtonSound() {
       var sound = document.getElementById('buttonSound');
       if (sound) sound.play().catch(err => console.error("Button sound error:", err));
     }
+
+    // Add listener to all buttons for sound
     document.querySelectorAll("button").forEach(btn => {
       btn.addEventListener("click", playButtonSound);
     });
@@ -124,7 +125,7 @@
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
-          audio.play().catch((err) => console.error("Background music error:", err));
+          audio.play().catch((err) => console.error("Music start error:", err));
       }
       document.removeEventListener('click', enableAudio);
     });
@@ -162,9 +163,7 @@
     }
     window.addEventListener("load", updateSpinsStatus);
 
-    // Referral processing:
-    // If URL contains the "ref" parameter and referral not yet processed,
-    // call /api/claim_referral.
+    // Process referral if URL contains a referral parameter
     function getQueryParam(param) {
       let params = new URLSearchParams(window.location.search);
       return params.get(param);
@@ -200,7 +199,7 @@
       { text: '20 GKY', color: '#FF8C00' },
       { text: '50 GKY', color: '#E67E22' },
       { text: '100 GKY', color: '#E74C3C' },
-      { text: 'NFTStarter', color: '#9B59B6' },
+      { text: 'NFTSTARTER', color: '#9B59B6' },
       { text: '500 GKY', color: '#3498DB' },
       { text: '1000 GKY', color: '#1ABC9C' },
       { text: 'NO PRIZE', color: '#C0392B' }
@@ -210,7 +209,7 @@
       text: item.text
     }));
 
-    // Create the wheel with startAngle=22.5 to center the first segment
+    // Create the wheel with startAngle = 22.5
     let theWheel = new Winwheel({
       canvasId: 'wheelCanvas',
       startAngle: 22.5,
@@ -219,6 +218,9 @@
       segments: segments,
       animation: { type: 'spinToStop', duration: 5, spins: 8 }
     });
+
+    // Flag to prevent multiple spins while spinning
+    let isSpinning = false;
 
     function findPrizeIndex(prizeText) {
       prizeText = prizeText.trim().toUpperCase();
@@ -245,6 +247,7 @@
             updateBalances();
             updateSpinsStatus();
             resetWheel();
+            isSpinning = false;
           }
         }
       });
@@ -258,9 +261,13 @@
     }
 
     document.getElementById("btnSpin").addEventListener("click", async () => {
+      if (isSpinning) return;  // Prevent multiple spins
+      isSpinning = true;
+      document.getElementById("btnSpin").disabled = true;
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
         alert("Wallet not connected.");
+        isSpinning = false;
         document.getElementById("btnSpin").disabled = false;
         return;
       }
@@ -277,6 +284,7 @@
         let chosenIndex = findPrizeIndex(prize);
         if (chosenIndex === -1) {
           alert("Unrecognized prize: " + prize);
+          isSpinning = false;
           document.getElementById("btnSpin").disabled = false;
           return;
         }
@@ -290,6 +298,7 @@
       } catch (error) {
         console.error("Error during spin:", error);
         alert("Spin error. Please contact support.");
+        isSpinning = false;
         document.getElementById("btnSpin").disabled = false;
       }
     });

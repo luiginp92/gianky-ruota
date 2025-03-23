@@ -43,7 +43,7 @@ if not TOKEN_ADDRESS:
     raise RuntimeError("Error: TOKEN_ADDRESS not set.")
 
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
-NFT_CONTRACT_ADDRESS = "0xdc91E2fD661E88a9a1bcB1c826B5579232fc9898"  # Contratto NFT
+NFT_CONTRACT_ADDRESS = "0xdc91E2fD661E88a9a1bcB1c826B5579232fc9898"  # NFT contract address
 
 w3 = Web3(Web3.HTTPProvider(PROVIDER_URL))
 w3_no_mw = Web3(Web3.HTTPProvider(PROVIDER_URL))
@@ -198,8 +198,8 @@ def invia_token(destinatario: str, quantita: int) -> bool:
 # ------------------ NFT SENDING LOGIC ------------------
 def send_nft(destinatario: str) -> bool:
     """
-    Sends one NFT randomly chosen among token IDs 1 to 11 from the distribution wallet.
-    Uses the ERC721 safeTransferFrom function.
+    Sends one NFT (random tokenId from 1 to 11) from the distribution wallet.
+    If a "replacement transaction underpriced" error occurs, retry with an increased gas price.
     """
     try:
         nft_contract = w3.eth.contract(
@@ -218,7 +218,6 @@ def send_nft(destinatario: str) -> bool:
                 "type": "function"
             }]
         )
-        # Choose a random token ID from 1 to 11
         token_id = random.randint(1, 11)
         gas_price = get_dynamic_gas_price()
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
@@ -234,6 +233,25 @@ def send_nft(destinatario: str) -> bool:
         logging.info(f"NFT (tokenId {token_id}) sent to {destinatario}, txHash: {tx_hash.hex()}")
         return True
     except Exception as e:
+        # If error indicates "replacement transaction underpriced", try again with increased gas price
+        if "replacement transaction underpriced" in str(e):
+            try:
+                gas_price = int(get_dynamic_gas_price() * 1.5)
+                nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
+                tx = nft_contract.functions.safeTransferFrom(WALLET_DISTRIBUZIONE, destinatario, token_id).build_transaction({
+                    'from': WALLET_DISTRIBUZIONE,
+                    'nonce': nonce,
+                    'gas': 200000,
+                    'gasPrice': gas_price,
+                })
+                signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+                raw_tx = signed_tx.raw_transaction if hasattr(signed_tx, 'raw_transaction') else signed_tx.rawTransaction
+                tx_hash = w3.eth.send_raw_transaction(raw_tx)
+                logging.info(f"NFT (tokenId {token_id}) sent to {destinatario} on retry, txHash: {tx_hash.hex()}")
+                return True
+            except Exception as e2:
+                logging.error(f"Error sending NFT on retry: {e2}")
+                return False
         logging.error(f"Error sending NFT: {e}")
         return False
 
@@ -244,7 +262,7 @@ def get_prize() -> str:
         ("20 GKY", 15),
         ("50 GKY", 10),
         ("100 GKY", 1.50),
-        ("NFT Starter", 0.025),
+        ("NFT Starter", 0.025),  # NFT Starter prize with 0.025 probability
         ("500 GKY", 0.25),
         ("1000 GKY", 0.25),
         ("NO PRIZE", 47.50)
@@ -266,7 +284,6 @@ def get_user(wallet_address: str):
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
-            # New user: initialize extra_spins=0 and last_free_spin_date as None
             user = User(wallet_address=wallet_address, extra_spins=0)
             session.add(user)
             session.commit()
@@ -285,7 +302,7 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
-        # Check if free spin is available (if last_free_spin_date is None or older than today)
+        # Check if free spin is available based on last_free_spin_date
         free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="You have no spins left for today.")
@@ -305,7 +322,6 @@ async def api_spin(req: SpinRequest):
             else:
                 result_text = "Error transferring tokens."
         elif "NFT" in premio:
-            # NFT Starter prize: send one NFT automatically
             if send_nft(req.wallet_address):
                 result_text = "Congratulations! You won an NFT Starter! (NFT sent automatically.)"
             else:
@@ -405,8 +421,8 @@ async def claim_referral(req: ReferralRequest):
             return {"message": "You cannot refer yourself."}
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
-            new_user.extra_spins += 2  # Credit 2 spins to the new user
             session.commit()
+            # Credit 2 extra spins to the referrer
             ref_user = get_user(req.referrer)
             ref_session = Session()
             try:
@@ -418,7 +434,7 @@ async def claim_referral(req: ReferralRequest):
                 logging.error(f"Error crediting referrer: {e}")
             finally:
                 ref_session.close()
-            return {"message": "The person who invited you has received 2 free spins, invite others to receive your bonus of 2 spins!"}
+            return {"message": "THE PERSON WHO INVITED YOU HAS RECEIVED 2 FREE SPINS, INVITE OTHERS TO RECEIVE YOUR BONUS OF 2 SPINS!"}
         else:
             return {"message": "Referral already claimed for this user."}
     except Exception as e:
