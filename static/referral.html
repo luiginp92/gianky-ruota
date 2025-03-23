@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,19 +12,18 @@
 </head>
 <body>
   <div class="container">
-    <h1>Il tuo Link Referral</h1>
-    <p>Condividi questo link con i tuoi amici. Quando un nuovo utente utilizzerà questo link per collegarsi, TU e il nuovo utente riceverete 2 giri gratuiti.</p>
+    <h1>Your Referral Link</h1>
+    <p>Share this link with your friends. When a new user signs up using this link, your referrer will receive 2 free spins. Invite your friends to receive your bonus of 2 free spins!</p>
     <div class="mb-3">
       <input type="text" id="referralLink" class="form-control" readonly>
     </div>
-    <button id="copyButton" class="btn btn-primary">Copia Link</button>
+    <button id="copyButton" class="btn btn-primary">Copy Link</button>
     <br><br>
-    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Torna alla Home</button>
+    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Back to Home</button>
     <br><br>
-    <!-- Pulsante per reclamare il referral -->
-    <button id="claimReferral" class="btn btn-success">Reclama Referral</button>
     <div id="referralMessage" class="mt-2"></div>
   </div>
+  
   <script>
     const wallet = localStorage.getItem("walletAddress");
     const referralInput = document.getElementById("referralLink");
@@ -32,42 +31,14 @@
       const referralLink = "https://t.me/giankytestbot?start=ref_" + wallet;
       referralInput.value = referralLink;
     } else {
-      referralInput.value = "Wallet non trovato. Collega il wallet prima.";
+      referralInput.value = "Wallet not found. Please connect your wallet first.";
     }
     
     document.getElementById("copyButton").addEventListener("click", () => {
       referralInput.select();
       referralInput.setSelectionRange(0, 99999);
       document.execCommand("copy");
-      alert("Link copiato negli appunti!");
-    });
-    
-    // Funzione per reclamare il referral
-    document.getElementById("claimReferral").addEventListener("click", async () => {
-      if (!wallet || wallet.length !== 42) {
-        alert("Wallet non collegato.");
-        return;
-      }
-      // Nel link referral, la parte dopo "ref_" è il wallet del referrer.
-      // Supponiamo che questo valore sia passato come query parameter "ref" (puoi modificarlo in base al tuo flusso)
-      const urlParams = new URLSearchParams(window.location.search);
-      const referrer = urlParams.get("start")?.split("_")[1];
-      if (!referrer) {
-        document.getElementById("referralMessage").innerText = "Nessun referral rilevato.";
-        return;
-      }
-      try {
-        const res = await fetch("/api/claim_referral", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: wallet, referrer: referrer })
-        });
-        const data = await res.json();
-        document.getElementById("referralMessage").innerText = data.message;
-      } catch (error) {
-        console.error("Errore nel reclamare il referral:", error);
-        document.getElementById("referralMessage").innerText = "Errore nel reclamare il referral.";
-      }
+      alert("Link copied to clipboard!");
     });
   </script>
 </body>

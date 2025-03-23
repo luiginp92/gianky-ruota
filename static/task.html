@@ -16,7 +16,7 @@
 <body>
   <div class="container">
     <h1>Completa le Task</h1>
-    <p>Completa una delle seguenti azioni per ricevere 2 giri gratuiti. Nota: il controllo della task richiede 10 minuti.</p>
+    <p>Completa una delle seguenti azioni per ricevere 2 giri gratuiti. Nota: il controllo della task richiede 10 minuti e ogni task può essere reclamata una sola volta.</p>
     
     <!-- Task 1: YouTube -->
     <div class="task" id="task1Container">
@@ -58,28 +58,24 @@
   <script>
     const TASK_DELAY = 600; // 600 secondi = 10 minuti
 
-    // Funzione per formattare il tempo rimanente (mm:ss)
+    // Controlla se la task è già stata completata, disabilita i pulsanti se così
+    function checkTaskCompletion(taskId) {
+      if (localStorage.getItem(`task_${taskId}_completed`)) {
+        document.querySelector(`.btn-complete-task[data-task="${taskId}"]`).disabled = true;
+        document.querySelector(`.btn-redeem-task[data-task="${taskId}"]`).classList.add("hidden");
+        document.getElementById(taskId + "Message").innerText = "Task già completata.";
+        document.getElementById(taskId + "Countdown").innerText = "";
+      }
+    }
+
+    // Funzione per formattare il tempo (mm:ss)
     function formatTime(seconds) {
       const m = Math.floor(seconds / 60);
       const s = seconds % 60;
       return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
-    // Handler per "Ho completato la Task"
-    document.querySelectorAll(".btn-complete-task").forEach(button => {
-      button.addEventListener("click", function() {
-        const taskId = this.getAttribute("data-task");
-        // Disabilita il pulsante e registra il timestamp in localStorage
-        this.disabled = true;
-        const now = Date.now();
-        localStorage.setItem(`task_${taskId}_claimed`, now);
-        document.getElementById(taskId + "Message").innerText = "Task completata! Attendi 10 minuti per il redeem.";
-        // Avvia il countdown
-        startCountdown(taskId);
-      });
-    });
-
-    // Avvia il countdown per il task, se già reclamato
+    // Avvia il countdown per la task
     function startCountdown(taskId) {
       const countdownElem = document.getElementById(taskId + "Countdown");
       const claimedTime = parseInt(localStorage.getItem(`task_${taskId}_claimed`), 10);
@@ -97,13 +93,30 @@
       }, 1000);
     }
 
+    // Handler per "Ho completato la Task"
+    document.querySelectorAll(".btn-complete-task").forEach(button => {
+      button.addEventListener("click", function() {
+        const taskId = this.getAttribute("data-task");
+        // Se la task è già stata completata, non fare nulla
+        if (localStorage.getItem(`task_${taskId}_completed`)) {
+          alert("Task già completata.");
+          return;
+        }
+        this.disabled = true;
+        const now = Date.now();
+        localStorage.setItem(`task_${taskId}_claimed`, now);
+        document.getElementById(taskId + "Message").innerText = "Task completata! Attendi 10 minuti per il redeem.";
+        startCountdown(taskId);
+      });
+    });
+
     // Handler per "Redeem Task"
     document.querySelectorAll(".btn-redeem-task").forEach(button => {
       button.addEventListener("click", async function() {
         const taskId = this.getAttribute("data-task");
         const wallet = localStorage.getItem("walletAddress");
         if (!wallet || wallet.length !== 42) {
-          alert("Wallet non connesso. Collega il wallet prima.");
+          alert("Wallet non collegato. Collega il wallet prima.");
           return;
         }
         try {
@@ -115,8 +128,11 @@
           if (!res.ok) throw new Error("Errore: " + res.status);
           const data = await res.json();
           document.getElementById(taskId + "Message").innerText = data.message;
-          // Nascondi il pulsante dopo il redeem
-          this.disabled = true;
+          // Una volta effettuato il redeem, segna la task come completata in localStorage
+          localStorage.setItem(`task_${taskId}_completed`, "true");
+          // Disabilita entrambi i pulsanti per questa task
+          document.querySelector(`.btn-complete-task[data-task="${taskId}"]`).disabled = true;
+          document.querySelector(`.btn-redeem-task[data-task="${taskId}"]`).disabled = true;
         } catch (error) {
           console.error("Errore nel redeem della task:", error);
           document.getElementById(taskId + "Message").innerText = "Errore nel redeem della task. Contatta l'assistenza.";
@@ -124,13 +140,13 @@
       });
     });
 
-    // Se l'utente ricarica la pagina, controlla se ci sono task in attesa e avvia il countdown
+    // All'avvio della pagina, controlla per ogni task se è già completata e avvia il countdown se necessario
     document.addEventListener("DOMContentLoaded", () => {
       ["task1", "task2", "task3"].forEach(taskId => {
-        const claimedTime = localStorage.getItem(`task_${taskId}_claimed`);
-        if (claimedTime) {
+        if (localStorage.getItem(`task_${taskId}_claimed`) && !localStorage.getItem(`task_${taskId}_completed`)) {
           startCountdown(taskId);
         }
+        checkTaskCompletion(taskId);
       });
     });
   </script>

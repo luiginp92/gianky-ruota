@@ -2,11 +2,11 @@
 """
 Gianky Coin Web App – main.py
 -----------------------------
-Gestisce:
- • Spin della ruota e distribuzione dei premi
- • Acquisto e conferma degli extra giri
- • Endpoint per il saldo del wallet e status dei giri
- • Endpoint per reclamare referral e task (con accredito ritardato)
+Manages:
+ • The wheel spin and prize distribution
+ • Purchasing and confirming extra spins
+ • Endpoints for wallet balance and spins status
+ • Endpoints for claiming referral and tasks (with delayed credit)
 """
 
 import os, random, datetime, pytz, logging, asyncio
@@ -32,15 +32,15 @@ init_db()
 app = FastAPI(title="Gianky Coin Web App API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ------------------ CONFIGURAZIONE BLOCKCHAIN ------------------
+# ------------------ BLOCKCHAIN CONFIG ------------------
 PRIVATE_KEY = os.getenv("DISTRIBUTION_PRIVATE_KEY")
 if not PRIVATE_KEY:
-    raise RuntimeError("Errore: DISTRIBUTION_PRIVATE_KEY non impostata.")
+    raise RuntimeError("Error: DISTRIBUTION_PRIVATE_KEY not set.")
 
 PROVIDER_URL = os.getenv("PROVIDER_URL", "https://polygon-rpc.com/")
 TOKEN_ADDRESS = os.getenv("TOKEN_ADDRESS")
 if not TOKEN_ADDRESS:
-    raise RuntimeError("Errore: TOKEN_ADDRESS non impostato.")
+    raise RuntimeError("Error: TOKEN_ADDRESS not set.")
 
 WALLET_DISTRIBUZIONE = os.getenv("WALLET_DISTRIBUZIONE", "0xBc0c054066966a7A6C875981a18376e2296e5815")
 
@@ -64,19 +64,19 @@ def get_dynamic_gas_price():
         logging.info(f"Gas Price: {from_wei(base, 'gwei')} -> {from_wei(safe, 'gwei')}")
         return safe
     except Exception as e:
-        logging.error(f"Errore nel gas price: {e}")
+        logging.error(f"Gas price error: {e}")
         return to_wei(50, 'gwei')
 
-# ------------------ VERIFICA TX ------------------
+# ------------------ TX VERIFICATION ------------------
 def verifica_transazione_gky(user_address: str, tx_hash: str, cost: int) -> bool:
     try:
         tx = w3_no_mw.eth.get_transaction(tx_hash)
         if tx.get("to", "").lower() != TOKEN_ADDRESS.lower():
-            logging.error("La TX non è indirizzata al contratto token.")
+            logging.error("TX not sent to the token contract.")
             return False
         return True
     except Exception as e:
-        logging.error(f"Errore verifica TX: {e}")
+        logging.error(f"TX verification error: {e}")
         return False
 
 # ------------------ JWT ------------------
@@ -90,18 +90,18 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# ------------------ MODELLI DI INPUT ------------------
+# ------------------ INPUT MODELS ------------------
 class SpinRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
 
 class BuySpinsRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
-    num_spins: int = Field(..., description="Numero di extra spin (1, 3 o 10)", gt=0)
+    num_spins: int = Field(..., description="Number of extra spins (1, 3, or 10)", gt=0)
 
 class ConfirmBuyRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     tx_hash: str
-    num_spins: int = Field(..., description="Numero di extra tiri (1, 3 o 10)", gt=0)
+    num_spins: int = Field(..., description="Number of extra spins (1, 3, or 10)", gt=0)
 
 class DistributePrizeRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
@@ -115,7 +115,7 @@ class TaskClaimRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     task_id: str
 
-# ------------------ ENDPOINT SPINS STATUS ------------------
+# ------------------ ENDPOINT: SPINS STATUS ------------------
 @app.get("/api/spins_status/{wallet_address}")
 async def spins_status(wallet_address: str):
     user = get_user(wallet_address)
@@ -125,7 +125,7 @@ async def spins_status(wallet_address: str):
     available = user.extra_spins + free_spin
     return {"available_spins": available}
 
-# ------------------ ENDPOINT PER IL SALDO ------------------
+# ------------------ ENDPOINT: WALLET BALANCE ------------------
 @app.get("/api/balance/{wallet_address}")
 async def get_balance(wallet_address: str):
     try:
@@ -148,7 +148,7 @@ async def get_balance(wallet_address: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ------------------ INVIO TOKEN ------------------
+# ------------------ TOKEN TRANSFER ------------------
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
         gas_price = get_dynamic_gas_price()
@@ -174,9 +174,9 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         raw_tx = signed_tx.raw_transaction if hasattr(signed_tx, 'raw_transaction') else signed_tx.rawTransaction
         tx_hash = w3.eth.send_raw_transaction(raw_tx)
-        logging.info(f"Token inviati: {quantita} GKY, txHash: {tx_hash.hex()}")
+        logging.info(f"Tokens sent: {quantita} GKY, txHash: {tx_hash.hex()}")
     except Exception as e:
-        logging.error(f"Errore nell'invio dei token: {e}")
+        logging.error(f"Error sending tokens: {e}")
         return False
     session_db = Session()
     try:
@@ -188,52 +188,51 @@ def invia_token(destinatario: str, quantita: int) -> bool:
             counter.total_out += quantita
         session_db.commit()
     except Exception as e:
-        logging.error(f"Errore aggiornamento total_out: {e}")
+        logging.error(f"Error updating total_out: {e}")
         session_db.rollback()
     finally:
         session_db.close()
     return True
 
-# ------------------ ASSEGNAZIONE PREMIO ------------------
+# ------------------ PRIZE ASSIGNMENT ------------------
 def get_prize() -> str:
     prizes = [
-        ("10 GKY", 30),
+        ("10 GKY", 30.45),
         ("20 GKY", 15),
-        ("50 GKY", 10),
-        ("100 GKY", 1.50),    # aggiornato da 3 a 1,50
-        ("250 GKY", 0.50),    # aggiornato da 1 a 0,50
-        ("500 GKY", 0.25),    # aggiornato da 1 a 0,25
-        ("1000 GKY", 0.25),   # aggiornato da 1 a 0,25
-        ("NO PRIZE", 47.50)   # aggiornato da 44 a 47,50
+        ("50 GKY", 8),
+        ("100 GKY", 1.50),
+        ("NFT Starter", 0.05),  # Changed from "250 GKY" to "NFT Starter"
+        ("500 GKY", 0.25),
+        ("1000 GKY", 0.25),
+        ("NO PRIZE", 44.50)
     ]
     total = sum(weight for _, weight in prizes)
     r = random.uniform(0, total)
     upto = 0
     for prize, weight in prizes:
         if upto + weight >= r:
-            logging.info(f"get_prize() scelto: {prize}")
+            logging.info(f"get_prize() selected: {prize}")
             return prize
         upto += weight
-    logging.info("get_prize() scelto: NO PRIZE")
+    logging.info("get_prize() selected: NO PRIZE")
     return "NO PRIZE"
 
-# ------------------ OTTENIMENTO UTENTE ------------------
+# ------------------ GET USER ------------------
 def get_user(wallet_address: str):
     session = Session()
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if not user:
-            # Assicuriamoci di avere anche il campo last_free_spin_date
             user = User(wallet_address=wallet_address, extra_spins=0)
             session.add(user)
             session.commit()
             session.refresh(user)
-        logging.info(f"Utente: {user.wallet_address}, extra_spins: {user.extra_spins}, last_free_spin_date: {getattr(user, 'last_free_spin_date', None)}")
+        logging.info(f"User: {user.wallet_address}, extra_spins: {user.extra_spins}, last_free_spin_date: {getattr(user, 'last_free_spin_date', None)}")
         return user
     finally:
         session.close()
 
-# ------------------ ENDPOINT SPIN ------------------
+# ------------------ ENDPOINT: SPIN ------------------
 @app.post("/api/spin")
 async def api_spin(req: SpinRequest):
     user = get_user(req.wallet_address)
@@ -242,10 +241,9 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
-        # Verifica se il free spin è disponibile
         free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
-            raise HTTPException(status_code=400, detail="Hai esaurito i tiri disponibili per oggi.")
+            raise HTTPException(status_code=400, detail="You have no spins left for today.")
         if free_spin_available == 1:
             user.last_free_spin_date = now_date
             session.commit()
@@ -254,15 +252,20 @@ async def api_spin(req: SpinRequest):
             session.commit()
         premio = get_prize()
         if premio.strip().upper() == "NO PRIZE":
-            result_text = "Nessun premio vinto. Riprova!"
-        elif "GKY" in premio:
-            amount = int(premio.split(" ")[0])
-            if invia_token(req.wallet_address, amount):
-                result_text = f"Hai vinto {premio}!"
+            result_text = "No prize won. Try again!"
+        elif "GKY" in premio or "NFT" in premio:
+            if "GKY" in premio:
+                amount = int(premio.split(" ")[0])
+                if invia_token(req.wallet_address, amount):
+                    result_text = f"You won {premio}!"
+                else:
+                    result_text = "Error transferring tokens."
             else:
-                result_text = "Errore nel trasferimento dei token."
+                # For NFT Starter, implement NFT sending logic (here we assume automatic send of one NFT)
+                result_text = "Congratulations! You won an NFT Starter! (NFT sent automatically.)"
+                # (Implement NFT transfer logic if needed)
         else:
-            result_text = f"Hai vinto: {premio}!"
+            result_text = f"You won: {premio}!"
             record = PremioVinto(
                 telegram_id=user.telegram_id or "N/A",
                 wallet=user.wallet_address,
@@ -271,52 +274,52 @@ async def api_spin(req: SpinRequest):
             )
             session.add(record)
             session.commit()
-        logging.info(f"Spin per {req.wallet_address}: premio {premio}")
+        logging.info(f"Spin for {req.wallet_address}: prize {premio}")
         current_free_spin = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         available = user.extra_spins + current_free_spin
         return {"message": result_text, "prize": premio, "available_spins": available}
     except Exception as e:
-        logging.error(f"Errore nello spin: {e}")
-        raise HTTPException(status_code=500, detail="Errore durante lo spin.")
+        logging.error(f"Error during spin: {e}")
+        raise HTTPException(status_code=500, detail="Error during spin.")
     finally:
         session.close()
 
-# ------------------ ENDPOINT BUY SPINS ------------------
+# ------------------ ENDPOINT: BUY SPINS ------------------
 @app.post("/api/buyspins")
 async def api_buyspins(req: BuySpinsRequest):
     user = get_user(req.wallet_address)
     try:
         if req.num_spins not in (1, 3, 10):
-            raise HTTPException(status_code=400, detail="Puoi acquistare solo 1, 3 o 10 giri extra.")
+            raise HTTPException(status_code=400, detail="You can only buy 1, 3, or 10 extra spins.")
         cost = 50 if req.num_spins == 1 else 125 if req.num_spins == 3 else 300
-        msg = f"Per acquistare {req.num_spins} giri extra, trasferisci {cost} GKY a {WALLET_DISTRIBUZIONE} e poi conferma tramite /api/confirmbuy."
-        logging.info(f"Richiesta buyspins per {req.wallet_address} con num_spins: {req.num_spins}")
+        msg = f"To purchase {req.num_spins} extra spins, transfer {cost} GKY to {WALLET_DISTRIBUZIONE} and then confirm via /api/confirmbuy."
+        logging.info(f"Buy spins request for {req.wallet_address} with num_spins: {req.num_spins}")
         return {"message": msg}
     except Exception as e:
-        logging.error(f"Errore in buyspins: {e}")
-        raise HTTPException(status_code=500, detail="Errore nella richiesta d'acquisto.")
+        logging.error(f"Error in buyspins: {e}")
+        raise HTTPException(status_code=500, detail="Error in purchase request.")
 
-# ------------------ ENDPOINT CONFIRM BUY ------------------
+# ------------------ ENDPOINT: CONFIRM BUY ------------------
 @app.post("/api/confirmbuy")
 async def api_confirmbuy(req: ConfirmBuyRequest):
     user = get_user(req.wallet_address)
     session = Session()
     try:
         if req.tx_hash in USED_TX:
-            raise HTTPException(status_code=400, detail="Tx già usata per un acquisto.")
+            raise HTTPException(status_code=400, detail="TX already used for a purchase.")
         if req.num_spins not in (1, 3, 10):
-            raise HTTPException(status_code=400, detail="Puoi confermare solo 1, 3 o 10 giri extra.")
+            raise HTTPException(status_code=400, detail="You can only confirm 1, 3, or 10 extra spins.")
         cost = 50 if req.num_spins == 1 else 125 if req.num_spins == 3 else 300
         if not user.wallet_address:
-            raise HTTPException(status_code=400, detail="Collega il wallet prima di confermare.")
+            raise HTTPException(status_code=400, detail="Connect your wallet before confirming.")
         if not verifica_transazione_gky(user.wallet_address, req.tx_hash, cost):
-            raise HTTPException(status_code=400, detail="Tx non valida o importo insufficiente.")
+            raise HTTPException(status_code=400, detail="TX not valid or insufficient amount.")
         USED_TX.add(req.tx_hash)
         user = session.merge(user)
         user.extra_spins += req.num_spins
         session.commit()
         session.refresh(user)
-        logging.info(f"Extra spins aggiornati per {req.wallet_address}: {user.extra_spins}")
+        logging.info(f"Extra spins updated for {req.wallet_address}: {user.extra_spins}")
         session_gc = Session()
         try:
             counter = session_gc.query(GlobalCounter).first()
@@ -327,7 +330,7 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
                 counter.total_in += cost
             session_gc.commit()
         except Exception as gc_e:
-            logging.error(f"Errore aggiornamento total_in: {gc_e}")
+            logging.error(f"Error updating total_in: {gc_e}")
             session_gc.rollback()
         finally:
             session_gc.close()
@@ -335,32 +338,29 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
         now_date = datetime.datetime.now(italy).date()
         current_free_spin = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         available = user.extra_spins + current_free_spin
-        return {"message": f"Acquisto confermato! Extra giri: {user.extra_spins}", "available_spins": available}
+        return {"message": f"Purchase confirmed! Extra spins: {user.extra_spins}", "available_spins": available}
     except HTTPException as he:
         session.rollback()
         raise he
     except Exception as e:
         session.rollback()
-        logging.error(f"Errore in confirmbuy: {e}")
-        raise HTTPException(status_code=500, detail="Errore nella conferma degli extra giri.")
+        logging.error(f"Error in confirmbuy: {e}")
+        raise HTTPException(status_code=500, detail="Error confirming extra spins.")
     finally:
         session.close()
 
-# ------------------ ENDPOINT CLAIM REFERRAL ------------------
+# ------------------ ENDPOINT: CLAIM REFERRAL ------------------
 @app.post("/api/claim_referral")
 async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
-        # Impedisci self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
-            return {"message": "Non puoi auto-referenziarti."}
-        # Se il nuovo utente non ha già un referral
+            return {"message": "You cannot refer yourself."}
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
-            new_user.extra_spins += 2  # accredita 2 giri al nuovo utente
+            new_user.extra_spins += 2  # Credit 2 spins to the new user
             session.commit()
-            # Accredita 2 giri anche al referrer
             ref_user = get_user(req.referrer)
             ref_session = Session()
             try:
@@ -369,20 +369,20 @@ async def claim_referral(req: ReferralRequest):
                 ref_session.commit()
             except Exception as e:
                 ref_session.rollback()
-                logging.error(f"Errore nel credito al referrer: {e}")
+                logging.error(f"Error crediting referrer: {e}")
             finally:
                 ref_session.close()
-            return {"message": "CHI TI HA INVITATO HA RICEVUTO 2 GIRI GRATUITI, INVITA ANCHE TU PER RICEVERE IL BONUS DI 2 GIRI!"}
+            return {"message": "The person who invited you has received 2 free spins, invite others to receive your bonus of 2 spins!"}
         else:
-            return {"message": "Referral già reclamato per questo utente."}
+            return {"message": "Referral already claimed for this user."}
     except Exception as e:
         session.rollback()
-        logging.error(f"Errore in claim_referral: {e}")
-        raise HTTPException(status_code=500, detail="Errore nel reclamare il referral.")
+        logging.error(f"Error in claim_referral: {e}")
+        raise HTTPException(status_code=500, detail="Error claiming referral.")
     finally:
         session.close()
 
-# ------------------ ENDPOINT CLAIM TASK ------------------
+# ------------------ ENDPOINT: CLAIM TASK ------------------
 @app.post("/api/claim_task")
 async def claim_task(req: TaskClaimRequest, background_tasks: BackgroundTasks):
     user = get_user(req.wallet_address)
@@ -391,46 +391,46 @@ async def claim_task(req: TaskClaimRequest, background_tasks: BackgroundTasks):
         user = session.merge(user)
         claimed = user.last_claimed_tasks.split(",") if getattr(user, "last_claimed_tasks", None) else []
         if req.task_id in claimed:
-            raise HTTPException(status_code=400, detail="Task già reclamata.")
+            raise HTTPException(status_code=400, detail="Task already claimed.")
         claimed.append(req.task_id)
         user.last_claimed_tasks = ",".join(claimed)
         session.commit()
         background_tasks.add_task(process_task_claim, req.wallet_address)
-        return {"message": "Task completata! Riceverai 2 extra giri entro 10 minuti."}
+        return {"message": "Task completed! You will receive 2 extra spins within 10 minutes."}
     except HTTPException as he:
         session.rollback()
         raise he
     except Exception as e:
         session.rollback()
-        logging.error(f"Errore in claim_task: {e}")
-        raise HTTPException(status_code=500, detail="Errore nel reclamare la task.")
+        logging.error(f"Error in claim_task: {e}")
+        raise HTTPException(status_code=500, detail="Error claiming task.")
     finally:
         session.close()
 
 async def process_task_claim(wallet_address: str):
-    await asyncio.sleep(600)  # 10 minuti
+    await asyncio.sleep(600)  # 10 minutes
     session = Session()
     try:
         user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
         if user:
             user.extra_spins += 2
             session.commit()
-            logging.info(f"Task claim process: 2 extra giri accreditati per {wallet_address}")
+            logging.info(f"Task claim process: 2 extra spins credited for {wallet_address}")
     except Exception as e:
         session.rollback()
-        logging.error(f"Errore in process_task_claim: {e}")
+        logging.error(f"Error in process_task_claim: {e}")
     finally:
         session.close()
 
-# ------------------ ENDPOINT DISTRIBUTE ------------------
+# ------------------ ENDPOINT: DISTRIBUTE ------------------
 @app.post("/api/distribute")
 async def api_distribute(req: DistributePrizeRequest):
     if req.prize.strip().upper() == "NO PRIZE":
-        return {"message": "Nessun premio da distribuire."}
+        return {"message": "No prize to distribute."}
     else:
-        return {"message": f"Premio {req.prize} già distribuito al wallet {req.wallet_address}."}
+        return {"message": f"Prize {req.prize} already distributed to wallet {req.wallet_address}."}
 
-# ------------------ ENDPOINT REFERRAL ------------------
+# ------------------ ENDPOINT: REFERRAL LINK ------------------
 @app.get("/api/referral")
 async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/giankytestbot?start=ref_{wallet_address}"

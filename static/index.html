@@ -1,19 +1,19 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GiankyCoin Web App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    /* Usa lo sfondo con sfondo.png */
+    /* Background using sfondo.png */
     body {
       background: url('/static/sfondo.png') no-repeat center center fixed;
       background-size: cover;
       padding-top: 20px;
       margin: 0;
     }
-    /* Header semi trasparente */
+    /* Semi-transparent header */
     .header {
       background-color: rgba(52, 58, 64, 0.5);
       color: white;
@@ -24,7 +24,6 @@
     .btn-custom { font-size: 1.2rem; margin: 0.5rem; }
     .footer { background-color: transparent; color: #ccc; text-align: center; padding: 1rem; margin-top: 2rem; }
     .balance-info { text-align: right; font-size: 0.9rem; }
-    /* La ruota non avrà bordo */
     #wheelCanvas { border: none; display: block; margin: 20px auto; }
     #freeSpins { font-size: 1.1rem; margin-top: 10px; text-align: center; }
     /* Splash screen */
@@ -40,19 +39,23 @@
       justify-content: center;
       z-index: 1000;
     }
+    /* Audio per i suoni dei pulsanti */
+    #buttonSound { display: none; }
   </style>
-  <!-- Carica TweenMax e Winwheel -->
+  <!-- TweenMax and Winwheel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/2.1.3/TweenMax.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@v2.7.0/Winwheel.min.js"></script>
 </head>
 <body>
   <!-- Splash screen -->
   <div id="splash">
-    <img src="/static/prepagina.png" alt="Caricamento..." style="max-width: 100%; height: auto;">
+    <img src="/static/prepagina.png" alt="Loading..." style="max-width: 100%; height: auto;">
   </div>
 
-  <!-- Audio in loop: pianobar.mp3 -->
+  <!-- Background music -->
   <audio id="backgroundMusic" src="/static/pianobar.mp3" loop></audio>
+  <!-- Suono per i pulsanti -->
+  <audio id="buttonSound" src="/static/click.mp3" preload="auto"></audio>
   
   <header class="header">
     <h1>GiankyCoin App</h1>
@@ -60,34 +63,33 @@
       <div>MATIC: <span id="maticBalance">0</span></div>
       <div>GiankyCoin: <span id="tokenBalance">0</span></div>
     </div>
-    <div id="freeSpins">Giri disponibili: <span id="freeSpinsCount">0</span></div>
+    <div id="freeSpins">Available Spins: <span id="freeSpinsCount">0</span></div>
   </header>
   <div class="container content">
     <div class="row mb-4">
       <div class="col text-center">
-        <!-- Canvas della ruota -->
         <canvas id="wheelCanvas" width="300" height="300"></canvas>
       </div>
     </div>
     <div class="row text-center">
       <div class="col">
-        <button id="btnSpin" class="btn btn-primary btn-custom">Gira la ruota</button>
+        <button id="btnSpin" class="btn btn-primary btn-custom">Spin the Wheel</button>
       </div>
     </div>
     <div class="row text-center mt-3">
       <div class="col">
-        <button id="btnConnect" class="btn btn-success btn-custom" onclick="window.location.href='/static/connectwallet.html'">Connetti Wallet</button>
+        <button id="btnConnect" class="btn btn-success btn-custom" onclick="window.location.href='/static/connectwallet.html'">Connect Wallet</button>
       </div>
       <div class="col">
-        <button id="btnBuySpins" class="btn btn-warning btn-custom" onclick="window.location.href='/static/buyspins.html'">Acquista Extra Tiri</button>
+        <button id="btnBuySpins" class="btn btn-warning btn-custom" onclick="window.location.href='/static/buyspins.html'">Buy Extra Spins</button>
       </div>
     </div>
     <div class="row text-center mt-3">
       <div class="col">
-        <button id="btnReferral" class="btn btn-info btn-custom" onclick="window.location.href='/static/referral.html'">Ottieni Referral</button>
+        <button id="btnReferral" class="btn btn-info btn-custom" onclick="window.location.href='/static/referral.html'">Get Referral</button>
       </div>
       <div class="col">
-        <button id="btnTask" class="btn btn-secondary btn-custom" onclick="window.location.href='/static/task.html'">Completa Task</button>
+        <button id="btnTask" class="btn btn-secondary btn-custom" onclick="window.location.href='/static/task.html'">Complete Task</button>
       </div>
     </div>
     <div class="row mt-4">
@@ -97,10 +99,21 @@
     </div>
   </div>
   <footer class="footer">
-    <p>&copy; 2025 GiankyCoin. Tutti i diritti riservati.</p>
+    <p>&copy; 2025 GiankyCoin. All rights reserved.</p>
   </footer>
   
   <script>
+    // Funzione per riprodurre il suono al click
+    function playButtonSound() {
+      var sound = document.getElementById('buttonSound');
+      if (sound) sound.play().catch(err => console.error("Errore nel suono:", err));
+    }
+
+    // Aggiungi listener per i pulsanti principali
+    document.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", playButtonSound);
+    });
+
     // Nascondi la splash screen dopo 2 secondi
     document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
@@ -108,7 +121,7 @@
       }, 2000);
     });
     
-    // Avvia la musica al primo click (necessario per le restrizioni di autoplay)
+    // Avvia la musica al primo click
     document.addEventListener('click', function enableAudio() {
       var audio = document.getElementById('backgroundMusic');
       if (audio.paused) {
@@ -188,7 +201,7 @@
       { text: '20 GKY', color: '#FF8C00' },
       { text: '50 GKY', color: '#E67E22' },
       { text: '100 GKY', color: '#E74C3C' },
-      { text: '250 GKY', color: '#9B59B6' },
+      { text: 'NFT STARTER', color: '#9B59B6' },
       { text: '500 GKY', color: '#3498DB' },
       { text: '1000 GKY', color: '#1ABC9C' },
       { text: 'NO PRIZE', color: '#C0392B' }
@@ -229,7 +242,7 @@
           spins: 8,
           stopAngle: finalAngle,
           callbackFinished: async function(indicatedSegment) {
-            alert("Hai vinto: " + indicatedSegment.text);
+            alert("You won: " + indicatedSegment.text);
             updateBalances();
             updateSpinsStatus();
             resetWheel();
@@ -248,7 +261,7 @@
     document.getElementById("btnSpin").addEventListener("click", async () => {
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
-        alert("Wallet non collegato.");
+        alert("Wallet not connected.");
         document.getElementById("btnSpin").disabled = false;
         return;
       }
@@ -258,13 +271,13 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ wallet_address: wallet })
         });
-        if (!spinRes.ok) throw new Error("Spin fallito: " + spinRes.status);
+        if (!spinRes.ok) throw new Error("Spin failed: " + spinRes.status);
         const spinData = await spinRes.json();
-        console.log("Risultato spin:", spinData);
+        console.log("Spin result:", spinData);
         const prize = spinData.prize;
         let chosenIndex = findPrizeIndex(prize);
         if (chosenIndex === -1) {
-          alert("Premio non riconosciuto: " + prize);
+          alert("Unrecognized prize: " + prize);
           document.getElementById("btnSpin").disabled = false;
           return;
         }
@@ -272,12 +285,12 @@
         const centerAngle = chosenIndex * segmentAngle + 22.5;
         const extraSpins = 360 * 5;
         const finalAngle = extraSpins + centerAngle;
-        console.log("Angolo finale calcolato:", finalAngle);
+        console.log("Calculated final angle:", finalAngle);
         theWheel = createWheel(finalAngle);
         theWheel.startAnimation();
       } catch (error) {
-        console.error("Errore nello spin:", error);
-        alert("Errore nello spin. Contatta l'assistenza.");
+        console.error("Error during spin:", error);
+        alert("Spin error. Please contact support.");
         document.getElementById("btnSpin").disabled = false;
       }
     });

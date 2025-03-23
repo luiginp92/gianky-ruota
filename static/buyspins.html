@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Acquista Extra Tiri - GiankyCoin</title>
+  <title>Buy Extra Spins - GiankyCoin</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
     body { padding: 20px; }
@@ -11,41 +11,39 @@
 </head>
 <body>
   <div class="container">
-    <h1>Acquista Extra Tiri</h1>
-    <p>Seleziona il numero di tiri extra da acquistare:</p>
+    <h1>Buy Extra Spins</h1>
+    <p>Select the number of extra spins you want to purchase:</p>
     <div class="mb-3">
-      <label for="numSpins" class="form-label">Numero di tiri extra</label>
+      <label for="numSpins" class="form-label">Number of extra spins</label>
       <select id="numSpins" class="form-select">
-        <option value="1">1 Tiro (50 GKY)</option>
-        <option value="3">3 Tiri (125 GKY)</option>
-        <option value="10">10 Tiri (300 GKY)</option>
+        <option value="1">1 Spin (50 GKY)</option>
+        <option value="3">3 Spins (125 GKY)</option>
+        <option value="10">10 Spins (300 GKY)</option>
       </select>
     </div>
-    <button id="requestPurchase" class="btn btn-primary">Richiedi Acquisto</button>
+    <button id="requestPurchase" class="btn btn-primary">Request Purchase</button>
     <hr>
     <div id="instructions" style="display:none;">
-      <h3>Istruzioni per l'acquisto</h3>
+      <h3>Purchase Instructions</h3>
       <p id="instructionMessage"></p>
       <p>
-        <strong>Come acquistare:</strong> Effettua un trasferimento del costo indicato (in GKY) al seguente wallet di distribuzione:
+        <strong>How to purchase:</strong> Transfer the specified amount (in GKY) to the following distribution wallet:
         <br>
         <code>0xBc0c054066966a7A6C875981a18376e2296e5815</code>
         <br>
-        Dopo aver completato il trasferimento, copia l'hash della transazione (txHash) e incollalo nel campo sottostante per confermare l'acquisto.
+        After completing the transfer, copy the transaction hash (txHash) and paste it in the field below to confirm your purchase.
       </p>
       <div class="mb-3">
-        <label for="txHash" class="form-label">Inserisci il txHash della transazione</label>
-        <input type="text" id="txHash" class="form-control" placeholder="TxHash della transazione">
+        <label for="txHash" class="form-label">Enter the transaction hash</label>
+        <input type="text" id="txHash" class="form-control" placeholder="Transaction txHash">
       </div>
-      <button id="confirmPurchase" class="btn btn-success">Conferma Acquisto</button>
+      <button id="confirmPurchase" class="btn btn-success">Confirm Purchase</button>
     </div>
     <br>
-    <!-- Pulsante Torna alla Home -->
-    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Torna alla Home</button>
+    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Back to Home</button>
   </div>
   
   <script>
-    // Recupera il token: se non esiste "access_token", usa "walletAddress" (per il flusso legacy)
     function getAccessToken() {
       return localStorage.getItem("access_token") || localStorage.getItem("walletAddress");
     }
@@ -53,13 +51,13 @@
     document.getElementById("requestPurchase").addEventListener("click", async () => {
       const token = getAccessToken();
       if (!token) {
-        alert("Token di accesso mancante. Effettua l'autenticazione.");
+        alert("Access token missing. Please log in.");
         return;
       }
       const numSpins = document.getElementById("numSpins").value;
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
-        alert("Wallet non collegato.");
+        alert("Wallet not connected.");
         return;
       }
       try {
@@ -71,31 +69,31 @@
           },
           body: JSON.stringify({ wallet_address: wallet, num_spins: parseInt(numSpins) })
         });
-        if (!res.ok) throw new Error("Errore: " + res.status);
+        if (!res.ok) throw new Error("Error: " + res.status);
         const data = await res.json();
         document.getElementById("instructionMessage").innerText = data.message;
         document.getElementById("instructions").style.display = "block";
       } catch (error) {
-        console.error("Errore nella richiesta di acquisto:", error);
-        alert("Errore nella richiesta di acquisto.");
+        console.error("Error in purchase request:", error);
+        alert("Error in purchase request.");
       }
     });
   
     document.getElementById("confirmPurchase").addEventListener("click", async () => {
       const token = getAccessToken();
       if (!token) {
-        alert("Token di accesso mancante. Effettua l'autenticazione.");
+        alert("Access token missing. Please log in.");
         return;
       }
       const numSpins = document.getElementById("numSpins").value;
       const txHash = document.getElementById("txHash").value.trim();
       if (!txHash) {
-        alert("Inserisci il txHash della transazione.");
+        alert("Please enter the transaction hash.");
         return;
       }
       const wallet = localStorage.getItem("walletAddress");
       if (!wallet) {
-        alert("Wallet non collegato.");
+        alert("Wallet not connected.");
         return;
       }
       try {
@@ -107,13 +105,13 @@
           },
           body: JSON.stringify({ wallet_address: wallet, tx_hash: txHash, num_spins: parseInt(numSpins) })
         });
-        if (!res.ok) throw new Error("Errore: " + res.status);
+        if (!res.ok) throw new Error("Error: " + res.status);
         const data = await res.json();
         alert(data.message);
         window.location.href = "/static/index.html";
       } catch (error) {
-        console.error("Errore nella conferma dell'acquisto:", error);
-        alert("Errore nella conferma dell'acquisto.");
+        console.error("Error in confirming purchase:", error);
+        alert("Error confirming purchase.");
       }
     });
   </script>
