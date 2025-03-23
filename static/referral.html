@@ -13,7 +13,11 @@
 <body>
   <div class="container">
     <h1>Your Referral Link</h1>
-    <p>Share this link with your friends. When a new user accesses this link, the person who invited you will receive 2 free spins. Invite others to receive your bonus of 2 free spins!</p>
+    <p>
+      Share this link with your friends.<br>
+      When a new user accesses this link, the person who invited you will receive 2 free spins.<br>
+      Invite others to receive your bonus of 2 free spins!
+    </p>
     <div class="mb-3">
       <input type="text" id="referralLink" class="form-control" readonly>
     </div>
@@ -25,15 +29,18 @@
   </div>
   
   <script>
+    // Set referral link based on wallet stored in localStorage
     const wallet = localStorage.getItem("walletAddress");
     const referralInput = document.getElementById("referralLink");
     if (wallet && wallet.length === 42) {
+      // Construct referral link using the "start" parameter with "ref_" prefix
       const referralLink = "https://t.me/giankytestbot?start=ref_" + wallet;
       referralInput.value = referralLink;
     } else {
       referralInput.value = "Wallet not found. Please connect your wallet first.";
     }
     
+    // Copy referral link to clipboard when button is clicked
     document.getElementById("copyButton").addEventListener("click", () => {
       referralInput.select();
       referralInput.setSelectionRange(0, 99999);
@@ -41,26 +48,35 @@
       alert("Link copied to clipboard!");
     });
     
-    // Automatically process referral if "ref" parameter is present in the URL.
+    // Automatically process referral if URL contains the "start" parameter with a referral code
     window.addEventListener("load", () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const refParam = urlParams.get("ref");
-      if (refParam && wallet && wallet.length === 42 && wallet.toLowerCase() !== refParam.toLowerCase()) {
-        fetch("/api/claim_referral", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wallet_address: wallet, referrer: refParam })
-        })
-        .then(response => response.json())
-        .then(data => {
-          document.getElementById("referralMessage").innerText = data.message;
-          // Remove referral parameters from the URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-        })
-        .catch(err => {
-          console.error("Error processing referral:", err);
-          document.getElementById("referralMessage").innerText = "Error processing referral.";
-        });
+      const startParam = urlParams.get("start");
+      // Expecting format "ref_0x...."
+      if (startParam && startParam.startsWith("ref_")) {
+        const refCode = startParam.substring(4); // Remove "ref_"
+        // Process referral only if the current wallet is different from the referrer
+        if (wallet && wallet.length === 42 && wallet.toLowerCase() !== refCode.toLowerCase()) {
+          fetch("/api/claim_referral", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet_address: wallet, referrer: refCode })
+          })
+          .then(response => response.json())
+          .then(data => {
+            // Display the message returned from the backend
+            // (Expected: "THE PERSON WHO INVITED YOU HAS RECEIVED 2 FREE SPINS, INVITE OTHERS TO RECEIVE YOUR BONUS OF 2 SPINS!")
+            document.getElementById("referralMessage").innerText = data.message;
+            // Mark referral as processed to avoid duplicate claims
+            localStorage.setItem("refProcessed", "true");
+            // Remove referral parameters from the URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          })
+          .catch(err => {
+            console.error("Error processing referral:", err);
+            document.getElementById("referralMessage").innerText = "Error processing referral.";
+          });
+        }
       }
     });
   </script>
