@@ -283,7 +283,7 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
-        # Check if free spin is available
+        # Check if free spin is available (if last_free_spin_date is None or older than today)
         free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="You have no spins left for today.")
@@ -396,10 +396,10 @@ async def api_confirmbuy(req: ConfirmBuyRequest):
 @app.post("/api/claim_referral")
 async def claim_referral(req: ReferralRequest):
     """
-    Updated referral: now only the referrer receives 2 free spins.
-    If the new user (the one who accessed the referral link) has not yet been marked as referred,
-    we record the referral (for audit purposes) but do NOT credit extra spins to the new user.
-    Instead, we credit 2 extra spins to the referrer.
+    Updated referral: only the referrer receives 2 free spins.
+    When a new user accesses a referral link, we record the referral (if not already done)
+    and credit 2 extra spins to the referrer.
+    The new user does not receive any bonus.
     """
     new_user = get_user(req.wallet_address)
     session = Session()
@@ -407,11 +407,11 @@ async def claim_referral(req: ReferralRequest):
         # Prevent self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"message": "You cannot refer yourself."}
-        # If no referral has been recorded for this user, process it
+        # Process referral only if not already recorded for the new user
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
             session.commit()
-            # Credit only the referrer with 2 spins
+            # Credit the referrer with 2 spins
             ref_user = get_user(req.referrer)
             ref_session = Session()
             try:
@@ -423,7 +423,7 @@ async def claim_referral(req: ReferralRequest):
                 logging.error(f"Error crediting referrer: {e}")
             finally:
                 ref_session.close()
-            return {"message": "Your referrer has received 2 free spins, invite others to receive your bonus of 2 spins!"}
+            return {"message": "The person who invited you has received 2 free spins, invite others to receive your bonus of 2 spins!"}
         else:
             return {"message": "Referral already claimed for this user."}
     except Exception as e:
