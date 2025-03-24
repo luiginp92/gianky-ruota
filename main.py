@@ -398,11 +398,13 @@ async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
+        # If the new user is referring themselves, show error message
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"referee_message": "You cannot refer yourself.", "referrer_message": ""}
+        # Process referral only if not already claimed
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
-            # Do NOT credit spins to the new user – only the referrer gets 2 free spins
+            # Do NOT credit spins to the new user – only credit 2 spins to the referrer
             session.commit()
             ref_user = get_user(req.referrer)
             ref_session = Session()

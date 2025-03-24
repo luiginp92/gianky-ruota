@@ -177,7 +177,6 @@
         const wallet = localStorage.getItem("walletAddress");
         console.log("Local wallet:", wallet);
         if (wallet && wallet.length === 42 && wallet.toLowerCase() !== ref.toLowerCase()) {
-          // Force the referral claim call
           fetch("/api/claim_referral", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -185,11 +184,13 @@
           })
           .then(response => response.json())
           .then(data => {
-            console.log("Referral claim response:", data);
-            alert(data.message);
+            // Combine messages from response
+            let msg = "";
+            if (data.referee_message) { msg += data.referee_message; }
+            if (data.referrer_message) { msg += "\n" + data.referrer_message; }
+            alert(msg);
             updateSpinsStatus();
             localStorage.setItem("refProcessed", "true");
-            // Remove query parameters from URL
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch(err => console.error("Referral claim error:", err));
