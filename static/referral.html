@@ -15,7 +15,7 @@
     <h1>Your Referral Link</h1>
     <p>
       Share this link with your friends.<br>
-      When a new user accesses this link, the person who invited you will receive 2 free spins.<br>
+      When a new user accesses this link, your referrer (the person who invited you) will receive 2 free spins.<br>
       Invite others to receive your bonus of 2 free spins!
     </p>
     <div class="mb-3">
@@ -33,7 +33,6 @@
     const wallet = localStorage.getItem("walletAddress");
     const referralInput = document.getElementById("referralLink");
     if (wallet && wallet.length === 42) {
-      // Construct referral link using the "start" parameter with "ref_" prefix
       const referralLink = "https://t.me/giankytestbot?start=ref_" + wallet;
       referralInput.value = referralLink;
     } else {
@@ -52,10 +51,9 @@
     window.addEventListener("load", () => {
       const urlParams = new URLSearchParams(window.location.search);
       const startParam = urlParams.get("start");
-      // Expecting format "ref_0x...."
+      // Expecting format "ref_0x..."
       if (startParam && startParam.startsWith("ref_")) {
-        const refCode = startParam.substring(4); // Remove "ref_"
-        // Process referral only if the current wallet is different from the referrer
+        const refCode = startParam.substring(4);
         if (wallet && wallet.length === 42 && wallet.toLowerCase() !== refCode.toLowerCase()) {
           fetch("/api/claim_referral", {
             method: "POST",
@@ -64,12 +62,9 @@
           })
           .then(response => response.json())
           .then(data => {
-            // Display the message returned from the backend
-            // (Expected: "THE PERSON WHO INVITED YOU HAS RECEIVED 2 FREE SPINS, INVITE OTHERS TO RECEIVE YOUR BONUS OF 2 SPINS!")
             document.getElementById("referralMessage").innerText = data.message;
-            // Mark referral as processed to avoid duplicate claims
             localStorage.setItem("refProcessed", "true");
-            // Remove referral parameters from the URL
+            // Remove referral parameters from URL
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch(err => {
