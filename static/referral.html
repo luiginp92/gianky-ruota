@@ -15,8 +15,8 @@
     <h1>Your Referral Link</h1>
     <p>
       Share this link with your friends.<br>
-      When a new user accesses this link, the person who invited you will receive 2 free spins.<br>
-      Invite others to receive your bonus of 2 free spins!
+      When a new user accesses this link, you (the referrer) will receive 2 free spins.<br>
+      And the new user will see a message encouraging them to invite others!
     </p>
     <div class="mb-3">
       <input type="text" id="referralLink" class="form-control" readonly>
@@ -61,8 +61,12 @@
           })
           .then(response => response.json())
           .then(data => {
-            document.getElementById("referralMessage").innerText = data.message;
+            // Display both messages (referee and referrer messages)
+            document.getElementById("referralMessage").innerText =
+              "For you: " + data.referee_message + "\n" +
+              "For the referrer: " + data.referrer_message;
             localStorage.setItem("refProcessed", "true");
+            // Remove query parameters from URL
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch(err => {
