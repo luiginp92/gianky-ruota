@@ -15,7 +15,7 @@
     <h1>Your Referral Link</h1>
     <p>
       Share this link with your friends.<br>
-      When a new user accesses this link, your referrer (the person who invited you) will receive 2 free spins.<br>
+      When a new user accesses this link, the person who invited you will receive 2 free spins.<br>
       Invite others to receive your bonus of 2 free spins!
     </p>
     <div class="mb-3">
@@ -47,11 +47,10 @@
       alert("Link copied to clipboard!");
     });
     
-    // Automatically process referral if URL contains the "start" parameter with a referral code
+    // Automatically process referral if URL contains a "start" parameter starting with "ref_"
     window.addEventListener("load", () => {
       const urlParams = new URLSearchParams(window.location.search);
       const startParam = urlParams.get("start");
-      // Expecting format "ref_0x..."
       if (startParam && startParam.startsWith("ref_")) {
         const refCode = startParam.substring(4);
         if (wallet && wallet.length === 42 && wallet.toLowerCase() !== refCode.toLowerCase()) {
@@ -64,7 +63,6 @@
           .then(data => {
             document.getElementById("referralMessage").innerText = data.message;
             localStorage.setItem("refProcessed", "true");
-            // Remove referral parameters from URL
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch(err => {

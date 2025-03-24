@@ -177,6 +177,7 @@
         const wallet = localStorage.getItem("walletAddress");
         console.log("Local wallet:", wallet);
         if (wallet && wallet.length === 42 && wallet.toLowerCase() !== ref.toLowerCase()) {
+          // Force the referral claim call
           fetch("/api/claim_referral", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
