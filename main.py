@@ -239,14 +239,14 @@ def send_nft(destinatario: str) -> bool:
 # ------------------ PRIZE ASSIGNMENT ------------------
 def get_prize() -> str:
     prizes = [
-        ("10 GKY", 30.075),
+        ("10 GKY", 37.075),
         ("20 GKY", 15),
         ("50 GKY", 10),
         ("100 GKY", 1.50),
         ("NFTSTARTER", 0.025),
         ("500 GKY", 0.25),
         ("1000 GKY", 0.25),
-        ("NO PRIZE", 47.50)
+        ("NO PRIZE", 40.50)
     ]
     total = sum(weight for _, weight in prizes)
     r = random.uniform(0, total)
@@ -401,28 +401,16 @@ async def claim_referral(req: ReferralRequest):
         # Do not allow self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"referee_message": "You cannot refer yourself.", "referrer_message": ""}
-        # Process referral only if not already claimed
+        # Process referral only if not already registered
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
-            # IMPORTANT: Do NOT credit the new user; only credit the referrer
             session.commit()
-            ref_user = get_user(req.referrer)
-            ref_session = Session()
-            try:
-                ref_user = ref_session.merge(ref_user)
-                ref_user.extra_spins += 2
-                ref_session.commit()
-            except Exception as e:
-                ref_session.rollback()
-                logging.error(f"Error crediting referrer: {e}")
-            finally:
-                ref_session.close()
             return {
-                "referee_message": "You have been referred! Invite others to receive your bonus of 2 free spins!",
-                "referrer_message": "The person you invited has accepted your referral, and you have received 2 free spins!"
+                "referee_message": "You have been referred! Invite others to earn rewards from tasks.",
+                "referrer_message": "Referral registered."
             }
         else:
-            return {"referee_message": "Referral already claimed for this user.", "referrer_message": ""}
+            return {"referee_message": "Referral already registered for this user.", "referrer_message": ""}
     except Exception as e:
         session.rollback()
         logging.error(f"Error in claim_referral: {e}")

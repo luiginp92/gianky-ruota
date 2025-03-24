@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Completa Task - GiankyCoin</title>
+  <title>Complete Tasks - GiankyCoin</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
     body { background-color: #f8f9fa; padding: 20px; }
@@ -15,67 +15,77 @@
 </head>
 <body>
   <div class="container">
-    <h1>Completa le Task</h1>
-    <p>Completa una delle seguenti azioni per ricevere 2 giri gratuiti. Nota: il controllo della task richiede 10 minuti e ogni task può essere reclamata una sola volta.</p>
+    <h1>Complete Tasks</h1>
+    <p>Complete one of the following actions to receive 2 free spins. Note: Task verification takes 10 minutes.</p>
     
-    <!-- Task 1: YouTube -->
+    <!-- Existing Task 1: YouTube (if still needed) -->
     <div class="task" id="task1Container">
       <h4>Task 1: YouTube</h4>
-      <p>Metti mi piace, condividi e iscriviti al canale YouTube:
-         <a href="https://www.youtube.com/watch?v=l5w8G3lsQm8" target="_blank">Guarda il video</a></p>
-      <button class="btn btn-primary btn-complete-task" data-task="task1">Ho completato la Task</button>
+      <p>Like, share, and subscribe to our YouTube channel:
+         <a href="https://www.youtube.com/watch?v=l5w8G3lsQm8" target="_blank">Watch the video</a></p>
+      <button class="btn btn-primary btn-complete-task" data-task="task1">I completed this task</button>
       <button class="btn btn-success btn-redeem-task hidden" data-task="task1">Redeem Task</button>
       <div class="mt-2 task-message" id="task1Message"></div>
       <div class="mt-2 countdown" id="task1Countdown"></div>
     </div>
     
-    <!-- Task 2: TikTok -->
+    <!-- Existing Task 2: TikTok -->
     <div class="task" id="task2Container">
       <h4>Task 2: TikTok</h4>
-      <p>Segui GiankyCoin su TikTok:
-         <a href="https://www.tiktok.com/@gky_official?_t=ZN-8uhuKOZi3La&_r=1" target="_blank">Segui qui</a></p>
-      <button class="btn btn-primary btn-complete-task" data-task="task2">Ho completato la Task</button>
+      <p>Follow GiankyCoin on TikTok:
+         <a href="https://www.tiktok.com/@gky_official" target="_blank">Follow here</a></p>
+      <button class="btn btn-primary btn-complete-task" data-task="task2">I completed this task</button>
       <button class="btn btn-success btn-redeem-task hidden" data-task="task2">Redeem Task</button>
       <div class="mt-2 task-message" id="task2Message"></div>
       <div class="mt-2 countdown" id="task2Countdown"></div>
     </div>
     
-    <!-- Task 3: Telegram -->
+    <!-- Existing Task 3: Telegram -->
     <div class="task" id="task3Container">
       <h4>Task 3: Telegram</h4>
-      <p>Segui GiankyCoin su Telegram:
-         <a href="https://t.me/giankycoin" target="_blank">Segui qui</a></p>
-      <button class="btn btn-primary btn-complete-task" data-task="task3">Ho completato la Task</button>
+      <p>Join our Telegram channel:
+         <a href="https://t.me/giankycoin" target="_blank">Join here</a></p>
+      <button class="btn btn-primary btn-complete-task" data-task="task3">I completed this task</button>
       <button class="btn btn-success btn-redeem-task hidden" data-task="task3">Redeem Task</button>
       <div class="mt-2 task-message" id="task3Message"></div>
       <div class="mt-2 countdown" id="task3Countdown"></div>
     </div>
     
+    <!-- New Task 4: Share and Like the Video -->
+    <div class="task" id="task4Container">
+      <h4>Task 4: Share and Like the Video</h4>
+      <p>Please share and like our video:
+         <a href="https://youtu.be/pA-aSIUrXMY?si=DA9_jbITWobDPjfH" target="_blank">Watch the video</a></p>
+      <button class="btn btn-primary btn-complete-task" data-task="task4">I completed this task</button>
+      <button class="btn btn-success btn-redeem-task hidden" data-task="task4">Redeem Task</button>
+      <div class="mt-2 task-message" id="task4Message"></div>
+      <div class="mt-2 countdown" id="task4Countdown"></div>
+    </div>
+    
     <br>
-    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Torna alla Home</button>
+    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Return to Home</button>
   </div>
 
   <script>
-    const TASK_DELAY = 600; // 600 secondi = 10 minuti
+    const TASK_DELAY = 600; // 600 seconds = 10 minutes
 
-    // Controlla se la task è già stata completata, disabilita i pulsanti se così
-    function checkTaskCompletion(taskId) {
-      if (localStorage.getItem(`task_${taskId}_completed`)) {
-        document.querySelector(`.btn-complete-task[data-task="${taskId}"]`).disabled = true;
-        document.querySelector(`.btn-redeem-task[data-task="${taskId}"]`).classList.add("hidden");
-        document.getElementById(taskId + "Message").innerText = "Task già completata.";
-        document.getElementById(taskId + "Countdown").innerText = "";
-      }
-    }
-
-    // Funzione per formattare il tempo (mm:ss)
     function formatTime(seconds) {
       const m = Math.floor(seconds / 60);
       const s = seconds % 60;
       return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
-    // Avvia il countdown per la task
+    document.querySelectorAll(".btn-complete-task").forEach(button => {
+      button.addEventListener("click", function() {
+        const taskId = this.getAttribute("data-task");
+        this.disabled = true;
+        const now = Date.now();
+        localStorage.setItem(`task_${taskId}_claimed`, now);
+        document.getElementById(taskId + "Message").innerText = "Task completed! Wait 10 minutes to redeem.";
+        startCountdown(taskId);
+      });
+    });
+
     function startCountdown(taskId) {
       const countdownElem = document.getElementById(taskId + "Countdown");
       const claimedTime = parseInt(localStorage.getItem(`task_${taskId}_claimed`), 10);
@@ -84,39 +94,21 @@
         const elapsed = Math.floor((Date.now() - claimedTime) / 1000);
         const remaining = TASK_DELAY - elapsed;
         if (remaining > 0) {
-          countdownElem.innerText = "Tempo rimanente: " + formatTime(remaining);
+          countdownElem.innerText = "Time remaining: " + formatTime(remaining);
         } else {
-          countdownElem.innerText = "Task pronta per il redeem!";
+          countdownElem.innerText = "Task ready to redeem!";
           document.querySelector(`.btn-redeem-task[data-task="${taskId}"]`).classList.remove("hidden");
           clearInterval(intervalId);
         }
       }, 1000);
     }
 
-    // Handler per "Ho completato la Task"
-    document.querySelectorAll(".btn-complete-task").forEach(button => {
-      button.addEventListener("click", function() {
-        const taskId = this.getAttribute("data-task");
-        // Se la task è già stata completata, non fare nulla
-        if (localStorage.getItem(`task_${taskId}_completed`)) {
-          alert("Task già completata.");
-          return;
-        }
-        this.disabled = true;
-        const now = Date.now();
-        localStorage.setItem(`task_${taskId}_claimed`, now);
-        document.getElementById(taskId + "Message").innerText = "Task completata! Attendi 10 minuti per il redeem.";
-        startCountdown(taskId);
-      });
-    });
-
-    // Handler per "Redeem Task"
     document.querySelectorAll(".btn-redeem-task").forEach(button => {
       button.addEventListener("click", async function() {
         const taskId = this.getAttribute("data-task");
         const wallet = localStorage.getItem("walletAddress");
         if (!wallet || wallet.length !== 42) {
-          alert("Wallet non collegato. Collega il wallet prima.");
+          alert("Wallet not connected. Please connect your wallet first.");
           return;
         }
         try {
@@ -125,28 +117,23 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ wallet_address: wallet, task_id: taskId })
           });
-          if (!res.ok) throw new Error("Errore: " + res.status);
+          if (!res.ok) throw new Error("Error: " + res.status);
           const data = await res.json();
           document.getElementById(taskId + "Message").innerText = data.message;
-          // Una volta effettuato il redeem, segna la task come completata in localStorage
-          localStorage.setItem(`task_${taskId}_completed`, "true");
-          // Disabilita entrambi i pulsanti per questa task
-          document.querySelector(`.btn-complete-task[data-task="${taskId}"]`).disabled = true;
-          document.querySelector(`.btn-redeem-task[data-task="${taskId}"]`).disabled = true;
+          this.disabled = true;
         } catch (error) {
-          console.error("Errore nel redeem della task:", error);
-          document.getElementById(taskId + "Message").innerText = "Errore nel redeem della task. Contatta l'assistenza.";
+          console.error("Error redeeming task:", error);
+          document.getElementById(taskId + "Message").innerText = "Error redeeming task. Please contact support.";
         }
       });
     });
 
-    // All'avvio della pagina, controlla per ogni task se è già completata e avvia il countdown se necessario
     document.addEventListener("DOMContentLoaded", () => {
-      ["task1", "task2", "task3"].forEach(taskId => {
-        if (localStorage.getItem(`task_${taskId}_claimed`) && !localStorage.getItem(`task_${taskId}_completed`)) {
+      ["task1", "task2", "task3", "task4"].forEach(taskId => {
+        const claimedTime = localStorage.getItem(`task_${taskId}_claimed`);
+        if (claimedTime) {
           startCountdown(taskId);
         }
-        checkTaskCompletion(taskId);
       });
     });
   </script>
