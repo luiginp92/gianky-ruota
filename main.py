@@ -283,7 +283,7 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
-        # Check free spin availability: if last_free_spin_date is None or older than today
+        # Check if free spin is available (if last_free_spin_date is None or older than today)
         free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="You have no spins left for today.")
@@ -398,13 +398,13 @@ async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
-        # If the new user is referring themselves, show error message
+        # Do not allow self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
             return {"referee_message": "You cannot refer yourself.", "referrer_message": ""}
         # Process referral only if not already claimed
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
-            # Do NOT credit spins to the new user – only credit 2 spins to the referrer
+            # IMPORTANT: Do NOT credit the new user; only credit the referrer
             session.commit()
             ref_user = get_user(req.referrer)
             ref_session = Session()

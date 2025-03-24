@@ -184,7 +184,7 @@
           })
           .then(response => response.json())
           .then(data => {
-            // Combine messages from response
+            // Combine messages from response (if any)
             let msg = "";
             if (data.referee_message) { msg += data.referee_message; }
             if (data.referrer_message) { msg += "\n" + data.referrer_message; }

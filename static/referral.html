@@ -25,7 +25,6 @@
     <br><br>
     <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Return to Home</button>
     <br><br>
-    <!-- No Claim button: referral processing is automatic -->
     <div id="referralMessage" class="mt-2"></div>
   </div>
   
@@ -62,7 +61,7 @@
           })
           .then(response => response.json())
           .then(data => {
-            // Display both messages if available
+            // Display combined messages from response
             let msg = "";
             if (data.referee_message) { msg += data.referee_message; }
             if (data.referrer_message) { msg += "\n" + data.referrer_message; }
