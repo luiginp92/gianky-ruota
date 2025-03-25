@@ -116,6 +116,14 @@ class TaskClaimRequest(BaseModel):
     wallet_address: str = Field(..., pattern="^0x[a-fA-F0-9]{40}$")
     task_id: str
 
+# ------------------ NEW ENDPOINT: CLAIMED TASKS ------------------
+@app.get("/api/claimed_tasks/{wallet_address}")
+async def claimed_tasks(wallet_address: str):
+    user = get_user(wallet_address)
+    tasks = user.last_claimed_tasks
+    claimed = tasks.split(",") if tasks and tasks.strip() != "" else []
+    return {"claimed_tasks": claimed}
+
 # ------------------ ENDPOINT: SPINS STATUS ------------------
 @app.get("/api/spins_status/{wallet_address}")
 async def spins_status(wallet_address: str):
@@ -283,7 +291,6 @@ async def api_spin(req: SpinRequest):
         user = session.merge(user)
         italy = pytz.timezone("Europe/Rome")
         now_date = datetime.datetime.now(italy).date()
-        # Check if free spin is available (if last_free_spin_date is None or older than today)
         free_spin_available = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         if free_spin_available == 0 and user.extra_spins <= 0:
             raise HTTPException(status_code=400, detail="You have no spins left for today.")
@@ -398,19 +405,28 @@ async def claim_referral(req: ReferralRequest):
     new_user = get_user(req.wallet_address)
     session = Session()
     try:
-        # Do not allow self-referral
+        # Disallow self-referral
         if new_user.wallet_address.lower() == req.referrer.lower():
-            return {"referee_message": "You cannot refer yourself.", "referrer_message": ""}
-        # Process referral only if not already registered
+            return {"message": "You cannot refer yourself."}
+        # Process referral only if not already registered for the referee
         if not getattr(new_user, "referred_by", None) or new_user.referred_by.strip() == "":
             new_user.referred_by = req.referrer
             session.commit()
-            return {
-                "referee_message": "You have been referred! Invite others to earn rewards from tasks.",
-                "referrer_message": "Referral registered."
-            }
+            # Credit the referrer with 2 free spins
+            ref_user = get_user(req.referrer)
+            ref_session = Session()
+            try:
+                ref_user = ref_session.merge(ref_user)
+                ref_user.extra_spins += 2
+                ref_session.commit()
+            except Exception as e:
+                ref_session.rollback()
+                logging.error(f"Error crediting referrer: {e}")
+            finally:
+                ref_session.close()
+            return {"message": "Referral recorded. (Referrer credited with 2 free spins.)"}
         else:
-            return {"referee_message": "Referral already registered for this user.", "referrer_message": ""}
+            return {"message": "Referral already recorded for this user."}
     except Exception as e:
         session.rollback()
         logging.error(f"Error in claim_referral: {e}")

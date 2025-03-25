@@ -11,14 +11,15 @@
     .task { background: #fff; border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
     .task h4 { margin-top: 0; }
     .hidden { display: none; }
+    .disabled-btn { pointer-events: none; opacity: 0.6; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Complete Tasks</h1>
-    <p>Complete one of the following actions to receive 2 free spins. Note: Task verification takes 10 minutes.</p>
+    <p>Complete one of the following actions to receive 2 free spins. (Each task can be claimed only once – once completed, it will never be available again.)</p>
     
-    <!-- Existing Task 1: YouTube (if still needed) -->
+    <!-- Task 1: YouTube -->
     <div class="task" id="task1Container">
       <h4>Task 1: YouTube</h4>
       <p>Like, share, and subscribe to our YouTube channel:
@@ -29,7 +30,7 @@
       <div class="mt-2 countdown" id="task1Countdown"></div>
     </div>
     
-    <!-- Existing Task 2: TikTok -->
+    <!-- Task 2: TikTok -->
     <div class="task" id="task2Container">
       <h4>Task 2: TikTok</h4>
       <p>Follow GiankyCoin on TikTok:
@@ -40,7 +41,7 @@
       <div class="mt-2 countdown" id="task2Countdown"></div>
     </div>
     
-    <!-- Existing Task 3: Telegram -->
+    <!-- Task 3: Telegram -->
     <div class="task" id="task3Container">
       <h4>Task 3: Telegram</h4>
       <p>Join our Telegram channel:
@@ -51,7 +52,7 @@
       <div class="mt-2 countdown" id="task3Countdown"></div>
     </div>
     
-    <!-- New Task 4: Share and Like the Video -->
+    <!-- Task 4: Share and Like the Video -->
     <div class="task" id="task4Container">
       <h4>Task 4: Share and Like the Video</h4>
       <p>Please share and like our video:
@@ -75,13 +76,60 @@
       return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
+    // Check claimed tasks from backend and disable corresponding buttons permanently
+    async function disableClaimedTasks() {
+      const wallet = localStorage.getItem("walletAddress");
+      if (!wallet) return;
+      try {
+        const res = await fetch(`/api/claimed_tasks/${wallet}`);
+        if (res.ok) {
+          const data = await res.json();
+          const claimedTasks = data.claimed_tasks; // array of task IDs
+          claimedTasks.forEach(taskId => {
+            // Disable complete and redeem buttons
+            const completeBtn = document.querySelector(`.btn-complete-task[data-task="${taskId}"]`);
+            const redeemBtn = document.querySelector(`.btn-redeem-task[data-task="${taskId}"]`);
+            const messageElem = document.getElementById(taskId + "Message");
+            if (completeBtn) {
+              completeBtn.classList.add("disabled-btn");
+              completeBtn.disabled = true;
+            }
+            if (redeemBtn) {
+              redeemBtn.classList.add("disabled-btn");
+              redeemBtn.disabled = true;
+              redeemBtn.classList.add("hidden");
+            }
+            if (messageElem) {
+              messageElem.innerText = "Task already claimed.";
+            }
+            // Also hide the countdown element if present
+            const countdownElem = document.getElementById(taskId + "Countdown");
+            if (countdownElem) {
+              countdownElem.innerText = "";
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching claimed tasks:", error);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // On page load, disable tasks already claimed (persistent via backend)
+      disableClaimedTasks();
+    });
+
+    // Handler for "I completed this task" button
     document.querySelectorAll(".btn-complete-task").forEach(button => {
       button.addEventListener("click", function() {
         const taskId = this.getAttribute("data-task");
+        // Immediately disable the button (permanent)
+        this.classList.add("disabled-btn");
         this.disabled = true;
-        const now = Date.now();
-        localStorage.setItem(`task_${taskId}_claimed`, now);
-        document.getElementById(taskId + "Message").innerText = "Task completed! Wait 10 minutes to redeem.";
+        // Set a flag in localStorage (for client-side reference)
+        localStorage.setItem(`task_${taskId}_claimed`, Date.now());
+        document.getElementById(taskId + "Message").innerText = "Task completed! Please click Redeem within 10 minutes.";
+        // Start countdown to reveal redeem button
         startCountdown(taskId);
       });
     });
@@ -96,46 +144,47 @@
         if (remaining > 0) {
           countdownElem.innerText = "Time remaining: " + formatTime(remaining);
         } else {
-          countdownElem.innerText = "Task ready to redeem!";
-          document.querySelector(`.btn-redeem-task[data-task="${taskId}"]`).classList.remove("hidden");
+          countdownElem.innerText = "Redeem available!";
+          // Reveal and permanently disable the redeem button after click
+          const redeemBtn = document.querySelector(`.btn-redeem-task[data-task="${taskId}"]`);
+          if (redeemBtn) {
+            redeemBtn.classList.remove("hidden");
+            // Once the user clicks redeem, we call the backend and then disable the button permanently.
+            redeemBtn.addEventListener("click", async function() {
+              const wallet = localStorage.getItem("walletAddress");
+              if (!wallet || wallet.length !== 42) {
+                alert("Wallet not connected. Please connect your wallet first.");
+                return;
+              }
+              try {
+                const res = await fetch("/api/claim_task", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ wallet_address: wallet, task_id: taskId })
+                });
+                if (!res.ok) throw new Error("Error: " + res.status);
+                const data = await res.json();
+                document.getElementById(taskId + "Message").innerText = data.message;
+                // Disable redeem button permanently
+                redeemBtn.classList.add("disabled-btn");
+                redeemBtn.disabled = true;
+                // Also disable the complete button (if not already)
+                const completeBtn = document.querySelector(`.btn-complete-task[data-task="${taskId}"]`);
+                if (completeBtn) {
+                  completeBtn.classList.add("disabled-btn");
+                  completeBtn.disabled = true;
+                }
+                clearInterval(intervalId);
+              } catch (error) {
+                console.error("Error redeeming task:", error);
+                document.getElementById(taskId + "Message").innerText = "Error redeeming task. Please contact support.";
+              }
+            }, { once: true });
+          }
           clearInterval(intervalId);
         }
       }, 1000);
     }
-
-    document.querySelectorAll(".btn-redeem-task").forEach(button => {
-      button.addEventListener("click", async function() {
-        const taskId = this.getAttribute("data-task");
-        const wallet = localStorage.getItem("walletAddress");
-        if (!wallet || wallet.length !== 42) {
-          alert("Wallet not connected. Please connect your wallet first.");
-          return;
-        }
-        try {
-          const res = await fetch("/api/claim_task", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet_address: wallet, task_id: taskId })
-          });
-          if (!res.ok) throw new Error("Error: " + res.status);
-          const data = await res.json();
-          document.getElementById(taskId + "Message").innerText = data.message;
-          this.disabled = true;
-        } catch (error) {
-          console.error("Error redeeming task:", error);
-          document.getElementById(taskId + "Message").innerText = "Error redeeming task. Please contact support.";
-        }
-      });
-    });
-
-    document.addEventListener("DOMContentLoaded", () => {
-      ["task1", "task2", "task3", "task4"].forEach(taskId => {
-        const claimedTime = localStorage.getItem(`task_${taskId}_claimed`);
-        if (claimedTime) {
-          startCountdown(taskId);
-        }
-      });
-    });
   </script>
 </body>
 </html>
