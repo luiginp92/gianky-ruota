@@ -10,6 +10,9 @@
   <script src="https://cdn.ethers.io/lib/ethers-5.7.min.js" type="application/javascript"></script>
   <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js"></script>
   <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/index.js"></script>
+  <script src="https://unpkg.com/@coinbase/wallet-sdk@3.0.0/dist/coinbase-wallet-sdk.js"></script>
+  <script src="https://unpkg.com/@portis/web3@^4.0.0/dist/umd/index.js"></script>
+  <script src="https://unpkg.com/fortmatic@^2.0.0/dist/fortmatic.js"></script>
 
   <style>
     body {
@@ -124,18 +127,35 @@
       const providerOptions = {
         walletconnect: {
           package: WalletConnectProvider.default, // required
-          options: { 
+          options: {
             // TODO: Inserire l'ID del progetto WalletConnect
             // Puoi ottenerne uno su cloud.walletconnect.com
             projectId: "b7cc6cca99d355063b5a69daba736ef6", // Inserito Project ID
-            infuraId: "YOUR_INFURA_ID", // opzionale ma consigliato
+            infuraId: "c8cc5729c8d94048a7de5673da5207c9", // opzionale ma consigliato
             rpc: { // Specifica la rete Polygon
               137: "https://polygon-rpc.com/"
-            }, 
+            },
             chainId: 137,
           }
-        }
+        },
         // TODO: Aggiungere altri provider se necessario (es. Coinbase Wallet)
+        // Aggiunta configurazione per Coinbase Wallet
+        coinbasewallet: {
+          package: CoinbaseWalletSDK, // required
+          options: {
+            appName: "GiankyCoin", // TODO: Sostituisci con il nome reale della tua app
+            infuraId: "c8cc5729c8d94048a7de5673da5207c9", // Required
+            chainId: 137, // TODO: Sostituisci con la chainId corretta
+          }
+        },
+        // Aggiunta configurazione per Fortmatic
+        fortmatic: {
+          package: Fortmatic, // required
+          options: {
+            key: "sk_live_B9FAD0EB41C32F78", // TODO: Sostituisci con la tua Fortmatic API Key
+            network: "matic", // TODO: Sostituisci con la rete corretta ('matic' per Polygon)
+          }
+        }
       };
 
       try {
