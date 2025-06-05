@@ -124,6 +124,9 @@
       console.log("Inizio inizializzazione...");
       console.log("Definizione providerOptions...");
 
+      // Importazione dinamica di WalletConnectProvider
+      const WalletConnectProvider = await import("@walletconnect/web3-provider");
+
       // Configurazione Web3Modal
       const providerOptions = {
         walletconnect: {
