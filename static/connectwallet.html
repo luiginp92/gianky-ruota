@@ -153,14 +153,8 @@
 
           // Controlla se l'utente ha già connesso un wallet in precedenza
           if (web3Modal.cachedProvider) {
-            console.log("Cached provider trovato, tentativo di connessione automatica...");
-            try {
-               await connectWallet(); // Usa await qui per aspettare la riconnessione
-            } catch (e) {
-               console.error("Connessione automatica fallita con provider cached:", e);
-               // Se la connessione con il provider cached fallisce, pulisci il cache
-               web3Modal.clearCachedProvider();
-            }
+            console.log("Cached provider trovato, reindirizzamento alla pagina principale...");
+            window.location.href = "/static/index.html";
           }
       } catch (e) {
           console.error("Errore durante l'inizializzazione di Web3Modal:", e);
