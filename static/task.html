@@ -6,7 +6,19 @@
   <title>Complete Tasks - GiankyCoin</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    body { background-color: #f8f9fa; padding: 20px; }
+    body {
+      background: url('/static/sfondo_sottopagine.png') no-repeat center center fixed;
+      background-size: cover;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
     .container { max-width: 700px; margin: auto; }
     .task { background: #fff; border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
     .task h4 { margin-top: 0; }
@@ -16,7 +28,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>Complete Tasks</h1>
+    <h1>Complete a Task</h1>
     <p>Complete one of the following actions to receive 2 free spins. (Each task can be claimed only once – once completed, it will never be available again.)</p>
     
     <!-- Task 1: YouTube -->
@@ -64,7 +76,7 @@
     </div>
     
     <br>
-    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Return to Home</button>
+    <a href="/index.html" class="btn btn-primary mt-3">Back to the wheel</a>
   </div>
 
   <script>

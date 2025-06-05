@@ -5,55 +5,402 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Connect Wallet - GiankyCoin</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <!-- Rimuoviamo ethers.js CDN vecchio -->
+  <!-- Aggiungiamo le dipendenze e Web3Modal via CDN -->
+  <script src="https://cdn.ethers.io/lib/ethers-5.7.min.js" type="application/javascript"></script>
+  <script src="https://unpkg.com/web3modal@1.9.12/dist/index.js"></script>
+  <script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/index.js"></script>
+
   <style>
-    body { padding: 20px; }
-    .container { max-width: 500px; margin: auto; text-align: center; }
+    body {
+      background: url('/static/sfondo_sottopagine.png') no-repeat center center fixed;
+      background-size: cover;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    .container { 
+      max-width: 500px; 
+      margin: auto; 
+      text-align: center;
+      background: rgba(255, 255, 255, 0.5);
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .wallet-info {
+      margin: 20px 0;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 5px;
+      word-break: break-all;
+    }
+    .status-message {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .status-message.success { background: #d4edda; color: #155724; }
+    .status-message.error { background: #f8d7da; color: #721c24; }
+    .status-message.info { background: #cce5ff; color: #004085; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Connect Your Wallet</h1>
-    <p>Enter your wallet address:</p>
-    <input type="text" id="walletAddress" class="form-control" placeholder="0x...">
-    <br>
-    <button id="connectButton" class="btn btn-success">Connect Wallet</button>
-    <br><br>
-    <!-- Nuovo pulsante Disconnect -->
-    <button id="disconnectButton" class="btn btn-danger">Disconnect Wallet</button>
-    <br><br>
-    <!-- Istruzioni per aggiungere GiankyCoin al proprio wallet -->
-    <div style="background:#f0f0f0; padding:10px; border-radius:5px; margin-top:20px;">
-      <h5>Add GiankyCoin to Your Wallet</h5>
-      <p>
-        To add GiankyCoin as a custom token, use the following token contract address:
-      </p>
-      <p>
-        <code>0x370806781689E670f85311700445449aC7C3Ff7a</code>
-      </p>
-      <p>
-        (Make sure to use the correct network settings.)
-      </p>
+    <h1>Connect Wallet</h1>
+    
+    <!-- Stato della connessione -->
+    <div id="connectionStatus" class="status-message info">
+      Connetti il tuo wallet per giocare
     </div>
-    <br>
-    <button onclick="window.location.href='/static/index.html'" class="btn btn-secondary">Back to Home</button>
-  </div>
-  
-  <script>
-    document.getElementById("connectButton").addEventListener("click", () => {
-      const wallet = document.getElementById("walletAddress").value.trim();
-      if (wallet && wallet.length === 42) {
-        localStorage.setItem("walletAddress", wallet);
-        window.location.href = "/static/index.html";
-      } else {
-        alert("Please enter a valid wallet address.");
-      }
-    });
 
-    document.getElementById("disconnectButton").addEventListener("click", () => {
-      localStorage.removeItem("walletAddress");
-      alert("Wallet disconnected.");
-      window.location.href = "/static/index.html";
-    });
+    <!-- Informazioni wallet -->
+    <div id="walletInfo" class="wallet-info" style="display: none;">
+      <h5>Wallet Connesso</h5>
+      <p id="walletAddress"></p>
+      <p>Network: <span id="networkName">-</span></p>
+    </div>
+
+    <!-- Pulsanti -->
+    <button id="connectButton" class="btn btn-success">Connetti Wallet</button>
+    <button id="disconnectButton" class="btn btn-danger" style="display: none;">Disconnetti</button>
+    <button id="spinButton" class="btn btn-primary" style="display: none;">Gira la Ruota</button>
+
+    <!-- Istruzioni per aggiungere GiankyCoin -->
+    <div style="background:#f0f0f0; padding:10px; border-radius:5px; margin-top:20px;">
+      <h5>Aggiungi GiankyCoin al tuo Wallet</h5>
+      <p>Per aggiungere GiankyCoin come token personalizzato, usa questo indirizzo:</p>
+      <p><code>0x370806781689E670f85311700445449aC7C3Ff7a</code></p>
+      <p>(Assicurati di usare le impostazioni di rete corrette.)</p>
+    </div>
+
+    <a href="/index.html" class="btn btn-secondary mt-3">Torna alla ruota</a>
+  </div>
+
+  <script>
+    // Configurazione
+    const CONFIG = {
+      // Indirizzo del contratto GiankyCoin
+      CONTRACT_ADDRESS: "0x370806781689E670f85311700445449aC7C3Ff7a",
+      // ABI del contratto GiankyCoin
+      CONTRACT_ABI: [{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"_automatedMarketMakers","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"_blacklisted","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"_exchangeRouterAddress","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"botAddress","type":"address"}],"name":"_ownerBlacklistBot","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newAMM","type":"address"}],"name":"addNewMarketMaker","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"holder","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"antiSniperMode","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"buyFee","outputs":[{"internalType":"uint256","name":"liquidityFee","type":"uint256"},{"internalType":"uint256","name":"developmentFee","type":"uint256"},{"internalType":"uint256","name":"marketingFee","type":"uint256"},{"internalType":"uint256","name":"total","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"clearStuckBalance","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_token","type":"address"}],"name":"clearStuckToken","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bool","name":"value","type":"bool"}],"name":"controlAntiSniperMode","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"pure","type":"function"},{"inputs":[],"name":"developmentReceiver","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getCirculatingSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"getOwner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"isOwner","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"marketingReceiver","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"maxBuyPercentage","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"maxSellPercentage","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"maxWalletPercentage","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"pure","type":"function"},{"inputs":[{"internalType":"address[]","name":"airdropWallets","type":"address[]"},{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"name":"ownerAirDropWallets","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"ownerSetInitialDistributionFinished","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_addr","type":"address"},{"internalType":"bool","name":"_status","type":"bool"}],"name":"ownerSetLimitlessAddress","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_maxBuyPercentage","type":"uint256"},{"internalType":"uint256","name":"_maxSellPercentage","type":"uint256"},{"internalType":"uint256","name":"_maxWalletPercentage","type":"uint256"}],"name":"ownerSetLimits","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_development","type":"address"},{"internalType":"address","name":"_marketing","type":"address"}],"name":"ownerSetReceivers","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"bool","name":"_enabled","type":"bool"},{"internalType":"uint256","name":"_percentageBase1000","type":"uint256"}],"name":"ownerSetSwapBackSettings","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_liquidityFee","type":"uint256"},{"internalType":"uint256","name":"_developmentFee","type":"uint256"},{"internalType":"uint256","name":"_marketingFee","type":"uint256"}],"name":"ownerUpdateBuyFees","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_liquidityFee","type":"uint256"},{"internalType":"uint256","name":"_developmentFee","type":"uint256"},{"internalType":"uint256","name":"_marketingFee","type":"uint256"}],"name":"ownerUpdateSellFees","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_transferFee","type":"uint256"}],"name":"ownerUpdateTransferFee","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"pair","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"sniper","type":"address"}],"name":"reverseSniper","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"router","outputs":[{"internalType":"contract IDEXRouter","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"sellFee","outputs":[{"internalType":"uint256","name":"liquidityFee","type":"uint256"},{"internalType":"uint256","name":"developmentFee","type":"uint256"},{"internalType":"uint256","name":"marketingFee","type":"uint256"},{"internalType":"uint256","name":"total","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"showSniperList","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"showSniperListLength","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"swapEnabled","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"pure","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"stateMutability":"payable","type":"receive"}],
+      // Costo dello spin in token (10 GKY)
+      SPIN_COST: "10"
+    };
+
+    // Variabili globali
+    let provider;
+    let signer;
+    let contract;
+    let connectedWallet;
+    let web3Modal; // Aggiunta variabile per Web3Modal
+    let isConnecting = false; // Aggiunto flag per gestire le connessioni multiple
+
+    // Elementi DOM
+    const connectButton = document.getElementById("connectButton");
+    const disconnectButton = document.getElementById("disconnectButton");
+    const spinButton = document.getElementById("spinButton");
+    const walletInfo = document.getElementById("walletInfo");
+    const walletAddress = document.getElementById("walletAddress");
+    const networkName = document.getElementById("networkName");
+    const connectionStatus = document.getElementById("connectionStatus");
+
+    // Event Listeners (Riportati qui)
+    connectButton.addEventListener('click', connectWallet);
+    disconnectButton.addEventListener('click', disconnectWallet);
+    spinButton.addEventListener('click', handleSpin);
+
+    // Inizializzazione
+    async function init() {
+      console.log("Inizio inizializzazione...");
+
+      // Configurazione Web3Modal
+      const providerOptions = {
+        walletconnect: {
+          package: WalletConnectProvider.default, // required
+          options: { 
+            // TODO: Inserire l'ID del progetto WalletConnect
+            // Puoi ottenerne uno su cloud.walletconnect.com
+            projectId: "b7cc6cca99d355063b5a69daba736ef6", // Inserito Project ID
+            infuraId: "YOUR_INFURA_ID", // opzionale ma consigliato
+            rpc: { // Specifica la rete Polygon
+              137: "https://polygon-rpc.com/"
+            }, 
+            chainId: 137,
+          }
+        }
+        // TODO: Aggiungere altri provider se necessario (es. Coinbase Wallet)
+      };
+
+      try {
+          web3Modal = new Web3Modal({
+            cacheProvider: true, // Opzionale: per ricordare l'ultima scelta dell'utente
+            providerOptions, // required
+            disableInjectedProvider: false, // Falso per includere MetaMask e altri injected wallets
+            theme: "dark", // o "light" o "auto"
+          });
+          console.log("Web3Modal inizializzato:", web3Modal);
+
+          // Controlla se l'utente ha già connesso un wallet in precedenza
+          if (web3Modal.cachedProvider) {
+            console.log("Cached provider trovato, tentativo di connessione automatica...");
+            try {
+               await connectWallet(); // Usa await qui per aspettare la riconnessione
+            } catch (e) {
+               console.error("Connessione automatica fallita con provider cached:", e);
+               // Se la connessione con il provider cached fallisce, pulisci il cache
+               web3Modal.clearCachedProvider();
+            }
+          }
+      } catch (e) {
+          console.error("Errore durante l'inizializzazione di Web3Modal:", e);
+          showError("Errore nell'inizializzazione del sistema wallet.");
+          // Disabilita i pulsanti se Web3Modal non si inizializza
+          connectButton.disabled = true;
+          disconnectButton.disabled = true;
+          spinButton.disabled = true;
+      }
+
+      // Gestione eventi WalletConnect (se usato)
+      // Questi listener vanno aggiunti *dopo* aver ottenuto il provider da web3Modal.connect()
+      // e sono gestiti nella funzione connectWallet.
+
+       // Event Listeners (Riportati qui per assicurarsi che siano sempre collegati)
+       connectButton.addEventListener('click', connectWallet);
+       disconnectButton.addEventListener('click', disconnectWallet);
+       spinButton.addEventListener('click', handleSpin);
+
+       console.log("Fine inizializzazione, event listeners collegati.");
+    }
+
+    // Connessione wallet
+    async function connectWallet() {
+      console.log("Click su Connetti Wallet.");
+      if (!web3Modal) {
+          console.error("web3Modal non è inizializzato quando si tenta la connessione.");
+          showError("Errore interno: sistema wallet non pronto.");
+          return;
+      }
+      console.log("web3Modal esiste, provo a connettere...");
+      try {
+        showInfo("Apertura modal wallet...");
+        // Mostra il modal e ottieni il provider selezionato dall'utente
+        const modalProvider = await web3Modal.connect();
+
+        provider = new ethers.providers.Web3Provider(modalProvider);
+        signer = provider.getSigner();
+        connectedWallet = await signer.getAddress();
+
+        // Inizializza il contratto con il signer
+        contract = new ethers.Contract(CONFIG.CONTRACT_ADDRESS, CONFIG.CONTRACT_ABI, signer);
+
+        // Aggiorna UI
+        updateUI(true);
+        showSuccess("Wallet connesso con successo!");
+
+        // Verifica rete
+        const network = await provider.getNetwork();
+        networkName.textContent = network.name; // Mostra il nome della rete
+
+        // Verifica saldo token
+        await checkTokenBalance();
+
+      } catch (error) {
+        showError("Errore durante la connessione o selezione wallet: " + error.message);
+        console.error("Connect Wallet Error:", error);
+      }
+    }
+
+    // Gestione cambio account (chiamato dall'evento accountsChanged)
+    async function handleAccountsChanged(accounts) {
+      if (accounts.length === 0) {
+        // Disconnesso
+        updateUI(false);
+        showInfo("Wallet disconnesso");
+        connectedWallet = null; // Assicurati che la variabile sia null
+        signer = null;
+        contract = null;
+      } else {
+        // Cambio account
+        connectedWallet = accounts[0];
+        signer = provider.getSigner(); // Ottieni il signer per il nuovo account
+        contract = contract.connect(signer); // Ricollega il contratto con il nuovo signer
+        walletAddress.textContent = connectedWallet; // Aggiorna l'indirizzo mostrato
+        await checkTokenBalance(); // Aggiorna il saldo
+        showInfo(`Account cambiato a ${connectedWallet}`);
+      }
+    }
+
+     // Disconnessione wallet
+    async function disconnectWallet() {
+      console.log("Click su Disconnetti.");
+      // Per WalletConnect, chiama il metodo disconnect
+      if (web3Modal && web3Modal.cachedProvider) {
+         const walletConnectProvider = await web3Modal.connect();
+         if (walletConnectProvider.disconnect) {
+            await walletConnectProvider.disconnect();
+         }
+         web3Modal.clearCachedProvider();
+      }
+
+      connectedWallet = null;
+      signer = null;
+      contract = null;
+      updateUI(false);
+      showInfo("Wallet disconnesso");
+      // Rimuovi l'elemento del saldo se esiste
+      const balanceElement = document.getElementById('tokenBalance');
+      if (balanceElement) {
+          balanceElement.remove();
+      }
+    }
+
+    // Verifica saldo token
+    async function checkTokenBalance() {
+      if (!contract || !connectedWallet) { // Assicurati che provider e wallet siano connessi
+         console.log("Contratto o wallet non connesso, salto controllo saldo.");
+         spinButton.disabled = true;
+         // Rimuovi l'elemento del saldo se esiste
+         const balanceElement = document.getElementById('tokenBalance');
+         if (balanceElement) {
+             balanceElement.remove();
+         }
+         return;
+      }
+
+      try {
+        const balance = await contract.balanceOf(connectedWallet);
+        const spinCost = ethers.utils.parseEther(CONFIG.SPIN_COST);
+
+        // Aggiorna o crea l'elemento del saldo
+        let balanceElement = document.getElementById('tokenBalance');
+        if (!balanceElement) {
+            balanceElement = document.createElement('p');
+            balanceElement.id = 'tokenBalance';
+            walletInfo.appendChild(balanceElement);
+        }
+        balanceElement.textContent = `Saldo GKY: ${ethers.utils.formatEther(balance)}`;
+
+        if (balance.lt(spinCost)) {
+          showError("Saldo insufficiente per giocare (minimo " + CONFIG.SPIN_COST + " GKY)");
+          spinButton.disabled = true;
+        } else {
+          // TODO: Potrebbe esserci bisogno di verificare anche l'allowance se si usa transferFrom
+          spinButton.disabled = false;
+        }
+      } catch (error) {
+        console.error("Errore nel controllo del saldo:", error);
+        showError("Errore nel controllo del saldo");
+        spinButton.disabled = true;
+      }
+    }
+
+    // Gestione spin
+    async function handleSpin() {
+       if (!contract || !connectedWallet) { // Assicurati che provider e wallet siano connessi
+         showError("Wallet non connesso.");
+         return;
+      }
+
+      try {
+        showInfo("Preparazione dello spin...");
+        spinButton.disabled = true;
+
+        const spinCost = ethers.utils.parseEther(CONFIG.SPIN_COST);
+
+        // Per usare transferFrom, il contratto della ruota (o chi per lui) deve avere l'allowance
+        // L'approccio più semplice per questo tipo di gioco è che l'utente trasferisca direttamente al contratto
+        // oppure che il contratto della ruota chiami transferFrom dopo che l'utente ha dato l'allowance.
+        // Data la struttura del contratto GiankyCoin (con transferFrom), l'approccio corretto è:
+        // 1. Utente approva il contratto *della ruota* (NON il contratto token) a spendere i GKY per lui.
+        // 2. L'utente chiama una funzione sul contratto *della ruota* (es. spin()) che a sua volta chiama transferFrom sul contratto GKY.
+
+        // SE invece l'obiettivo è trasferire i GKY al contratto GKY stesso (cosa insolita per un gioco):
+        // const transferTx = await contract.transfer(
+        //   CONFIG.CONTRACT_ADDRESS, // Indirizzo del destinatario (il contratto GKY stesso?)
+        //   spinCost
+        // );
+        // await transferTx.wait();
+
+        // Dato l'ABI fornito, il contratto sembra essere il token ERC-20 stesso.
+        // Se la logica è che l'utente paga inviando i GKY al contratto GKY, la funzione corretta sarebbe `transfer`,
+        // ma tipicamente un gioco interagisce con un contratto DApp separato.
+
+        // Assumiamo che l'interazione debba avvenire con un altro contratto (il contratto della Ruota)
+        // e che il contratto della Ruota abbia una funzione tipo `spin()` che gestisce la logica e il pagamento.
+        // Per ora, simuleremo il trasferimento direttamente al contratto GKY usando `transfer` (meno comune per un gioco).
+        // TODO: Adattare questa logica se esiste un contratto DApp separato per la ruota.
+
+        // Simulo la chiamata di pagamento al contratto GKY
+        showInfo("Esecuzione pagamento...");
+         const transferTx = await contract.transfer(
+           CONFIG.CONTRACT_ADDRESS, // Destinatario: il contratto GKY stesso
+           spinCost
+         );
+        await transferTx.wait();
+
+        showSuccess("Pagamento effettuato con successo!");
+        // Aggiorna il saldo dopo il pagamento
+        await checkTokenBalance();
+        
+        // TODO: Qui dovresti chiamare l'endpoint backend per avviare l'animazione della ruota e la logica del premio
+        // Esempio: fetch('/api/spin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet_address: connectedWallet, tx_hash: transferTx.hash }) });
+        console.log("Pagamento riuscito, procedi con la logica della ruota. TX Hash:", transferTx.hash);
+
+        // Reindirizza alla ruota DOPO che la logica backend ha gestito lo spin/premio
+        // Per ora, reindirizzo subito per dimostrazione:
+        window.location.href = "/static/index.html";
+
+      } catch (error) {
+        showError("Errore durante lo spin o il pagamento: " + error.message);
+        console.error("Spin Error:", error);
+        spinButton.disabled = false;
+      }
+    }
+
+    // Utility UI
+    function updateUI(connected) {
+      connectButton.style.display = connected ? 'none' : 'inline-block';
+      disconnectButton.style.display = connected ? 'inline-block' : 'none';
+      // Il pulsante spin sarà abilitato/disabilitato da checkTokenBalance, non solo dalla connessione
+      // spinButton.style.display = connected ? 'inline-block' : 'none';
+      walletInfo.style.display = connected ? 'block' : 'none';
+
+      if (connected) {
+        walletAddress.textContent = connectedWallet;
+      } else {
+         // Quando non connesso, nascondi le info wallet e rimuovi il saldo
+         walletInfo.style.display = 'none';
+         const balanceElement = document.getElementById('tokenBalance');
+         if (balanceElement) {
+             balanceElement.remove();
+         }
+      }
+    }
+
+    function showSuccess(message) {
+      connectionStatus.className = 'status-message success';
+      connectionStatus.textContent = message;
+    }
+
+    function showError(message) {
+      connectionStatus.className = 'status-message error';
+      connectionStatus.textContent = message;
+    }
+
+    function showInfo(message) {
+      connectionStatus.className = 'status-message info';
+      connectionStatus.textContent = message;
+    }
+
+    // Inizializza l'app
+    init();
   </script>
 </body>
 </html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Loading - Gianky Coin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        .loading-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
+        }
+
+        .loading-image {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            z-index: 1;
+        }
+
+        .loading-text {
+            position: absolute;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #FFD700;
+            font-size: clamp(24px, 5vw, 36px);
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            animation: blink 1s infinite;
+            z-index: 2;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px 40px;
+            border-radius: 10px;
+            border: 2px solid #FFD700;
+            white-space: nowrap;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Media queries per schermi più piccoli */
+        @media (max-width: 768px) {
+            .loading-text {
+                bottom: 15%;
+                padding: 15px 30px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .loading-text {
+                bottom: 10%;
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-container">
+        <img src="/static/prepagina.png" alt="Gianky Coin" class="loading-image" onerror="this.onerror=null; this.src='/static/prepagina.png?' + new Date().getTime();">
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <script>
+        // Funzione per gestire il reindirizzamento
+        function redirectToMain() {
+            // Rimuovi l'evento prima di reindirizzare
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            // Usa replace invece di href per evitare problemi di cache
+            window.location.replace('/index.html');
+        }
+
+        // Funzione per gestire l'evento beforeunload
+        function handleBeforeUnload(e) {
+            // Previeni il comportamento predefinito
+            e.preventDefault();
+            // Rimuovi l'evento
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        }
+
+        // Aggiungi l'evento beforeunload
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        // Reindirizza alla pagina principale dopo 6 secondi
+        setTimeout(redirectToMain, 6000);
+
+        // Gestisci il caso di hard refresh
+        window.addEventListener('load', function() {
+            // Forza il caricamento della pagina di loading
+            if (window.performance && window.performance.navigation.type === window.performance.navigation.TYPE_RELOAD) {
+                // Se è un hard refresh, ricarica la pagina di loading
+                window.location.replace('/');
+            }
+        });
+
+        // Forza il ricaricamento dell'immagine ad ogni refresh
+        window.addEventListener('load', function() {
+            const img = document.querySelector('.loading-image');
+            if (img) {
+                img.src = '/static/prepagina.png?' + new Date().getTime();
+            }
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,6 @@
+version: "2"
+authtoken: 2xzSSeG98PDrmWYDgStBQ3c1XrU_2UF1ACdk2RJUuSjzCwwVZ
+tunnels:
+  gianky-wheel:
+    proto: http
+    addr: 5000 

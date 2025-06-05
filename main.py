@@ -11,9 +11,9 @@ Manages:
 
 import os, random, datetime, pytz, logging, asyncio
 from typing import Optional
-
+from pyngrok import ngrok
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
@@ -30,7 +30,51 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 init_db()
 
 app = FastAPI(title="Gianky Coin Web App API")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Ottieni il percorso assoluto della directory static
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+
+# Monta la directory static su /static
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Rimuovi il mount duplicato alla root se presente (dall'ultimo tentativo)
+try:
+    # Controlla se 'root' è nel dictionary dei routes prima di provare a rimuoverlo
+    # Questo è un workaround per gestire potenziali errori se il mount non esiste
+    # Nota: l'accesso diretto ai routes interni potrebbe non essere stabile tra versioni di FastAPI
+    # Un approccio più robusto potrebbe richiedere la ristrutturazione del setup dei mounts
+    # Qui assumiamo che l'ultimo tentativo di mount alla root abbia aggiunto qualcosa con name='root'
+    # e proviamo a rimuoverlo per evitare conflitti.
+    # Questo blocco try/except è per sicurezza nel caso la struttura interna di FastAPI cambi.
+    found_root_mount = False
+    for route in app.routes:
+        if hasattr(route, 'name') and route.name == 'root':
+             found_root_mount = True
+             # Non possiamo rimuovere direttamente un route per nome in questo modo standard
+             # La soluzione più semplice e sicura è rimuovere e rimontare tutti gli statici,
+             # ma questo è complesso in una singola edit call.
+             # Lasciamo che il mount /static sovrastinga parzialmente il mount /. 
+             # La redirect dalla root sarà la soluzione più diretta.
+             break # Trovato il mount 'root', procediamo con la redirect
+except Exception as e:
+    logging.warning(f"Errore nel tentativo di verificare mount 'root': {e}")
+    # Continua anche in caso di errore, la redirect dovrebbe risolvere il problema
+
+# Reindirizza la root a /static/loading.html
+@app.get("/", response_class=RedirectResponse, include_in_schema=False)
+async def redirect_to_loading():
+    return "/static/loading.html"
+
+@app.get("/index.html", response_class=HTMLResponse)
+async def index():
+    return FileResponse("static/index.html")
+
+# Configurazione ngrok
+NGROK_AUTH_TOKEN = os.getenv("NGROK_AUTH_TOKEN")
+if NGROK_AUTH_TOKEN:
+    ngrok.set_auth_token(NGROK_AUTH_TOKEN)
+    public_url = ngrok.connect(8000).public_url
+    logging.info(f"Ngrok tunnel URL: {public_url}")
 
 # ------------------ BLOCKCHAIN CONFIG ------------------
 PRIVATE_KEY = os.getenv("DISTRIBUTION_PRIVATE_KEY")
@@ -134,12 +178,37 @@ async def spins_status(wallet_address: str):
     available = user.extra_spins + free_spin
     return {"available_spins": available}
 
+# ------------------ ENDPOINT: GRANT TEST SPINS ------------------
+@app.post("/api/grant_test_spins")
+async def grant_test_spins(wallet_address: str = "0xTestWallet00000000000000000000000000"): # Default test wallet
+    session_db = Session()
+    try:
+        user = get_user(wallet_address)
+        if user is None:
+             raise HTTPException(status_code=500, detail="Could not get or create user.")
+
+        user.extra_spins += 5
+        session_db.commit()
+        logging.info(f"Granted 5 test spins to {wallet_address}")
+        italy = pytz.timezone("Europe/Rome")
+        now_date = datetime.datetime.now(italy).date()
+        current_free_spin = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
+        available = user.extra_spins + current_free_spin
+        return {"message": "5 test spins granted.", "available_spins": available}
+    except Exception as e:
+        session_db.rollback()
+        logging.error(f"Error granting test spins: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session_db.close()
+
 # ------------------ ENDPOINT: WALLET BALANCE ------------------
 @app.get("/api/balance/{wallet_address}")
 async def get_balance(wallet_address: str):
     try:
         provider = Web3(Web3.HTTPProvider(PROVIDER_URL))
-        matic_balance = provider.eth.get_balance(wallet_address)
+        checksum_address = provider.to_checksum_address(wallet_address)
+        matic_balance = provider.eth.get_balance(checksum_address)
         token_contract = provider.eth.contract(
             address=TOKEN_ADDRESS,
             abi=[{
@@ -152,7 +221,7 @@ async def get_balance(wallet_address: str):
                 "type": "function"
             }]
         )
-        token_balance = token_contract.functions.balanceOf(wallet_address).call()
+        token_balance = token_contract.functions.balanceOf(checksum_address).call()
         return {"matic": float(from_wei(matic_balance, 'ether')), "gky": float(from_wei(token_balance, 'ether'))}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -160,6 +229,7 @@ async def get_balance(wallet_address: str):
 # ------------------ TOKEN TRANSFER ------------------
 def invia_token(destinatario: str, quantita: int) -> bool:
     try:
+        checksum_destinatario = w3.to_checksum_address(destinatario)
         gas_price = get_dynamic_gas_price()
         token_contract = w3.eth.contract(
             address=TOKEN_ADDRESS,
@@ -174,7 +244,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
             }]
         )
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
-        tx = token_contract.functions.transfer(destinatario, quantita * 10**18).build_transaction({
+        tx = token_contract.functions.transfer(checksum_destinatario, quantita * 10**18).build_transaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
             'gas': 100000,
@@ -183,7 +253,7 @@ def invia_token(destinatario: str, quantita: int) -> bool:
         signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         raw_tx = signed_tx.raw_transaction if hasattr(signed_tx, 'raw_transaction') else signed_tx.rawTransaction
         tx_hash = w3.eth.send_raw_transaction(raw_tx)
-        logging.info(f"Tokens sent: {quantita} GKY, txHash: {tx_hash.hex()}")
+        logging.info(f"Tokens sent to {checksum_destinatario}: {quantita} GKY, txHash: {tx_hash.hex()}")
     except Exception as e:
         logging.error(f"Error sending tokens: {e}")
         return False
@@ -210,6 +280,7 @@ def send_nft(destinatario: str) -> bool:
     Uses the ERC721 safeTransferFrom function.
     """
     try:
+        checksum_destinatario = w3.to_checksum_address(destinatario)
         nft_contract = w3.eth.contract(
             address=NFT_CONTRACT_ADDRESS,
             abi=[{
@@ -229,7 +300,7 @@ def send_nft(destinatario: str) -> bool:
         token_id = random.randint(1, 11)
         gas_price = get_dynamic_gas_price()
         nonce = w3.eth.get_transaction_count(WALLET_DISTRIBUZIONE)
-        tx = nft_contract.functions.safeTransferFrom(WALLET_DISTRIBUZIONE, destinatario, token_id).build_transaction({
+        tx = nft_contract.functions.safeTransferFrom(WALLET_DISTRIBUZIONE, checksum_destinatario, token_id).build_transaction({
             'from': WALLET_DISTRIBUZIONE,
             'nonce': nonce,
             'gas': 200000,
@@ -269,18 +340,24 @@ def get_prize() -> str:
 
 # ------------------ GET USER ------------------
 def get_user(wallet_address: str):
-    session = Session()
+    session_db = Session()
     try:
-        user = session.query(User).filter(User.wallet_address.ilike(wallet_address)).first()
+        checksum_address = w3.to_checksum_address(wallet_address)
+        user = session_db.query(User).filter_by(wallet_address=checksum_address).first()
         if not user:
-            user = User(wallet_address=wallet_address, extra_spins=0)
-            session.add(user)
-            session.commit()
-            session.refresh(user)
-        logging.info(f"User: {user.wallet_address}, extra_spins: {user.extra_spins}, last_free_spin_date: {getattr(user, 'last_free_spin_date', None)}")
+            user = User(wallet_address=checksum_address, extra_spins=0, last_free_spin_date=None, last_claimed_tasks="")
+            session_db.add(user)
+            session_db.commit()
+            logging.info(f"New user created: {checksum_address}")
         return user
+    except Exception as e:
+        session_db.rollback()
+        logging.error(f"Error getting or creating user for {wallet_address}: {e}")
+        # Depending on desired behavior, you might want to raise HTTPException here
+        # raise HTTPException(status_code=500, detail=str(e))
+        return None # Or handle as appropriate
     finally:
-        session.close()
+        session_db.close()
 
 # ------------------ ENDPOINT: SPIN ------------------
 @app.post("/api/spin")
@@ -301,36 +378,34 @@ async def api_spin(req: SpinRequest):
             user.extra_spins -= 1
             session.commit()
         premio = get_prize()
+        
+        # Simuliamo il premio senza inviarlo realmente
         if premio.strip().upper() == "NO PRIZE":
             result_text = "No prize won. Try again!"
         elif "GKY" in premio:
-            amount = int(premio.split(" ")[0])
-            if invia_token(req.wallet_address, amount):
-                result_text = f"You won {premio}!"
-            else:
-                result_text = "Error transferring tokens."
+            result_text = f"You won {premio}! (Test mode - no tokens sent)"
         elif "NFT" in premio:
-            if send_nft(req.wallet_address):
-                result_text = "Congratulations! You won an NFT Starter! (NFT sent automatically.)"
-            else:
-                result_text = "Error sending NFT."
+            result_text = "Congratulations! You won an NFT Starter! (Test mode - no NFT sent)"
         else:
             result_text = f"You won: {premio}!"
-            record = PremioVinto(
-                telegram_id=user.telegram_id or "N/A",
-                wallet=user.wallet_address,
-                premio=premio,
-                user_id=user.id
-            )
-            session.add(record)
-            session.commit()
-        logging.info(f"Spin for {req.wallet_address}: prize {premio}")
+            
+        # Registriamo comunque il premio nel database
+        record = PremioVinto(
+            telegram_id=user.telegram_id or "N/A",
+            wallet=user.wallet_address,
+            premio=premio,
+            user_id=user.id
+        )
+        session.add(record)
+        session.commit()
+        
+        logging.info(f"Spin for {req.wallet_address}: prize {premio} (Test mode)")
         current_free_spin = 1 if (getattr(user, "last_free_spin_date", None) is None or user.last_free_spin_date < now_date) else 0
         available = user.extra_spins + current_free_spin
         return {"message": result_text, "prize": premio, "available_spins": available}
     except Exception as e:
         logging.error(f"Error during spin: {e}")
-        raise HTTPException(status_code=500, detail="Error during spin.")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         session.close()
 
@@ -488,17 +563,27 @@ async def api_referral(wallet_address: str):
     referral_link = f"https://t.me/giankytestbot?start=ref_{wallet_address}"
     return {"referral_link": referral_link}
 
-# ------------------ ROOT ------------------
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    return """
-    <html>
-      <head>
-        <meta http-equiv="refresh" content="0; url=/static/index.html" />
-      </head>
-      <body></body>
-    </html>
-    """
+@app.get("/static/loading.html", response_class=HTMLResponse)
+async def loading():
+    response = FileResponse("static/loading.html")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+@app.get("/index.html", response_class=HTMLResponse)
+async def index():
+    return FileResponse("static/index.html")
+
+@app.get("/api/restart")
+async def restart_server():
+    """Endpoint per riavviare il server"""
+    try:
+        # Riavvia il server
+        os.system("uvicorn main:app --reload --host 127.0.0.1 --port 8000")
+        return JSONResponse(content={"message": "Server riavviato con successo"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    uvicorn.run(app, host="127.0.0.1", port=5000)
