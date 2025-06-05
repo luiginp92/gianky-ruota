@@ -122,6 +122,7 @@
     // Inizializzazione
     async function init() {
       console.log("Inizio inizializzazione...");
+      console.log("Definizione providerOptions...");
 
       // Configurazione Web3Modal
       const providerOptions = {
@@ -140,6 +141,7 @@
         }
       };
 
+      console.log("Creazione istanza Web3Modal con providerOptions:", providerOptions);
       try {
           web3Modal = new Web3Modal({
             cacheProvider: true, // Opzionale: per ricordare l'ultima scelta dell'utente
@@ -162,6 +164,7 @@
           }
       } catch (e) {
           console.error("Errore durante l'inizializzazione di Web3Modal:", e);
+          console.error("Dettagli errore inizializzazione Web3Modal:", e.message, e);
           showError("Errore nell'inizializzazione del sistema wallet.");
           // Disabilita i pulsanti se Web3Modal non si inizializza
           connectButton.disabled = true;
